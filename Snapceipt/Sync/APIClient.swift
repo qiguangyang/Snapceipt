@@ -21,6 +21,10 @@ final class LiveAPIClient: APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    /// Coalesces concurrent 401-triggered refreshes into a single shared call so two
+    /// in-flight requests can't both spend the rotating refresh token (which the
+    /// backend's reuse-detection would treat as a stolen token → spurious logout).
+    private let refreshCoordinator = RefreshCoordinator()
 
     init(baseURL: URL, auth: AuthStore, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -52,11 +56,11 @@ final class LiveAPIClient: APIClient {
     }
 
     func signOut() async throws {
-        try await sendNoContent("POST", "/auth/signout", body: Optional<String>.none, authenticated: true)
+        try await sendNoContent("POST", "/auth/signout", body: NoBody(), authenticated: true)
     }
 
     func me() async throws -> MeResponse {
-        try await send("GET", "/auth/me", body: Optional<String>.none, authenticated: true)
+        try await send("GET", "/auth/me", body: NoBody(), authenticated: true)
     }
 
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
@@ -68,7 +72,7 @@ final class LiveAPIClient: APIClient {
         var items = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
         return try await send("GET", "/sync/pull", query: items,
-                              body: Optional<String>.none, authenticated: true)
+                              body: NoBody(), authenticated: true)
     }
 
     // MARK: - Request plumbing
@@ -137,9 +141,17 @@ final class LiveAPIClient: APIClient {
                        status: http.statusCode)
     }
 
-    /// Refresh the access token using the stored refresh token. Returns true if a new
-    /// session was saved. Refresh failures (no token / 401) clear the session.
+    /// Refresh the access token, coalescing concurrent callers onto one shared refresh
+    /// (see `refreshCoordinator`). Returns true if a new session was saved.
     private func tryRefresh() async -> Bool {
+        await refreshCoordinator.refresh { [weak self] in
+            await self?.performRefresh() ?? false
+        }
+    }
+
+    /// Do the actual token refresh using the stored refresh token. Returns true if a
+    /// new session was saved. Refresh failures (no token / 401) clear the session.
+    private func performRefresh() async -> Bool {
         guard let refreshToken = auth.session?.refreshToken else { return false }
         do {
             let req = try makeRequest("POST", "/auth/refresh", query: [],
@@ -179,7 +191,7 @@ final class LiveAPIClient: APIClient {
         if authenticated, let bearer = auth.bearer() {
             request.setValue(bearer, forHTTPHeaderField: "Authorization")
         }
-        if let body, !(body is _NoBody) {
+        if let body, !(body is NoBody) {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try encoder.encode(body)
         }
@@ -196,6 +208,25 @@ final class LiveAPIClient: APIClient {
     }
 }
 
-/// Sentinel for "no body" so `Optional<String>.none` does not serialize a JSON `null`.
-private protocol _NoBody {}
-extension Optional: _NoBody where Wrapped == String {}
+/// Explicit "no request body" marker. Encodes to nothing; `makeRequest` skips the
+/// body + Content-Type when the body is a `NoBody`, so a GET/empty POST never emits
+/// a stray JSON `null`.
+struct NoBody: Encodable {
+    func encode(to encoder: Encoder) throws {}
+}
+
+/// Serializes token refreshes so that N concurrent 401s trigger at most one refresh
+/// network call. Callers arriving while a refresh is in flight await the same Task
+/// and observe its result, rather than each spending the rotating refresh token.
+private actor RefreshCoordinator {
+    private var inFlight: Task<Bool, Never>?
+
+    func refresh(_ work: @escaping @Sendable () async -> Bool) async -> Bool {
+        if let inFlight { return await inFlight.value }
+        let task = Task { await work() }
+        inFlight = task
+        let result = await task.value
+        inFlight = nil
+        return result
+    }
+}
