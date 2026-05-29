@@ -7,6 +7,10 @@ import { applyD1Migrations, env } from "cloudflare:test";
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {
     TEST_MIGRATIONS: D1Migration[];
+    // Secrets/vars injected by vitest.config.ts (the generated `interface Env`
+    // from `wrangler types` omits secrets, which aren't declared in wrangler.jsonc).
+    JWT_SIGNING_KEY: string;
+    APPLE_BUNDLE_ID: string;
   }
 }
 

@@ -16,7 +16,13 @@ export default defineWorkersConfig({
         miniflare: {
           // Test-only extras layered on top of wrangler.jsonc bindings.
           compatibilityFlags: ["nodejs_compat"],
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            // Auth tests sign/verify with this HS256 key (real key stays in
+            // .dev.vars locally / `wrangler secret` on deploy).
+            JWT_SIGNING_KEY: "test-signing-key-0123456789-abcdefghijklmnop",
+            APPLE_BUNDLE_ID: "com.snapceipt.app",
+          },
           // .dev.vars isn't read in tests; inject the secrets/vars tests need.
           // (real secrets stay in .dev.vars locally / `wrangler secret` on deploy)
           // JWT_SIGNING_KEY/APPLE_BUNDLE_ID are exercised by later auth tests.

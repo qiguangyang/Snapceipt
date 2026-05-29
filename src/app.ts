@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { AppEnv } from "./env";
 import { requestId, registerErrorHandler } from "./middleware/error";
+import { authMiddleware } from "./middleware/auth";
 import { ApiError, ERROR, type ErrorCode } from "./lib/errors";
 import { miscRoutes } from "./routes/misc";
 
@@ -23,11 +24,23 @@ app.use("*", logger());
 app.use("*", cors());
 
 // TEMP: exercises the error envelope end-to-end; replaced when real routes land.
+// Mounted BEFORE authMiddleware so it stays reachable without a bearer token
+// (it is not in PUBLIC_PATHS); remove alongside __authprobe in later cleanup.
 app.get("/__throw", (c) => {
   const code = c.req.query("code") ?? "INTERNAL";
   if (code in ERROR) throw new ApiError(code as ErrorCode, "nope");
   throw new Error("unexpected: " + code);
 });
 
-// Public + placeholder routes. (auth/rateLimit middleware: later tasks.)
+// Bearer auth, applied once globally. isPublic() internally lets /health,
+// /auth/* and /banks through, so a single wildcard mount is correct and avoids
+// per-group duplication. Protected routes just read c.var.userId / c.var.deviceId.
+app.use("*", authMiddleware());
+
+// TEMP(test-probe): protected route that echoes the resolved identity so the
+// auth middleware can be black-box tested. Harmless behind auth; useful for the
+// auth tests in later tasks. Remove in later cleanup.
+app.get("/__authprobe", (c) => c.json({ userId: c.var.userId, deviceId: c.var.deviceId }));
+
+// Public + placeholder routes. (rateLimit middleware: later tasks.)
 app.route("/", miscRoutes);
