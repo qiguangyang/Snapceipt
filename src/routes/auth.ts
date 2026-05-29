@@ -311,13 +311,14 @@ authRoutes.post("/refresh", validate("json", refreshBody), async (c) => {
   const session = await findSessionByRefreshHash(c.env.DB, presentedHash);
 
   if (session) {
-    // ROTATE: new opaque refresh, slide the 60-day expiry, keep the same family.
-    const rotated = await rotateSession(c.env.DB, session.id);
-
-    // Record the now-superseded hash so a future replay is caught as reuse.
+    // Record the soon-to-be-superseded hash BEFORE rotating, so that if KV.put
+    // throws the old refresh token remains valid in D1 and the client can retry.
     await c.env.KV.put(`${RETIRED_REFRESH_PREFIX}${presentedHash}`, session.family, {
       expirationTtl: REFRESH_REUSE_TTL_SECONDS,
     });
+
+    // ROTATE: new opaque refresh, slide the 60-day expiry, keep the same family.
+    const rotated = await rotateSession(c.env.DB, session.id);
 
     const accessToken = await signAccess(c.env.JWT_SIGNING_KEY, {
       userId: session.user_id,

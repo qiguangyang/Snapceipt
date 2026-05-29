@@ -39,12 +39,12 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
 
   await c.env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, model, os_version, apns_token, push_enabled, last_seen_at, created_at, updated_at)
-     VALUES (?, ?, 'ios', ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, 'ios', ?, ?, ?, COALESCE(?, 1), ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        model        = COALESCE(excluded.model, devices.model),
        os_version   = COALESCE(excluded.os_version, devices.os_version),
        apns_token   = COALESCE(excluded.apns_token, devices.apns_token),
-       push_enabled = excluded.push_enabled,
+       push_enabled = COALESCE(excluded.push_enabled, devices.push_enabled),
        last_seen_at = excluded.last_seen_at,
        updated_at   = excluded.updated_at,
        deleted_at   = NULL
@@ -56,7 +56,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       model ?? null,
       osVersion ?? null,
       apnsToken ?? null,
-      pushEnabled === false ? 0 : 1,
+      pushEnabled !== undefined ? (pushEnabled ? 1 : 0) : null,
       now,
       now,
       now,
