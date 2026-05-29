@@ -40,8 +40,8 @@ final class Budget: Syncable {
         currency: String = "AUD",
         alertThresholdPct: Int = 90,
         alertSentAt: Int? = nil,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

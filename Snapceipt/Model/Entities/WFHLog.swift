@@ -31,8 +31,8 @@ final class WFHLog: Syncable {
         note: String? = nil,
         rateCentsPerHour: Int? = nil,
         claimCents: Int? = nil,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

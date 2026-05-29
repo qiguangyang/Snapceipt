@@ -40,8 +40,8 @@ final class MileageTrip: Syncable {
         rateCentsPerKm: Int? = nil,
         claimCents: Int? = nil,
         autoTracked: Bool = false,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

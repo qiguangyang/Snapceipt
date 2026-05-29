@@ -30,7 +30,7 @@ struct IDClockTests {
 
     @Test("nowMs returns integer ms close to wall clock")
     func nowMs() {
-        let t = Clock.nowMs()
+        let t = Epoch.nowMs()
         let wall = Int((Date().timeIntervalSince1970 * 1000).rounded())
         #expect(abs(t - wall) < 1000)
     }

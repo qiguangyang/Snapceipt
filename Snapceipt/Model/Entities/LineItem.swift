@@ -30,8 +30,8 @@ final class LineItem: Syncable {
         priceCents: Int,
         quantity: Int = 1,
         sortOrder: Int = 0,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

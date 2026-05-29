@@ -41,8 +41,8 @@ final class Profile: Syncable {
         gstRegistered: Bool = false,
         sortOrder: Int = 0,
         isDefault: Bool = false,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

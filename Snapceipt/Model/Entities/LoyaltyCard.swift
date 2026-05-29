@@ -37,8 +37,8 @@ final class LoyaltyCard: Syncable {
         color1: String,
         color2: String,
         sortOrder: Int = 0,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

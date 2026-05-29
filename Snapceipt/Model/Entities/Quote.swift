@@ -43,8 +43,8 @@ final class Quote: Syncable {
         status: String = "draft",
         validUntil: String? = nil,
         sentAt: Int? = nil,
-        createdAt: Int = Clock.nowMs(),
-        updatedAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
+        updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
         rev: Int = 0,
         lastEditedDeviceId: String? = nil

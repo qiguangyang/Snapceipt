@@ -32,7 +32,7 @@ final class OutboxMutation {
         op: String,
         payloadJSON: String,
         baseRev: Int? = nil,
-        createdAt: Int = Clock.nowMs(),
+        createdAt: Int = Epoch.nowMs(),
         attemptCount: Int = 0,
         status: String = "pending"
     ) {

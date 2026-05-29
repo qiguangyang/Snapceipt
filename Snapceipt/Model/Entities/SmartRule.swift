@@ -26,7 +26,7 @@ final class SmartRule: Syncable {
          matchType: String = "merchant_contains", matcher: String,
          categoryId: String? = nil, setDeductiblePct: Int? = nil, setMode: String? = nil,
          priority: Int = 0, enabled: Bool = true,
-         createdAt: Int = Clock.nowMs(), updatedAt: Int = Clock.nowMs(),
+         createdAt: Int = Epoch.nowMs(), updatedAt: Int = Epoch.nowMs(),
          deletedAt: Int? = nil, rev: Int = 0, lastEditedDeviceId: String? = nil) {
         self.id = id; self.userId = userId; self.profileId = profileId
         self.matchType = matchType; self.matcher = matcher; self.categoryId = categoryId

@@ -45,7 +45,7 @@ enum ID {
 
 /// Epoch-millisecond clock. All `createdAt`/`updatedAt`/`deletedAt` timestamps
 /// (the LWW + cursor key) are integer ms in UTC.
-enum Clock {
+enum Epoch {
     /// Current time as integer epoch milliseconds.
     static func nowMs() -> Int {
         Int((Date().timeIntervalSince1970 * 1000).rounded())
