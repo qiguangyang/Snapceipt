@@ -6,10 +6,23 @@ import type { AppEnv } from "../env";
 import { ApiError } from "../lib/errors";
 import { uuidv7 } from "../lib/ids";
 import { nowMs } from "../lib/time";
-import { issueSession } from "../lib/sessions";
+import { hashToken, signAccess } from "../lib/jwt";
+import {
+  issueSession,
+  findSessionByRefreshHash,
+  rotateSession,
+  revokeSession,
+  revokeSessionFamily,
+} from "../lib/sessions";
 import { sendMagicLinkEmail } from "../lib/email";
 import { verifyAppleIdentityToken } from "../lib/apple";
-import { appleBody, magicLinkRequestBody, magicLinkVerifyBody } from "../schemas/auth";
+import { requireAuth } from "../middleware/auth";
+import {
+  appleBody,
+  magicLinkRequestBody,
+  magicLinkVerifyBody,
+  refreshBody,
+} from "../schemas/auth";
 
 /**
  * zValidator wrapper whose failure path throws the shared ApiError so the
@@ -17,7 +30,7 @@ import { appleBody, magicLinkRequestBody, magicLinkVerifyBody } from "../schemas
  * @hono/zod-validator behavior returns a bare 400 with the raw ZodError, which
  * would bypass our error contract).
  */
-function validate<T extends ZodSchema, Target extends keyof ValidationTargets>(
+export function validate<T extends ZodSchema, Target extends keyof ValidationTargets>(
   target: Target,
   schema: T,
 ) {
@@ -41,6 +54,8 @@ export const authRoutes = new Hono<AppEnv>();
 
 const MAGIC_LINK_TTL_SECONDS = 600; // 10 minutes
 const MAGIC_LINK_BASE_URL = "https://snapceipt.app/auth/magic";
+// Superseded-refresh-hash retention for reuse detection == the 60-day refresh window.
+const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 
 /** Canonical form for email comparison + storage: trimmed + lowercased. */
 export function normalizeEmail(email: string): string {
@@ -264,5 +279,152 @@ authRoutes.post("/apple", validate("json", appleBody), async (c) => {
     refreshToken: session.refreshToken,
     expiresIn: 900,
     user: { id: user.id, email: user.email, displayName: user.display_name },
+  });
+});
+
+/** KV namespace for superseded (already-rotated) refresh hashes — see /auth/refresh. */
+const RETIRED_REFRESH_PREFIX = "rfr:";
+
+/**
+ * POST /auth/refresh
+ * Public (no bearer): rotate an opaque refresh token. The presented token is
+ * hashed and looked up via findSessionByRefreshHash, which resolves ONLY when the
+ * row is non-revoked AND not expired. On a hit → rotate in place (new refresh,
+ * slide the 60-day expiry, keep the same session id + family), mint a fresh access
+ * token, and return the session envelope.
+ *
+ * Reuse detection: rotateSession OVERWRITES the refresh hash in place, so a
+ * replayed old token's hash no longer exists in the sessions table. To still
+ * catch reuse, every rotation records the just-superseded hash in KV
+ * (`rfr:<hash>` -> family, 60-day TTL matching the refresh window). On a DB miss
+ * we consult KV: a hit means an already-rotated token was replayed -> revoke the
+ * whole family and answer 401 AUTH_SESSION_REVOKED. A revoked/expired live-table
+ * miss with no KV record (e.g. a signed-out session) is also AUTH_SESSION_REVOKED
+ * when the hash is still present on a (revoked) row; a hash that never existed is
+ * 401 AUTH_INVALID_TOKEN.
+ */
+authRoutes.post("/refresh", validate("json", refreshBody), async (c) => {
+  const { refreshToken } = c.req.valid("json");
+  const presentedHash = await hashToken(refreshToken);
+
+  // 1. Live session for this hash? (findSessionByRefreshHash filters revoked + expired.)
+  const session = await findSessionByRefreshHash(c.env.DB, presentedHash);
+
+  if (session) {
+    // ROTATE: new opaque refresh, slide the 60-day expiry, keep the same family.
+    const rotated = await rotateSession(c.env.DB, session.id);
+
+    // Record the now-superseded hash so a future replay is caught as reuse.
+    await c.env.KV.put(`${RETIRED_REFRESH_PREFIX}${presentedHash}`, session.family, {
+      expirationTtl: REFRESH_REUSE_TTL_SECONDS,
+    });
+
+    const accessToken = await signAccess(c.env.JWT_SIGNING_KEY, {
+      userId: session.user_id,
+      sessionId: session.id,
+      deviceId: session.device_id,
+    });
+
+    const user = await c.env.DB.prepare(
+      "SELECT id, email, display_name FROM users WHERE id = ? AND deleted_at IS NULL",
+    )
+      .bind(session.user_id)
+      .first<{ id: string; email: string | null; display_name: string | null }>();
+    if (!user) throw new ApiError("AUTH_INVALID_TOKEN", "User not found");
+
+    return c.json({
+      accessToken,
+      refreshToken: rotated.refreshToken,
+      expiresIn: 900,
+      user: { id: user.id, email: user.email, displayName: user.display_name },
+    });
+  }
+
+  // 2. No live match. Reuse of an already-rotated token? KV remembers superseded
+  //    hashes -> revoke the whole family and force re-auth.
+  const retiredFamily = await c.env.KV.get(`${RETIRED_REFRESH_PREFIX}${presentedHash}`);
+  if (retiredFamily) {
+    await revokeSessionFamily(c.env.DB, retiredFamily);
+    throw new ApiError("AUTH_SESSION_REVOKED", "Refresh token reuse detected");
+  }
+
+  // 3. Hash still present on a (revoked/expired) row — e.g. a signed-out session
+  //    whose current refresh token is presented. The session is dead.
+  const known = await c.env.DB.prepare("SELECT family FROM sessions WHERE refresh_hash = ?")
+    .bind(presentedHash)
+    .first<{ family: string }>();
+  if (known) {
+    throw new ApiError("AUTH_SESSION_REVOKED", "Session is no longer active");
+  }
+
+  // 4. Token never existed.
+  throw new ApiError("AUTH_INVALID_TOKEN", "Invalid refresh token");
+});
+
+/**
+ * POST /auth/signout
+ * Bearer required (requireAuth sets c.var.sessionId from the JWT `sid` claim).
+ * Revoke just the current session (single-device sign-out). Idempotent.
+ */
+authRoutes.post("/signout", requireAuth(), async (c) => {
+  await revokeSession(c.env.DB, c.var.sessionId);
+  return c.json({ ok: true });
+});
+
+/**
+ * GET /auth/me
+ * Bearer required: return the current user plus their active (non-deleted)
+ * devices, scoped to c.var.userId.
+ */
+authRoutes.get("/me", requireAuth(), async (c) => {
+  const userId = c.var.userId;
+
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name, plan FROM users WHERE id = ? AND deleted_at IS NULL",
+  )
+    .bind(userId)
+    .first<{
+      id: string;
+      email: string | null;
+      display_name: string | null;
+      plan: string;
+    }>();
+  if (!user) throw new ApiError("NOT_FOUND", "User not found");
+
+  const devices = await c.env.DB.prepare(
+    `SELECT id, platform, model, os_version, apns_token, push_enabled, last_seen_at, created_at
+       FROM devices
+      WHERE user_id = ? AND deleted_at IS NULL
+      ORDER BY created_at`,
+  )
+    .bind(userId)
+    .all<{
+      id: string;
+      platform: string;
+      model: string | null;
+      os_version: string | null;
+      apns_token: string | null;
+      push_enabled: number;
+      last_seen_at: number | null;
+      created_at: number;
+    }>();
+
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      plan: user.plan,
+    },
+    devices: devices.results.map((d) => ({
+      id: d.id,
+      platform: d.platform,
+      model: d.model,
+      osVersion: d.os_version,
+      hasApnsToken: d.apns_token !== null,
+      pushEnabled: d.push_enabled === 1,
+      lastSeenAt: d.last_seen_at,
+      createdAt: d.created_at,
+    })),
   });
 });

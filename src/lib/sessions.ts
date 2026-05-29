@@ -82,6 +82,11 @@ export async function findSessionByRefreshHash(
 /**
  * Rotate the refresh token in place: install a new hash, slide the 60-day expiry,
  * keep the same session id + family. Returns the new plaintext refresh token.
+ *
+ * The UPDATE is guarded with `revoked_at IS NULL`, so a missing/already-revoked
+ * session writes zero rows. We RETURNING the family from the same statement and
+ * throw a meaningful error if nothing came back, instead of dereferencing a
+ * non-null assertion on an absent row.
  */
 export async function rotateSession(
   db: D1Database,
@@ -91,21 +96,21 @@ export async function rotateSession(
   const refreshHash = await hashToken(refreshToken);
   const t = nowMs();
 
-  await db
+  const row = await db
     .prepare(
       `UPDATE sessions
           SET refresh_hash = ?, last_seen_at = ?, expires_at = ?
-        WHERE id = ? AND revoked_at IS NULL`,
+        WHERE id = ? AND revoked_at IS NULL
+        RETURNING family`,
     )
     .bind(refreshHash, t, t + REFRESH_TTL_MS, sessionId)
-    .run();
-
-  const row = await db
-    .prepare("SELECT family FROM sessions WHERE id = ?")
-    .bind(sessionId)
     .first<{ family: string }>();
 
-  return { sessionId, refreshToken, family: row!.family };
+  if (!row) {
+    throw new Error(`rotateSession: no live session to rotate for id=${sessionId}`);
+  }
+
+  return { sessionId, refreshToken, family: row.family };
 }
 
 /** Revoke a single session (sign-out of one device). */

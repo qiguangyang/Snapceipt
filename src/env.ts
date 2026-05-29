@@ -33,6 +33,8 @@ export type Variables = {
   userId: string;
   /** Device id bound to the session (set by auth middleware). */
   deviceId: string;
+  /** Session id (JWT `sid` claim) bound to the access token (set by auth middleware). */
+  sessionId: string;
   /** Per-request id for tracing + the error envelope. */
   requestId: string;
 };

@@ -7,6 +7,7 @@ import { authMiddleware } from "./middleware/auth";
 import { ApiError, ERROR, type ErrorCode } from "./lib/errors";
 import { miscRoutes } from "./routes/misc";
 import { authRoutes } from "./routes/auth";
+import { deviceRoutes } from "./routes/devices";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -46,4 +47,7 @@ app.get("/__authprobe", (c) => c.json({ userId: c.var.userId, deviceId: c.var.de
 // Public + placeholder routes. (rateLimit middleware: later tasks.)
 // /auth/* is in the public-path allowlist (auth middleware skips it).
 app.route("/auth", authRoutes);
+// Protected: /devices/* is not in PUBLIC_PATHS, so authMiddleware guards it and
+// the handlers read c.var.userId.
+app.route("/devices", deviceRoutes);
 app.route("/", miscRoutes);
