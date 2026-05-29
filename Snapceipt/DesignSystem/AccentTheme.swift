@@ -14,7 +14,7 @@ struct AccentPalette: Equatable {
         deep: Color(hex: 0xC2461A)
     )
 
-    /// Business teal — AP_ACCENTS[4]: #0E7C72 / #DCF0ED / #0A5950.
+    /// Business teal — AP_ACCENTS[1]: #0E7C72 / #DCF0ED / #0A5950.
     static let business = AccentPalette(
         base: Color(hex: 0x0E7C72),
         soft: Color(hex: 0xDCF0ED),

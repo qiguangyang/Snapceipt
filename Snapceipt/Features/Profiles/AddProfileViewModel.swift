@@ -12,16 +12,33 @@ final class AddProfileViewModel {
     @ObservationIgnored private let userId: String
 
     var type: ProfileType = .personal {
-        didSet { if !userPickedSwatch { swatch = defaultSwatch(for: type) } }
+        didSet {
+            // Auto-track the type default until the user manually picks a swatch.
+            // Assign through the auto-assignment guard so `swatch.didSet` does not
+            // mistake this for a manual pick (which would freeze the swatch and stop
+            // Business→Personal from re-applying terracotta).
+            if !userPickedSwatch {
+                isAutoAssigningSwatch = true
+                swatch = defaultSwatch(for: type)
+                isAutoAssigningSwatch = false
+            }
+        }
     }
     var name: String = ""
     var abn: String = ""
     var gstRegistered: Bool = false
     var swatch: AccentSwatch = defaultSwatch(for: .personal) {
-        didSet { userPickedSwatch = true }
+        didSet {
+            // Only a manual change marks the swatch user-picked; the type-driven
+            // auto-assignment above sets `isAutoAssigningSwatch` to skip this.
+            if !isAutoAssigningSwatch { userPickedSwatch = true }
+        }
     }
     /// Set once the user changes the accent so the type-default stops overriding.
     @ObservationIgnored private var userPickedSwatch = false
+    /// True only while `type.didSet` is auto-assigning the default swatch, so that
+    /// `swatch.didSet` does not flag it as a manual user pick.
+    @ObservationIgnored private var isAutoAssigningSwatch = false
 
     /// Step-machine: false = form, true = success screen.
     private(set) var didCreate = false

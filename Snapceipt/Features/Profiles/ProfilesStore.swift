@@ -108,9 +108,11 @@ func defaultSwatch(for type: ProfileType) -> AccentSwatch {
 @Observable
 @MainActor
 final class ProfilesStore {
-    @ObservationIgnored private let context: ModelContext
+    @ObservationIgnored let context: ModelContext
     @ObservationIgnored private let sync: any SyncEnqueuing
-    @ObservationIgnored private let userId: String
+    /// The signed-in user's id (used to scope fetches and to build child view-models
+    /// such as the AddProfile form presented from the shell).
+    @ObservationIgnored let userId: String
     @ObservationIgnored private static let activeKey = "sc.activeProfile"
 
     /// All non-deleted profiles for the signed-in user, sorted for display.

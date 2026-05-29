@@ -56,12 +56,6 @@ private struct FirstProfileForm: View {
     @State private var accentIndex = 0
     @FocusState private var nameFocused: Bool
 
-    /// Personal/Business accent presets (single-sourced from `AccentPalette`).
-    private enum ProfileType: String, CaseIterable {
-        case personal, business
-        var label: String { self == .personal ? "Personal" : "Business" }
-    }
-
     /// Accent swatches offered at onboarding. The first two are the canonical
     /// personal/business presets; the rest are extra terracotta/teal-adjacent picks.
     private static let swatches: [(base: UInt32, soft: UInt32, deep: UInt32)] = [

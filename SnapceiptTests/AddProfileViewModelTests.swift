@@ -90,6 +90,40 @@ struct AddProfileViewModelTests {
         #expect(sync.calls.isEmpty)
     }
 
+    @Test("the swatch auto-follows type until the user manually picks one")
+    func swatchAutoFollowsType() throws {
+        let (context, store, _) = try makeFixture()
+        let vm = AddProfileViewModel(store: store, context: context, userId: "u1")
+
+        // Defaults to terracotta (the Personal default).
+        #expect(vm.swatch.id == AP_ACCENTS[0].id)
+
+        // Switching to Business auto-applies teal…
+        vm.type = .business
+        #expect(vm.swatch.id == AP_ACCENTS[1].id)
+
+        // …and switching back to Personal re-applies terracotta (the bug: the
+        // auto-assignment used to trip `userPickedSwatch` and freeze the swatch).
+        vm.type = .personal
+        #expect(vm.swatch.id == AP_ACCENTS[0].id)
+    }
+
+    @Test("a manual swatch pick stops the type-default from overriding it")
+    func manualSwatchStopsAutoFollow() throws {
+        let (context, store, _) = try makeFixture()
+        let vm = AddProfileViewModel(store: store, context: context, userId: "u1")
+
+        // User manually picks Indigo.
+        vm.swatch = AP_ACCENTS[2]
+        #expect(vm.swatch.id == AP_ACCENTS[2].id)
+
+        // Type changes no longer override the user's pick.
+        vm.type = .business
+        #expect(vm.swatch.id == AP_ACCENTS[2].id)
+        vm.type = .personal
+        #expect(vm.swatch.id == AP_ACCENTS[2].id)
+    }
+
     @Test("personal profiles drop ABN/GST even if set on the form")
     func personalClearsBusinessFields() throws {
         let (context, store, _) = try makeFixture()
