@@ -13,9 +13,10 @@ export const appleBody = z.object({
 
 export type AppleBody = z.infer<typeof appleBody>;
 
-/** POST /auth/magic-link/request — always 202 (no enumeration); rate-limited. */
+/** POST /auth/magic-link/request — always 202 (no enumeration); rate-limited.
+ *  `.trim()` tolerates trailing whitespace; the route lowercases for storage. */
 export const magicLinkRequestBody = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
 });
 
 export type MagicLinkRequestBody = z.infer<typeof magicLinkRequestBody>;
