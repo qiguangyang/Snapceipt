@@ -8,7 +8,8 @@ import { uuidv7 } from "../lib/ids";
 import { nowMs } from "../lib/time";
 import { issueSession } from "../lib/sessions";
 import { sendMagicLinkEmail } from "../lib/email";
-import { magicLinkRequestBody, magicLinkVerifyBody } from "../schemas/auth";
+import { verifyAppleIdentityToken } from "../lib/apple";
+import { appleBody, magicLinkRequestBody, magicLinkVerifyBody } from "../schemas/auth";
 
 /**
  * zValidator wrapper whose failure path throws the shared ApiError so the
@@ -181,3 +182,87 @@ authRoutes.post(
     });
   },
 );
+
+/**
+ * POST /auth/apple
+ * Verify the Sign-in-with-Apple identity token (RS256 against Apple's JWKS,
+ * with iss/aud/exp + sha256(rawNonce)==nonce enforced), upsert the user keyed by
+ * the stable Apple `sub` (auth_identities.provider='apple'). Apple only sends
+ * fullName/email on the FIRST authorization, so we persist them only when
+ * creating the user — later sign-ins never overwrite them. Register the
+ * X-Device-Id device and issue a session. Verification failures surface as
+ * 401 AUTH_INVALID_TOKEN.
+ */
+authRoutes.post("/apple", validate("json", appleBody), async (c) => {
+  const { identityToken, rawNonce, fullName, email } = c.req.valid("json");
+
+  // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
+  const claims = await verifyAppleIdentityToken(c.env, identityToken, rawNonce);
+  const appleSub = claims.sub;
+  // Prefer the client-supplied email (first-auth only); fall back to the token.
+  const appleEmail = email ?? claims.email ?? null;
+
+  const now = nowMs();
+
+  // 2. Look up the existing apple identity. Present → reuse the user (no
+  //    overwrite of first-auth name/email). Absent → create user + identity.
+  const identity = await c.env.DB.prepare(
+    "SELECT user_id FROM auth_identities WHERE provider = 'apple' AND subject = ?",
+  )
+    .bind(appleSub)
+    .first<{ user_id: string }>();
+
+  let userId: string;
+  if (identity) {
+    userId = identity.user_id;
+  } else {
+    userId = uuidv7();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'free', ?, ?)`,
+      ).bind(userId, appleEmail, appleEmail ? 1 : 0, fullName ?? null, now, now),
+      c.env.DB.prepare(
+        `INSERT INTO auth_identities (id, user_id, provider, subject, created_at)
+         VALUES (?, ?, 'apple', ?, ?)`,
+      ).bind(uuidv7(), userId, appleSub, now),
+    ]);
+  }
+
+  // 3. Register / refresh the device (X-Device-Id is the install UUID).
+  const deviceHeader = c.req.header("X-Device-Id");
+  const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
+  await c.env.DB.prepare(
+    `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       last_seen_at = excluded.last_seen_at,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(deviceId, userId, now, now, now)
+    .run();
+
+  // 4. Issue an access+refresh session bound to this user+device (Task 5 helper).
+  const session = await issueSession(c.env.DB, {
+    userId,
+    deviceId,
+    signingKey: c.env.JWT_SIGNING_KEY,
+  });
+
+  // 5. Load the canonical user for the response envelope.
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name FROM users WHERE id = ?",
+  )
+    .bind(userId)
+    .first<{ id: string; email: string | null; display_name: string | null }>();
+
+  if (!user) throw new ApiError("INTERNAL", "User not found after upsert");
+
+  return c.json({
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    expiresIn: 900,
+    user: { id: user.id, email: user.email, displayName: user.display_name },
+  });
+});
