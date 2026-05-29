@@ -63,13 +63,26 @@ describe("auth middleware", () => {
     expect(res.status).toBe(401);
   });
 
-  it("accepts a valid bearer and exposes userId/deviceId on a probe route", async () => {
-    const res = await SELF.fetch("https://api.test/__authprobe", {
-      headers: { Authorization: await bearer("u-42", "s-9", "d-7") },
+  it("accepts a valid bearer and resolves the identity on a real protected route (/auth/me)", async () => {
+    // Black-box the middleware via a REAL protected route (no test-only probe):
+    // a valid bearer must pass verification, expose c.var.userId, and let the
+    // /auth/me handler return THAT user. Seed the user first so the handler (which
+    // 404s on a missing user) returns 200 and proves the identity round-trip.
+    const userId = "01890000-0000-7000-8000-0000000000a7";
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
+       VALUES (?, ?, 1, ?, 'free', ?, ?)`,
+    )
+      .bind(userId, "probe@example.com", "Probe User", now, now)
+      .run();
+
+    const res = await SELF.fetch("https://api.test/auth/me", {
+      headers: { Authorization: await bearer(userId, "s-9", "d-7") },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { userId: string; deviceId: string };
-    expect(body.userId).toBe("u-42");
-    expect(body.deviceId).toBe("d-7");
+    const body = (await res.json()) as { user: { id: string; email: string } };
+    expect(body.user.id).toBe(userId);
+    expect(body.user.email).toBe("probe@example.com");
   });
 });

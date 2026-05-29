@@ -23,6 +23,14 @@ export function registerErrorHandler(app: Hono<AppEnv>): void {
     const requestId = c.get("requestId") ?? uuidv7();
     c.header("X-Request-Id", requestId);
     const status = err instanceof ApiError ? err.status : 500;
+    // Rate-limit errors carry the seconds-to-reset in details.retryAfter; surface
+    // it as the standard Retry-After header (e.g. for 429 RATE_LIMITED).
+    if (err instanceof ApiError) {
+      const retryAfter = (err.details as { retryAfter?: unknown } | undefined)?.retryAfter;
+      if (typeof retryAfter === "number") {
+        c.header("Retry-After", String(retryAfter));
+      }
+    }
     const envelope = toEnvelope(err, requestId);
     return c.json(envelope, status as 400 | 401 | 403 | 404 | 409 | 429 | 500 | 501);
   });

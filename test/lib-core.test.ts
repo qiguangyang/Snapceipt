@@ -92,23 +92,28 @@ describe("ApiError + ERROR map + toEnvelope()", () => {
 });
 
 describe("HTTP: error middleware produces the envelope + X-Request-Id", () => {
-  it("a route that throws ApiError returns the matching status + envelope", async () => {
-    const res = await SELF.fetch("https://example.com/__throw?code=NOT_FOUND");
-    expect(res.status).toBe(404);
+  // Asserted against REAL routes (no test-only /__throw scaffold): the shared
+  // /banks placeholder throws ApiError("NOT_IMPLEMENTED") so it exercises the
+  // ApiError -> status + envelope + X-Request-Id path end-to-end.
+  it("a route that throws ApiError (/banks -> 501) returns the matching status + envelope", async () => {
+    const res = await SELF.fetch("https://example.com/banks");
+    expect(res.status).toBe(501);
     const reqId = res.headers.get("X-Request-Id");
     expect(reqId).toBeTruthy();
     const body = (await res.json()) as {
       error: { code: string; message: string; requestId: string };
     };
-    expect(body.error.code).toBe("NOT_FOUND");
-    expect(body.error.message).toBe("nope");
+    expect(body.error.code).toBe("NOT_IMPLEMENTED");
+    expect(body.error.message).toBeTruthy();
+    // The envelope's requestId matches the X-Request-Id response header.
     expect(body.error.requestId).toBe(reqId);
   });
 
-  it("an unexpected throw becomes a 500 INTERNAL envelope", async () => {
-    const res = await SELF.fetch("https://example.com/__throw?code=BOOM");
-    expect(res.status).toBe(500);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("INTERNAL");
+  it("an unknown path under a public prefix returns 404", async () => {
+    // The app is protected-by-default (authMiddleware 401s any non-public path),
+    // so to reach Hono's notFound handler we hit an unknown path under a PUBLIC
+    // prefix (/auth/*): auth lets it through, no route matches -> 404.
+    const res = await SELF.fetch("https://example.com/auth/no-such-route");
+    expect(res.status).toBe(404);
   });
 });
