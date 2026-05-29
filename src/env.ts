@@ -1,0 +1,41 @@
+/**
+ * Cloudflare Worker bindings for the Snapceipt API.
+ * Declared in wrangler.jsonc; injected as `c.env` at runtime.
+ *
+ * RECEIPTS / AI / EMAIL / DEEPSEEK_API_KEY are declared now but unused in the
+ * foundation phase (receipt extraction, export, email-in, R2 images land later).
+ */
+export type Env = {
+  /** D1 (SQLite) — source of truth for all syncable data. */
+  DB: D1Database;
+  /** R2 bucket for receipt images (unused this phase). */
+  RECEIPTS: R2Bucket;
+  /** Workers AI binding for email-in OCR (unused this phase). */
+  AI: Ai;
+  /** KV: rate-limit counters + magic-link/nonce/JWKS cache. */
+  KV: KVNamespace;
+  /** Cloudflare Email Send binding (magic-link, exports). */
+  EMAIL: SendEmail;
+  /** Secret: HS256 signing key for app-issued JWTs. */
+  JWT_SIGNING_KEY: string;
+  /** Secret: DeepSeek API key (unused this phase). */
+  DEEPSEEK_API_KEY: string;
+  /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
+  APPLE_BUNDLE_ID: string;
+};
+
+/**
+ * Request-scoped values set by middleware (auth, requestId) and read by routes.
+ * NEVER store these in module-level globals — keep them on the Hono context.
+ */
+export type Variables = {
+  /** Authenticated user id (set by auth middleware). */
+  userId: string;
+  /** Device id bound to the session (set by auth middleware). */
+  deviceId: string;
+  /** Per-request id for tracing + the error envelope. */
+  requestId: string;
+};
+
+/** Convenience alias for typing `new Hono<AppEnv>()`. */
+export type AppEnv = { Bindings: Env; Variables: Variables };
