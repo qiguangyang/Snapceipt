@@ -15,10 +15,11 @@ describe("misc routes", () => {
     expect(body.error.code).toBe("NOT_IMPLEMENTED");
   });
 
-  it("GET /_meta-backed migration applied (D1 binding wired)", async () => {
+  it("serves with the D1 binding wired (migration applied)", async () => {
     const res = await SELF.fetch("https://example.com/health");
-    // health works -> worker bundled; migrations are validated by the harness
-    // itself (applyD1Migrations would throw in setup if the SQL were invalid).
+    // health works -> worker bundled; the 0001_init schema is validated by the
+    // harness itself (applyD1Migrations would throw in setup if the SQL were
+    // invalid) and exhaustively by test/schema.test.ts.
     expect(res.ok).toBe(true);
   });
 });
