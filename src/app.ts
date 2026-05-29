@@ -6,7 +6,8 @@ import type { AppEnv } from "./env";
 import { miscRoutes } from "./routes/misc";
 
 /**
- * Builds the Snapceipt Worker app.
+ * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
+ * scope below — there is no factory function (per the plan's Canonical Contracts).
  * Order matters: requestId first (so every later layer + the error envelope
  * can read c.var.requestId), then logger, then cors. Routes mount last.
  */
@@ -20,5 +21,3 @@ app.use("*", cors());
 
 // Public + placeholder routes. (auth/rateLimit/error middleware: later tasks.)
 app.route("/", miscRoutes);
-
-export default app;
