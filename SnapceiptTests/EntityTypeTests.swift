@@ -1,0 +1,27 @@
+import Testing
+@testable import Snapceipt
+
+@Suite("EntityType")
+struct EntityTypeTests {
+    @Test("has exactly the 12 syncable cases")
+    func count() {
+        #expect(EntityType.allCases.count == 12)
+    }
+
+    @Test("raw values match the backend camelCase contract")
+    func rawValues() {
+        let expected = [
+            "transaction", "lineItem", "profile", "category", "smartRule",
+            "budget", "loyaltyCard", "quote", "quoteLineItem",
+            "mileageTrip", "wfhLog", "taxSettings",
+        ]
+        #expect(EntityType.allCases.map(\.rawValue) == expected)
+    }
+
+    @Test("round-trips through its raw string")
+    func roundTrip() throws {
+        let t = try #require(EntityType(rawValue: "loyaltyCard"))
+        #expect(t == .loyaltyCard)
+        #expect(EntityType(rawValue: "nope") == nil)
+    }
+}

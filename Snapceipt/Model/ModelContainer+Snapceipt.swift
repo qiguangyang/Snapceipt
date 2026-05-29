@@ -1,32 +1,48 @@
 import Foundation
 import SwiftData
 
-/// Central place that knows the full SwiftData schema for the app.
-/// Later tasks append their `@Model` types to `snapceiptSchema`.
+/// The full Snapceipt SwiftData schema: the 12 syncable domain models + the
+/// offline OutboxMutation queue.
 enum SnapceiptSchema {
-    /// Every persisted `@Model` type. Empty in the foundation scaffold;
-    /// Task 3+ register `Profile`, `Transaction`, `OutboxMutation`, etc. here.
-    static var models: [any PersistentModel.Type] { [] }
+    static let models: [any PersistentModel.Type] = [
+        Profile.self,
+        Transaction.self,
+        LineItem.self,
+        Category.self,
+        SmartRule.self,
+        Budget.self,
+        LoyaltyCard.self,
+        MileageTrip.self,
+        WFHLog.self,
+        Quote.self,
+        QuoteLineItem.self,
+        TaxSettings.self,
+        OutboxMutation.self,
+    ]
 
-    static var schema: Schema { Schema(models) }
+    static let schema = Schema(models)
 }
 
-/// Builds the app's shared `ModelContainer`.
-/// - Parameter inMemory: when `true`, nothing is written to disk (used by tests/previews).
-func makeSnapceiptContainer(inMemory: Bool = false) -> ModelContainer {
-    let configuration = ModelConfiguration(
-        schema: SnapceiptSchema.schema,
-        isStoredInMemoryOnly: inMemory
-    )
-    do {
-        return try ModelContainer(
-            for: SnapceiptSchema.schema,
-            configurations: [configuration]
+extension ModelContainer {
+    /// Builds the app's ModelContainer. Pass `inMemory: true` for tests/previews
+    /// (ephemeral store) and `false` for the on-disk app store.
+    static func makeSnapceiptContainer(inMemory: Bool = false) throws -> ModelContainer {
+        let config = ModelConfiguration(
+            schema: SnapceiptSchema.schema,
+            isStoredInMemoryOnly: inMemory
         )
+        return try ModelContainer(for: SnapceiptSchema.schema, configurations: [config])
+    }
+}
+
+/// Builds the app's shared `ModelContainer` for non-throwing call sites (app
+/// launch, previews). Wraps `ModelContainer.makeSnapceiptContainer(inMemory:)`
+/// and falls back to an in-memory store if the on-disk store is corrupt/
+/// incompatible (the real migration/reset flow is owned by a later task).
+func makeSnapceiptContainer(inMemory: Bool = false) -> ModelContainer {
+    do {
+        return try ModelContainer.makeSnapceiptContainer(inMemory: inMemory)
     } catch {
-        // A failure here means the on-disk store is incompatible/corrupt.
-        // Fall back to an in-memory store so the app still launches; the
-        // real recovery flow (migration/reset) is owned by a later task.
         let fallback = ModelConfiguration(
             schema: SnapceiptSchema.schema,
             isStoredInMemoryOnly: true
