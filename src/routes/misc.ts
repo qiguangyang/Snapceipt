@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
+import { ApiError } from "../lib/errors";
 
 /**
  * Misc routes: a public health check and the connected-banks placeholder.
@@ -13,18 +14,11 @@ miscRoutes.get("/health", (c) => {
 });
 
 // Connected banks / reconcile is a v1 UI placeholder with no backend.
-// Return a 501 envelope so the iOS app degrades gracefully.
-// (Uses the error-envelope shape directly; the ApiError class + middleware
-//  arrive in the errors task and will subsume this.)
-miscRoutes.all("/banks", (c) => {
-  return c.json(
-    {
-      error: {
-        code: "NOT_IMPLEMENTED",
-        message: "Connected banks are not available in this version.",
-        requestId: c.get("requestId") ?? "",
-      },
-    },
-    501,
+// Throw the shared ApiError so the onError handler emits the uniform 501
+// envelope (with requestId + X-Request-Id) — the iOS app degrades gracefully.
+miscRoutes.all("/banks", () => {
+  throw new ApiError(
+    "NOT_IMPLEMENTED",
+    "Connected banks are not available in this version.",
   );
 });
