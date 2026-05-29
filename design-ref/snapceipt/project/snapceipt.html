@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Snapceipt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --cream: #FBF6F0;
+    --paper: #FFFFFF;
+    --paper-2: #F6EEE4;
+    --ink: #211C18;
+    --ink-2: #6B6258;
+    --ink-3: #A99F93;
+    --line: #ECE3D8;
+    --line-2: #F3EBE1;
+
+    --p: #E8602C;        /* personal — terracotta */
+    --p-soft: #FDEBE0;
+    --p-deep: #C2461A;
+    --b: #0E7C72;        /* business — teal */
+    --b-soft: #DCF0ED;
+    --b-deep: #0A5950;
+
+    --income: #1F9D6B;
+    --income-soft: #DEF3E9;
+    --alert: #D6452B;
+
+    /* accent — swapped at runtime by profile mode */
+    --accent: var(--p);
+    --accent-soft: var(--p-soft);
+    --accent-deep: var(--p-deep);
+
+    --display: 'Schibsted Grotesk', system-ui, sans-serif;
+    --ui: 'Hanken Grotesk', system-ui, sans-serif;
+
+    --r-card: 22px;
+    --r-inner: 16px;
+    --r-chip: 12px;
+
+    --sh-card: 0 1px 2px rgba(33,28,24,.04), 0 10px 26px -16px rgba(33,28,24,.14);
+    --sh-pop: 0 8px 24px -8px rgba(33,28,24,.22), 0 2px 6px rgba(33,28,24,.08);
+    --sh-fab: 0 8px 20px -4px color-mix(in srgb, var(--accent) 55%, transparent), 0 3px 8px rgba(33,28,24,.18);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #E7E2DB;
+    font-family: var(--ui);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(120% 80% at 50% 0%, #F1ECE4 0%, #E4DED5 55%, #DAD3C9 100%);
+  }
+  #scaler { transform-origin: center center; }
+
+  /* App-wide helpers */
+  .app-root { font-family: var(--ui); color: var(--ink); }
+  .num { font-family: var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .display { font-family: var(--display); }
+  .nowrap { white-space: nowrap; }
+
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  .scroll { overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+
+  .icons-bold .sc-ic path { stroke-width: 2.4px; }
+  .icons-thin .sc-ic path { stroke-width: 1.45px; }
+
+  @keyframes sc-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sc-scan { 0% { top: 4%; } 100% { top: 92%; } }
+  @keyframes sc-pop-in { 0% { transform: scale(.5); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes sc-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  @keyframes sc-pulse { 0%,100% { opacity: .5; transform: scale(.9);} 50% { opacity: 1; transform: scale(1.05);} }
+  @keyframes sc-check { 0% { stroke-dashoffset: 48; } 100% { stroke-dashoffset: 0; } }
+  @keyframes sc-ring { 0% { transform: scale(.6); opacity: .55; } 100% { transform: scale(1.5); opacity: 0; } }
+  @keyframes sc-spin { to { transform: rotate(360deg); } }
+  @keyframes sc-rise { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes sc-confetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(220px) rotate(420deg); opacity: 0; } }
+
+  .screen-enter { animation: sc-fade-up .34s cubic-bezier(.22,.61,.36,1) both; }
+  .stagger > * { animation: sc-fade-up .42s cubic-bezier(.22,.61,.36,1) both; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="scaler">
+      <div id="root"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="frames/ios-frame.jsx"></script>
+  <script type="text/babel" src="app/theme.jsx"></script>
+  <script type="text/babel" src="app/home.jsx"></script>
+  <script type="text/babel" src="app/capture.jsx"></script>
+  <script type="text/babel" src="app/transactions.jsx"></script>
+  <script type="text/babel" src="app/reports.jsx"></script>
+  <script type="text/babel" src="app/profile.jsx"></script>
+  <script type="text/babel" src="app/addprofile.jsx"></script>
+  <script type="text/babel" src="app/settings-pages.jsx"></script>
+  <script type="text/babel" src="app/logbook-pages.jsx"></script>
+  <script type="text/babel" src="app/quote-page.jsx"></script>
+  <script type="text/babel" src="app/manual-page.jsx"></script>
+  <script type="text/babel" src="app/loyalty-page.jsx"></script>
+  <script type="text/babel" src="app/tweaks-panel.jsx"></script>
+  <script type="text/babel" src="app/shell.jsx"></script>
+
+  <script>
+    // Fit the 402×874 device to the viewport
+    (function () {
+      var DW = 402, DH = 874, MARGIN = 24;
+      function fit() {
+        var s = Math.min(
+          (window.innerWidth - MARGIN) / DW,
+          (window.innerHeight - MARGIN) / DH,
+          1.18
+        );
+        var el = document.getElementById('scaler');
+        if (el) el.style.transform = 'scale(' + s + ')';
+      }
+      window.addEventListener('resize', fit);
+      fit();
+      window.__fitDevice = fit;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Xcode / SwiftPM
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Secrets / env
+*.p8
+.env
+.dev.vars
+.wrangler/
+
+# Node / Cloudflare Worker
+node_modules/
+dist/
+.wrangler/state/
+
+# Misc
+*.log
