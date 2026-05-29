@@ -9,11 +9,13 @@ export interface ProcessedMutation {
   entity_id: string;
   op: "upsert" | "delete";
   status: "applied" | "conflict" | "duplicate" | "rejected";
-  result_json: string | null;
+  result_json: string;   // schema: TEXT NOT NULL — always populated
   created_at: number;
 }
 
-/** Allow-list of table names that may be passed to the scoped helpers (table names cannot be bound params). */
+/** Allow-list of table names that may be passed to the scoped helpers (table names cannot be bound params).
+ *  `processed_mutations` is intentionally absent — it is server-only and accessed via its own dedicated
+ *  helpers (record/getProcessedMutation), never through the tenant-scoped query path. */
 const SCOPED_TABLES = new Set([
   "users", "devices", "profiles", "categories", "smart_rules",
   "transactions", "line_items", "receipt_images", "budgets", "loyalty_cards",
@@ -65,7 +67,7 @@ export async function recordProcessedMutation(
     entityId: string;
     op: "upsert" | "delete";
     status: "applied" | "conflict" | "duplicate" | "rejected";
-    resultJson: string | null;
+    resultJson: string;   // processed_mutations.result_json is NOT NULL
     createdAt: number;
   },
 ): Promise<void> {
