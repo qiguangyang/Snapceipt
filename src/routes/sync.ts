@@ -3,7 +3,7 @@ import type { AppEnv } from "../env";
 import { serverStamp } from "../lib/time";
 import { getProcessedMutation } from "../lib/db";
 import { pushBodySchema, type Mutation } from "../schemas/sync";
-import { tableForEntityType, type SyncTableMeta } from "../lib/syncTables";
+import { tableForEntityType, PROFILE_ID_REQUIRED, type SyncTableMeta } from "../lib/syncTables";
 import { validate } from "./auth";
 
 /**
@@ -78,8 +78,9 @@ async function applyMutation(
   deviceId: string,
   m: Mutation,
 ): Promise<MutationResult> {
-  // (1) Idempotency replay — echo the stored result.
-  const prior = await getProcessedMutation(db, m.mutationId);
+  // (1) Idempotency replay — echo the stored result. Scoped to the authed user so a
+  // replayed mutationId from another tenant is treated as new (no cross-tenant leak).
+  const prior = await getProcessedMutation(db, m.mutationId, userId);
   if (prior) {
     const replay = JSON.parse(prior.result_json) as Omit<MutationResult, "status">;
     return { ...replay, status: "duplicate" };
@@ -161,6 +162,21 @@ async function applyMutation(
   }
 
   // upsert
+
+  // (5) Guard NOT NULL profile_id: an upsert into a table whose profile_id is NOT NULL
+  // (transactions, budgets, mileage_trips, wfh_logs, quotes, tax_settings) that omits
+  // profileId would write NULL and throw an unhandled D1 constraint error inside the
+  // batch. Reject the mutation cleanly instead. (delete never inserts profile_id, so it
+  // only applies on the upsert path.)
+  if (PROFILE_ID_REQUIRED.has(m.entityType) && payload.profileId == null) {
+    return recordAndReturn(db, userId, deviceId, m, {
+      mutationId: m.mutationId,
+      status: "rejected",
+      reason: "VALIDATION_FAILED",
+      entity: null,
+    });
+  }
+
   const writeStmt = buildUpsertStmt(db, meta, m, userId, now, newRev, deviceId, stored);
 
   // Build the canonical row we are persisting so we can echo + record it without

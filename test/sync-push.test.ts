@@ -4,6 +4,7 @@ import { signAccess } from "../src/lib/jwt";
 import { uuidv7 } from "../src/lib/ids";
 import { SYNCABLE_TYPES } from "../src/schemas/entities";
 import { tableForEntityType } from "../src/lib/syncTables";
+import { getProcessedMutation, recordProcessedMutation } from "../src/lib/db";
 
 const USER_ID = "01890000-0000-7000-8000-000000000001";
 const OTHER_USER_ID = "01890000-0000-7000-8000-0000000000ff";
@@ -236,6 +237,68 @@ describe("POST /sync/push", () => {
     const json = (await res.json()) as any;
     expect(json.error.code).toBe("VALIDATION_FAILED");
   });
+
+  it("profile upsert persists the persona (profileType -> type), not the envelope discriminant", async () => {
+    const entityId = uuidv7();
+    const m = {
+      mutationId: uuidv7(),
+      entityType: "profile",
+      entityId,
+      op: "upsert" as const,
+      updatedAt: 1_000,
+      payload: {
+        id: entityId,
+        userId: USER_ID,
+        type: "profile", // envelope discriminant — must NOT land in profiles.type
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+        name: "Acme Pty Ltd",
+        profileType: "business", // the persona — this is what profiles.type must hold
+        initials: "AP",
+        accent1: "#aaa",
+        accent2: "#bbb",
+        accent3: "#ccc",
+        abn: "12345678901",
+        gstRegistered: true,
+      } as Record<string, unknown>,
+    };
+    const res = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    expect(res.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT type, name, initials, accent_1, accent_2, accent_3, abn, gst_registered
+         FROM profiles WHERE id = ?`,
+    )
+      .bind(entityId)
+      .first<any>();
+    expect(row.type).toBe("business"); // the persona, NOT "profile"
+    expect(row.name).toBe("Acme Pty Ltd");
+    expect(row.initials).toBe("AP");
+    expect(row.accent_1).toBe("#aaa");
+    expect(row.accent_2).toBe("#bbb");
+    expect(row.accent_3).toBe("#ccc");
+    expect(row.abn).toBe("12345678901");
+    expect(row.gst_registered).toBe(1); // boolean -> 0/1
+  });
+
+  it("rejects an upsert that omits profileId for a NOT NULL profile_id table (no row, no 500)", async () => {
+    const m = txnMutation();
+    delete m.payload.profileId;
+    const res = await push({ deviceId: DEVICE_ID, mutations: [m] });
+    expect(res.status).toBe(200); // clean per-mutation reject, NOT an unhandled throw
+    const json = (await res.json()) as any;
+    expect(json.error).toBeUndefined();
+    expect(json.results[0].status).toBe("rejected");
+    expect(json.results[0].reason).toBe("VALIDATION_FAILED");
+
+    const row = await env.DB.prepare(`SELECT id FROM transactions WHERE id = ?`)
+      .bind(m.entityId)
+      .first<any>();
+    expect(row).toBeNull(); // nothing written
+  });
 });
 
 describe("syncable table map", () => {
@@ -262,5 +325,37 @@ describe("syncable table map", () => {
     }
     // Unknown types map to null.
     expect(tableForEntityType("notAType")).toBeNull();
+  });
+});
+
+describe("getProcessedMutation tenant scoping", () => {
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM processed_mutations");
+  });
+
+  it("does not leak another tenant's mutation result across users", async () => {
+    const mutationId = uuidv7();
+    const entityId = uuidv7();
+    // User A records a processed mutation echoing A's own entity.
+    await recordProcessedMutation(env.DB, {
+      mutationId,
+      userId: USER_ID,
+      deviceId: DEVICE_ID,
+      entityType: "transaction",
+      entityId,
+      op: "upsert",
+      status: "applied",
+      resultJson: JSON.stringify({ mutationId, entity: { id: entityId, userId: USER_ID } }),
+      createdAt: Date.now(),
+    });
+
+    // User A's own lookup finds it.
+    const forA = await getProcessedMutation(env.DB, mutationId, USER_ID);
+    expect(forA).not.toBeNull();
+    expect(forA!.user_id).toBe(USER_ID);
+
+    // User B replaying the SAME mutationId must NOT receive A's row — treated as new.
+    const forB = await getProcessedMutation(env.DB, mutationId, OTHER_USER_ID);
+    expect(forB).toBeNull();
   });
 });

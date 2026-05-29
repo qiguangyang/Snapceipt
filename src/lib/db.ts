@@ -84,14 +84,17 @@ export async function recordProcessedMutation(
     .run();
 }
 
-/** Look up a prior mutation result for idempotent replay. Returns null if not yet processed. */
+/** Look up a prior mutation result for idempotent replay. Returns null if not yet
+ *  processed for THIS user. Scoped by user_id so a replayed mutationId from another
+ *  tenant cannot leak that tenant's entity back as a `duplicate`. */
 export async function getProcessedMutation(
   db: D1Database,
   mutationId: string,
+  userId: string,
 ): Promise<ProcessedMutation | null> {
   return db
-    .prepare(`SELECT * FROM processed_mutations WHERE mutation_id = ?`)
-    .bind(mutationId)
+    .prepare(`SELECT * FROM processed_mutations WHERE mutation_id = ? AND user_id = ?`)
+    .bind(mutationId, userId)
     .first<ProcessedMutation>();
 }
 

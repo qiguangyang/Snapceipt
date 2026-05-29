@@ -53,7 +53,10 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     hasProfileId: false,
     columns: {
       name: "name",
-      type: "type",
+      // Client sends the persona as `profileType` (envelope `type` is the "profile"
+      // discriminant). Map profileType -> profiles.type so we persist the persona,
+      // not the envelope discriminant.
+      profileType: "type",
       initials: "initials",
       accent1: "accent_1",
       accent2: "accent_2",
@@ -186,6 +189,22 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     },
   },
 };
+
+/**
+ * EntityTypes whose D1 `profile_id` column is NOT NULL (see migrations/0001_init.sql).
+ * An upsert for one of these that omits profileId would write NULL and trip a NOT NULL
+ * constraint inside the batch — the push route guards these and rejects the mutation
+ * cleanly (VALIDATION_FAILED) instead. categories/smartRule/loyaltyCard have a nullable
+ * profile_id; profile/lineItem have none — they are intentionally absent here.
+ */
+export const PROFILE_ID_REQUIRED: ReadonlySet<string> = new Set([
+  "transaction",
+  "budget",
+  "mileageTrip",
+  "wfhLog",
+  "quote",
+  "taxSettings",
+]);
 
 /** Resolve a client entityType to its table metadata, or null if unknown. */
 export function tableForEntityType(entityType: string): SyncTableMeta | null {

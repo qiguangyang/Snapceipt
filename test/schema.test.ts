@@ -124,14 +124,16 @@ describe("0001_init schema", () => {
   });
 
   it("records and replays processed mutations idempotently", async () => {
-    expect(await getProcessedMutation(env.DB, "mut-1")).toBeNull();
+    expect(await getProcessedMutation(env.DB, "mut-1", "u1")).toBeNull();
     await recordProcessedMutation(env.DB, {
       mutationId: "mut-1", userId: "u1", deviceId: "d1",
       entityType: "transaction", entityId: "t1", op: "upsert",
       status: "applied", resultJson: JSON.stringify({ id: "t1" }), createdAt: 100,
     });
-    const got = await getProcessedMutation(env.DB, "mut-1");
+    const got = await getProcessedMutation(env.DB, "mut-1", "u1");
     expect(got?.status).toBe("applied");
     expect(got?.entity_id).toBe("t1");
+    // Tenant-scoped: u2 replaying the same mutationId does not see u1's row.
+    expect(await getProcessedMutation(env.DB, "mut-1", "u2")).toBeNull();
   });
 });
