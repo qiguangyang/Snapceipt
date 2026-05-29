@@ -2,8 +2,20 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { serverStamp } from "../lib/time";
 import { getProcessedMutation } from "../lib/db";
-import { pushBodySchema, type Mutation } from "../schemas/sync";
-import { tableForEntityType, PROFILE_ID_REQUIRED, type SyncTableMeta } from "../lib/syncTables";
+import {
+  pushBodySchema,
+  pullQuerySchema,
+  encodeCursor,
+  decodeCursor,
+  type Mutation,
+  type Cursor,
+} from "../schemas/sync";
+import {
+  tableForEntityType,
+  SYNCABLE_TABLES,
+  PROFILE_ID_REQUIRED,
+  type SyncTableMeta,
+} from "../lib/syncTables";
 import { validate } from "./auth";
 
 /**
@@ -323,3 +335,86 @@ function buildUpsertStmt(
 
   return db.prepare(sql).bind(...insertVals);
 }
+
+// ===========================================================================
+// GET /sync/pull — local-first delta pull (composite keyset + global merge)
+// ===========================================================================
+
+/** A pull change envelope: the camelCase entity plus its SPINE `type` tag. */
+type PullChange = Record<string, unknown> & {
+  type: string;
+  id: string;
+  updatedAt: number;
+};
+
+/**
+ * GET /sync/pull?cursor=<opaque>&limit=<n>
+ *
+ * Delta pull across EVERY syncable table, merged into ONE stream globally ordered
+ * by the composite keyset (updatedAt, id) and capped at `limit`. Tombstones
+ * (deletedAt != null) ARE included so deletes propagate to the client. Every query
+ * is scoped `WHERE user_id = c.var.userId` (tenant isolation).
+ *
+ * Algorithm:
+ *  1. Decode the opaque cursor -> { ts, id } (null = first/full sync, no keyset filter).
+ *  2. For each table, fetch up to `limit + 1` rows strictly after the cursor using
+ *     the composite predicate `(updated_at > ?) OR (updated_at = ? AND id > ?)`,
+ *     ordered by `(updated_at, id)`. The `+1` is the "is there a next page" probe.
+ *  3. Merge all per-table results and re-sort globally by `(updatedAt, id)`.
+ *  4. Slice to `limit`. `hasMore = merged.length > limit` (some table still had rows
+ *     beyond the emitted window). `nextCursor` = the LAST emitted row's (updatedAt, id),
+ *     so the next request resumes strictly after it — no row dropped or repeated even
+ *     when many rows (across tables) share the same updatedAt.
+ *
+ * Table names come only from the hardcoded SYNCABLE_TABLES registry (never user
+ * input), so the interpolated `${table}` is not an injection vector; user_id, the
+ * cursor parts, and the fetch limit are all bound parameters.
+ */
+syncRoutes.get("/pull", validate("query", pullQuerySchema), async (c) => {
+  const userId = c.var.userId;
+  const { cursor: rawCursor, limit } = c.req.valid("query");
+
+  // null cursor = first/full sync: start from (-1, "") so every row is "after".
+  const cursor: Cursor = decodeCursor(rawCursor) ?? { ts: -1, id: "" };
+
+  // limit + 1 per table: enough to detect hasMore after the global merge slice.
+  const fetchN = limit + 1;
+
+  const perTable = await Promise.all(
+    Object.entries(SYNCABLE_TABLES).map(async ([type, meta]) => {
+      const { results } = await c.env.DB.prepare(
+        `SELECT * FROM ${meta.table}
+          WHERE user_id = ?1
+            AND ( updated_at > ?2 OR (updated_at = ?2 AND id > ?3) )
+          ORDER BY updated_at ASC, id ASC
+          LIMIT ?4`,
+      )
+        .bind(userId, cursor.ts, cursor.id, fetchN)
+        .all<Record<string, unknown>>();
+      return results.map((row): PullChange => ({
+        type,
+        ...rowToEntity(meta, row),
+        id: row.id as string,
+        updatedAt: Number(row.updated_at),
+      }));
+    }),
+  );
+
+  // Merge + global composite-keyset sort by (updatedAt, id).
+  const merged = perTable.flat().sort((a, b) => {
+    if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const hasMore = merged.length > limit;
+  const changes = hasMore ? merged.slice(0, limit) : merged;
+
+  const last = changes[changes.length - 1];
+  // Advance the cursor to the last emitted row; with nothing emitted, echo the
+  // incoming cursor (or re-encode the start sentinel) so the client can re-poll.
+  const nextCursor = last
+    ? encodeCursor({ ts: last.updatedAt, id: last.id })
+    : (rawCursor ?? encodeCursor(cursor));
+
+  return c.json({ changes, nextCursor, hasMore, serverTime: serverStamp() });
+});
