@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "cf-typegen": "wrangler types",
     "migrate:local": "wrangler d1 migrations apply snapceipt --local",
     "migrate:remote": "wrangler d1 migrations apply snapceipt --remote"

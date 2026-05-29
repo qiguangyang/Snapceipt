@@ -7,6 +7,11 @@ const migrations = await readD1Migrations(path.join(__dirname, "migrations"));
 
 export default defineWorkersConfig({
   test: {
+    // The HTTP e2e suite (e2e/**) boots a real worker via `unstable_dev`, which
+    // CANNOT run inside vitest-pool-workers. It lives in its own Node-env project
+    // (vitest.e2e.config.ts / `npm run test:e2e`) and must be excluded here so
+    // the workers-pool `npm test` never tries to collect it.
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     setupFiles: ["./test/apply-migrations.ts"],
     poolOptions: {
       workers: {

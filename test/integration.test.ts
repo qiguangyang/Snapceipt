@@ -60,6 +60,12 @@ describe("integration: magic-link -> sync push/pull, banks 501, health 200", () 
       body: JSON.stringify({ email }),
     });
     expect(reqRes.status).toBe(202);
+    // E2E seam is GATED OFF by default: the workers-pool runtime does not set
+    // E2E_TEST_MODE, so the 202 carries NO body and never leaks the raw token.
+    // (The e2e harness sets E2E_TEST_MODE="1" to opt into the `{ devToken }` body.)
+    const reqText = await reqRes.text();
+    expect(reqText).toBe("");
+    expect(reqText).not.toContain("devToken");
 
     // 2. Recover the single-use token from the captured email, then verify.
     const token = spy.lastToken();

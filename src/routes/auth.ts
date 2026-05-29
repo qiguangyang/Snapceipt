@@ -100,9 +100,31 @@ authRoutes.post(
     });
 
     const link = `${MAGIC_LINK_BASE_URL}?token=${token}`;
+    const e2e = c.env.E2E_TEST_MODE === "1";
+
     // Routed through the email seam (src/lib/email.ts) so tests can spy on it;
     // the real SendEmail binding isn't exercisable in the test runtime.
-    await sendMagicLinkEmail(c.env, { to: normalized, link });
+    // In E2E mode the local dev runtime has no real SendEmail binding, so a send
+    // failure must not 500 the request — the harness gets the token via devToken
+    // below, not via email. In production (e2e off) a send failure still surfaces.
+    if (e2e) {
+      try {
+        await sendMagicLinkEmail(c.env, { to: normalized, link });
+      } catch {
+        // E2E-only: ignore the missing/failing local SendEmail binding.
+      }
+    } else {
+      await sendMagicLinkEmail(c.env, { to: normalized, link });
+    }
+
+    // E2E-ONLY SEAM — never enabled in production. When E2E_TEST_MODE === "1"
+    // (only ever set by the e2e harness, never declared in wrangler.jsonc),
+    // ALSO echo the raw token so a black-box HTTP client can finish the
+    // magic-link flow without reading the email it can't access. Off by default:
+    // the normal 202 carries NO body, so no token leaks unless explicitly opted in.
+    if (e2e) {
+      return c.json({ devToken: token }, 202);
+    }
 
     // ALWAYS 202 — no account enumeration. No response body.
     return c.body(null, 202);

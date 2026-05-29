@@ -22,6 +22,15 @@ export type Env = {
   DEEPSEEK_API_KEY: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
+  /**
+   * E2E-ONLY test seam. When set to "1", POST /auth/magic-link/request ALSO
+   * returns the raw magic-link token in its 202 body so a black-box HTTP client
+   * can complete auth without reading the email. MUST be undefined in
+   * production — it is never declared in wrangler.jsonc and is only injected by
+   * the e2e harness (vitest.e2e.config.ts / unstable_dev vars). Optional so the
+   * normal runtime + unit/integration tests run with it unset.
+   */
+  E2E_TEST_MODE?: string;
 };
 
 /**
