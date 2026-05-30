@@ -11,9 +11,23 @@ class UITestCase: XCTestCase {
         app = XCUIApplication()
     }
 
+    override func tearDown() {
+        app?.terminate()
+        app = nil
+        super.tearDown()
+    }
+
     /// Hermetic launch: in-app stub + reset to signed-out/empty.
     func launchStub() {
         app.launchArguments += ["-uiTestStub", "-uiTestReset"]
+        app.launch()
+    }
+
+    /// Launch directly into a SEEDED, already-signed-in shell (2 profiles) — for
+    /// shell-level tests. NOTE: no `-uiTestReset` (seeding wants a live session;
+    /// the seed overwrites the session deterministically).
+    func launchSeeded() {
+        app.launchArguments += ["-uiTestStub", "-uiTestSeed"]
         app.launch()
     }
 

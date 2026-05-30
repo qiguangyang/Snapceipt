@@ -32,6 +32,7 @@ struct SnapceiptApp: App {
         launch.applyResetIfNeeded(authStore: auth)
         let api: APIClient = launch.makeAPIClient(auth: auth)
         let container = launch.makeContainer()
+        launch.applySeedIfNeeded(authStore: auth, context: container.mainContext)
 #else
         let api: APIClient = LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.app")!, auth: auth)
         let container = makeSnapceiptContainer()

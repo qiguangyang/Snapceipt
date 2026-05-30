@@ -7,12 +7,14 @@ import SwiftData
 struct AppLaunch {
     let useStub: Bool
     let reset: Bool
+    let seed: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
          environment: [String: String] = ProcessInfo.processInfo.environment) {
         useStub = arguments.contains("-uiTestStub")
         reset = arguments.contains("-uiTestReset")
+        seed = arguments.contains("-uiTestSeed")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 
@@ -24,6 +26,23 @@ struct AppLaunch {
         authStore.clear()
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         UserDefaults.standard.removeObject(forKey: "sc.syncCursor")
+    }
+
+    /// Seeds an already-signed-in dev session + two profiles, for shell-level UI tests
+    /// where the profile switcher must be enabled (needs >1 profile). DEBUG only.
+    func applySeedIfNeeded(authStore: AuthStore, context: ModelContext) {
+        guard seed else { return }
+        authStore.save(SessionResponse(
+            accessToken: "seed-access", refreshToken: "seed-refresh", expiresIn: 900,
+            user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
+        let p1 = Profile(userId: DevAccount.userId, name: "Studio North", type: "business",
+                         initials: "SN", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950",
+                         sortOrder: 0, isDefault: true)
+        let p2 = Profile(userId: DevAccount.userId, name: "Home Budget", type: "personal",
+                         initials: "HB", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
+                         sortOrder: 1, isDefault: false)
+        context.insert(p1); context.insert(p2)
+        try? context.save()
     }
 
     func makeAPIClient(auth: AuthStore) -> APIClient {
