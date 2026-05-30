@@ -238,6 +238,26 @@ final class AuthViewModel {
         }
     }
 
+    // MARK: Dev sign-in
+
+    #if DEBUG
+    /// One-tap dev sign-in: fetch the backend's dev token (E2E_TEST_MODE) for the fixed
+    /// dev account and verify it → real session. Errors clearly if the backend isn't in dev mode.
+    func devSignIn() async {
+        pendingEmail = nil
+        state = .verifying
+        do {
+            guard let token = try await api.magicLinkRequestDev(email: DevAccount.email) else {
+                state = .error("Dev sign-in needs the backend running in dev mode (E2E_TEST_MODE).")
+                return
+            }
+            await verifyMagicLink(token: token)   // existing path → saves session, sets .signedIn
+        } catch {
+            state = .error("Dev sign-in failed: \(error.localizedDescription)")
+        }
+    }
+    #endif
+
     // MARK: Deep link
 
     func handleDeepLink(_ url: URL) async {

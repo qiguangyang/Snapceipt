@@ -178,4 +178,28 @@ struct AuthViewModelTests {
         let vm = AuthViewModel(api: api, auth: store)
         #expect(vm.state == .signedIn)
     }
+
+    @Test func devSignInWithTokenReachesSignedInAndSavesSession() async {
+        let mock = MockAPIClient()
+        mock.magicLinkRequestDevHandler = { _ in "dev-tok" }
+        mock.magicLinkVerifyHandler = { token in
+            #expect(token == "dev-tok")
+            return SessionResponse(accessToken: "a", refreshToken: "r", expiresIn: 900,
+                                   user: SessionUser(id: "u-dev", email: "dev@snapceipt.app", displayName: "Dev"))
+        }
+        let auth = AuthStore(keychain: Keychain(service: "t.\(UUID())"))
+        let vm = AuthViewModel(api: mock, auth: auth)
+        await vm.devSignIn()
+        #expect(vm.state == .signedIn)
+        #expect(auth.session?.userId == "u-dev")
+    }
+
+    @Test func devSignInWithNoTokenGoesToErrorAndStaysSignedOutScreen() async {
+        let mock = MockAPIClient()
+        mock.magicLinkRequestDevHandler = { _ in nil }   // backend not in dev mode
+        let vm = AuthViewModel(api: mock, auth: AuthStore(keychain: Keychain(service: "t.\(UUID())")))
+        await vm.devSignIn()
+        if case .error = vm.state {} else { Issue.record("expected .error, got \(vm.state)") }
+        #expect(vm.pendingEmail == nil)   // RootView keeps showing SignInView
+    }
 }
