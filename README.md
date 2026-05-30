@@ -151,3 +151,8 @@ wrapped binding backed by an external worker that the offline test runtime can't
 resolve (workers-sdk #6796 / #7434). `vitest.config.ts` overrides the `AI`
 wrapped binding with a local stub worker so the test runtime boots; `wrangler
 dev`/`wrangler deploy` use the real binding unchanged.
+
+## iOS UI tests
+
+- **Hermetic suite (no backend, default/CI):** `xcodebuild test -scheme Snapceipt -destination "platform=iOS Simulator,name=iPhone 16" -only-testing:SnapceiptUITests` — launches the app against an in-app stub (`-uiTestStub`) and drives sign-in → onboarding → shell + the profile switcher. `LiveSmokeUITests` `XCTSkip`s here.
+- **Live smoke (real Worker):** `./scripts/ios-e2e-live.sh` — applies D1 migrations to a fresh local store, starts `wrangler dev` with `E2E_TEST_MODE=1`, and runs `LiveSmokeUITests` (real `LiveAPIClient` → dev sign-in hits the live `/auth/magic-link/*` seam → onboarding). The script tears the Worker down on exit.
