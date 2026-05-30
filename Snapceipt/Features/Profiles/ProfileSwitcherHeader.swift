@@ -34,6 +34,7 @@ struct ProfileSwitcherHeader: View {
         }
         .buttonStyle(.plain)
         .disabled(!canSwitch)
+        .accessibilityIdentifier(AccessibilityID.profileSwitcher)
     }
 
     private var avatar: some View {

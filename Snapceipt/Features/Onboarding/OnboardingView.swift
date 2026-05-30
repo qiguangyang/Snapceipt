@@ -105,6 +105,7 @@ private struct FirstProfileForm: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(Palette.line, lineWidth: 1)
                     )
+                    .accessibilityIdentifier(AccessibilityID.onboardingName)
 
                 // Type
                 HStack(spacing: 10) {
@@ -123,6 +124,7 @@ private struct FirstProfileForm: View {
                                         .stroke(Palette.line, lineWidth: type == t ? 0 : 1)
                                 )
                         }
+                        .accessibilityIdentifier(t == .personal ? AccessibilityID.onboardingTypePersonal : AccessibilityID.onboardingTypeBusiness)
                     }
                 }
 
@@ -155,6 +157,7 @@ private struct FirstProfileForm: View {
                     .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .disabled(trimmedName.isEmpty)
+            .accessibilityIdentifier(AccessibilityID.onboardingCreate)
             .opacity(trimmedName.isEmpty ? 0.5 : 1)
             .padding(.horizontal, 22)
             .padding(.bottom, 28)

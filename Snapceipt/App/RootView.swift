@@ -109,6 +109,7 @@ struct ShellView: View {
             // --- Floating raised-center tab bar ---
             TabBar(router: router, accent: accent)
                 .padding(.bottom, 22)
+                .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
         // Re-skin the whole shell to the active profile's accent at runtime.
         .environment(\.accent, accent)
@@ -186,6 +187,7 @@ struct ShellView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
+        .accessibilityIdentifier(AccessibilityID.shellHome)
     }
 
     // MARK: - Overlays
