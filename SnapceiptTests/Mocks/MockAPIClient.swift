@@ -13,6 +13,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
 
     var authAppleHandler: ((AppleAuthBody) async throws -> SessionResponse)?
     var magicLinkRequestHandler: ((String) async throws -> Void)?
+    var magicLinkRequestDevHandler: ((String) async throws -> String?)?
     var magicLinkVerifyHandler: ((String) async throws -> SessionResponse)?
     var refreshHandler: ((String) async throws -> SessionResponse)?
     var signOutHandler: (() async throws -> Void)?
@@ -42,6 +43,11 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func magicLinkRequest(email: String) async throws {
         guard let h = magicLinkRequestHandler else { throw MockAPIClientError.unscripted }
         try await h(email)
+    }
+
+    func magicLinkRequestDev(email: String) async throws -> String? {
+        guard let h = magicLinkRequestDevHandler else { throw MockAPIClientError.unscripted }
+        return try await h(email)
     }
 
     func magicLinkVerify(token: String) async throws -> SessionResponse {

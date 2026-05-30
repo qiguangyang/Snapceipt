@@ -174,6 +174,26 @@ struct APIClientTests {
         let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         #expect(obj?["email"] as? String == "user@example.com")
     }
+
+    @Test("magicLinkRequestDev returns the devToken from the 202 body")
+    func magicLinkRequestDevReturnsDevTokenFrom202Body() async throws {
+        let (client, _) = makeClient(seedBearer: nil)
+        MockURLProtocol.setHandler { _ in
+            (202, ["Content-Type": "application/json"], self.json(#"{"devToken":"dev-tok-123"}"#))
+        }
+        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.app")
+        #expect(token == "dev-tok-123")
+        #expect(MockURLProtocol.lastRequest?.url?.path == "/auth/magic-link/request")
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
+    }
+
+    @Test("magicLinkRequestDev returns nil when the 202 body has no token")
+    func magicLinkRequestDevReturnsNilWhenNoToken() async throws {
+        let (client, _) = makeClient(seedBearer: nil)
+        MockURLProtocol.setHandler { _ in (202, [:], Data()) }
+        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.app")
+        #expect(token == nil)
+    }
 }
 
 /// Test helper: URLProtocol strips httpBody into a stream, so read it back for assertions.

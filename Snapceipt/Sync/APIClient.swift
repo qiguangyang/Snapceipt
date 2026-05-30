@@ -5,6 +5,9 @@ import Foundation
 protocol APIClient {
     func authApple(_ body: AppleAuthBody) async throws -> SessionResponse
     func magicLinkRequest(email: String) async throws
+    /// Dev-only: POST /auth/magic-link/request and return the `devToken` the backend
+    /// includes only when E2E_TEST_MODE=1 (nil otherwise). Used by the dev sign-in button.
+    func magicLinkRequestDev(email: String) async throws -> String?
     func magicLinkVerify(token: String) async throws -> SessionResponse
     func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
@@ -43,6 +46,16 @@ final class LiveAPIClient: APIClient {
     func magicLinkRequest(email: String) async throws {
         try await sendNoContent("POST", "/auth/magic-link/request",
                                 body: MagicLinkRequestBody(email: email), authenticated: false)
+    }
+
+    func magicLinkRequestDev(email: String) async throws -> String? {
+        /// The 202 body only carries `devToken` when the backend runs with E2E_TEST_MODE=1.
+        struct DevResp: Decodable { let devToken: String? }
+        let data = try await perform("POST", "/auth/magic-link/request", query: [],
+                                     body: MagicLinkRequestBody(email: email),
+                                     authenticated: false, allowRefresh: false)
+        guard !data.isEmpty else { return nil }
+        return (try? decoder.decode(DevResp.self, from: data))?.devToken
     }
 
     func magicLinkVerify(token: String) async throws -> SessionResponse {

@@ -139,6 +139,7 @@ struct SignInView: View {
 final class PreviewAPIClient: APIClient {
     func authApple(_ body: AppleAuthBody) async throws -> SessionResponse { stub }
     func magicLinkRequest(email: String) async throws {}
+    func magicLinkRequestDev(email: String) async throws -> String? { nil }
     func magicLinkVerify(token: String) async throws -> SessionResponse { stub }
     func refresh(refreshToken: String) async throws -> SessionResponse { stub }
     func signOut() async throws {}
