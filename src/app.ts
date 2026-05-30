@@ -9,6 +9,8 @@ import { miscRoutes } from "./routes/misc";
 import { authRoutes } from "./routes/auth";
 import { deviceRoutes } from "./routes/devices";
 import { syncRoutes } from "./routes/sync";
+import { imageRoutes } from "./routes/images";
+import { extractRoutes } from "./routes/extract";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -43,6 +45,18 @@ app.use("*", authMiddleware());
 // are never rate-limited (they sit outside these prefixes).
 app.use("/sync/*", rateLimit("sync"));
 app.use("/devices/*", rateLimit("default"));
+// Receipt extraction (external API) — tight 30/user/hr tier. Mount the limiter
+// on BOTH the exact path AND the wildcard: the route handler serves POST /extract
+// (no trailing slash, mounted at "/"), and Hono's "/extract/*" wildcard does NOT
+// reliably match the exact "/extract" path, so the exact mount guarantees the
+// limiter runs for the actual POST. (Belt-and-suspenders; no behavior depends on
+// "try and see".)
+app.use("/extract", rateLimit("extract"));
+app.use("/extract/*", rateLimit("extract"));
+// Image upload/read — default tier. POST /images is the exact path; GET /images/*
+// is the wildcard. Mount both so the exact-path POST is also limited.
+app.use("/images", rateLimit("default"));
+app.use("/images/*", rateLimit("default"));
 
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
@@ -53,4 +67,8 @@ app.route("/devices", deviceRoutes);
 // Protected: /sync/* (push + pull). Same auth model — handlers read
 // c.var.userId / c.var.deviceId.
 app.route("/sync", syncRoutes);
+// Protected: receipt image upload/read (R2 + FK-safe receipt_images link).
+app.route("/images", imageRoutes);
+// Protected: receipt extraction (DeepSeek + stub). Rate tier "extract" above.
+app.route("/extract", extractRoutes);
 app.route("/", miscRoutes);
