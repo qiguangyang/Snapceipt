@@ -257,7 +257,7 @@ git commit -m "feat(ios): shared AccessibilityID + DEBUG dev sign-in button on S
 ## Task 4: `StubAPIClient` + `AppLaunch` seam + `SnapceiptApp` wiring
 
 **Files:**
-- Create: `Snapceipt/App/AppLaunch.swift` (DEBUG: launch parsing + `DevAccount` + factory)
+- Create: `Snapceipt/App/AppLaunch.swift` (DEBUG: launch parsing + APIClient/container factory; uses `DevAccount` from Task 2)
 - Create: `Snapceipt/Sync/StubAPIClient.swift` (DEBUG)
 - Modify: `Snapceipt/App/SnapceiptApp.swift`
 - Modify: `Snapceipt/Info.plist` (allow local networking for the live smoke)
