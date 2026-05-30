@@ -45,13 +45,29 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Snapceipt.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Snapceipt"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  SnapceiptUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SnapceiptUITests
+      - path: Snapceipt/Shared/AccessibilityID.swift   # shared constants (UI tests can't @testable-import the app)
+    dependencies:
+      - target: Snapceipt
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.SnapceiptUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Snapceipt
 schemes:
   Snapceipt:
     build:
       targets:
         Snapceipt: all
         SnapceiptTests: [test]
+        SnapceiptUITests: [test]
     test:
       targets:
         - SnapceiptTests
+        - SnapceiptUITests
       gatherCoverageData: false
