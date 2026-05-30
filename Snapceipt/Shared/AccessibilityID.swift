@@ -14,4 +14,11 @@ enum AccessibilityID {
     static let shellTabBar = "shell.tabbar"
     static let shellHome = "shell.home"
     static let profileSwitcher = "profile.switcher"
+    static let tabHome = "tab.home"
+    static let tabActivity = "tab.activity"
+    static let tabReports = "tab.reports"
+    static let tabProfile = "tab.profile"
+    static let tabSnap = "tabbar.snap"
+    static let addProfileName = "addprofile.name"
+    static let captureClose = "capture.close"
 }

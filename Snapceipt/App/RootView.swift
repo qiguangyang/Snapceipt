@@ -69,6 +69,7 @@ struct RootView: View {
 /// and on foreground.
 struct ShellView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(AuthStore.self) private var auth
 
     @Bindable var router: Router
     @Bindable var profiles: ProfilesStore
@@ -129,7 +130,7 @@ struct ShellView: View {
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
-            profiles.reload()
+            profiles.rescope(to: auth.session?.userId ?? "")
             await sync.sync()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -260,6 +261,7 @@ struct ShellView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.captureClose)
             }
         }
         .transition(.opacity)

@@ -37,10 +37,12 @@ struct TabBar: View {
                     isActive: router.tab == .home, accent: accent) {
                 router.go(.tab(.home))
             }
+            .accessibilityIdentifier(AccessibilityID.tabHome)
             TabItem(iconName: "receipt", label: "Activity",
                     isActive: router.tab == .activity, accent: accent) {
                 router.go(.tab(.activity))
             }
+            .accessibilityIdentifier(AccessibilityID.tabActivity)
 
             // Center Snap FAB — raised, accent gradient, 3pt cream ring, FAB shadow.
             Button {
@@ -69,16 +71,18 @@ struct TabBar: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .accessibilityIdentifier("tabbar.snap")
+            .accessibilityIdentifier(AccessibilityID.tabSnap)
 
             TabItem(iconName: "chart", label: "Reports",
                     isActive: router.tab == .reports, accent: accent) {
                 router.go(.tab(.reports))
             }
+            .accessibilityIdentifier(AccessibilityID.tabReports)
             TabItem(iconName: "user", label: "Profile",
                     isActive: router.tab == .profile, accent: accent) {
                 router.go(.tab(.profile))
             }
+            .accessibilityIdentifier(AccessibilityID.tabProfile)
         }
         .padding(.horizontal, 10)
         .frame(height: 64)

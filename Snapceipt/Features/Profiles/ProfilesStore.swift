@@ -112,7 +112,7 @@ final class ProfilesStore {
     @ObservationIgnored private let sync: any SyncEnqueuing
     /// The signed-in user's id (used to scope fetches and to build child view-models
     /// such as the AddProfile form presented from the shell).
-    @ObservationIgnored let userId: String
+    @ObservationIgnored private(set) var userId: String
     @ObservationIgnored private static let activeKey = "sc.activeProfile"
 
     /// All non-deleted profiles for the signed-in user, sorted for display.
@@ -142,6 +142,17 @@ final class ProfilesStore {
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)]
         )
         profiles = (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// Re-scope to the live session's user (e.g. after an in-session sign-in) and reload.
+    /// Always reloads + re-resolves the active profile, even when the user is unchanged.
+    func rescope(to newUserId: String) {
+        if newUserId != userId { userId = newUserId }
+        reload()
+        if profiles.first(where: { $0.id == activeProfileId }) == nil {
+            activeProfileId = profiles.first(where: { $0.isDefault })?.id
+                ?? profiles.first?.id ?? ""
+        }
     }
 
     var activeProfile: Profile? {

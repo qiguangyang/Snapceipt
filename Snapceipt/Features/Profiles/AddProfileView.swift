@@ -25,6 +25,7 @@ struct AddProfileView: View {
                     TextField("e.g. Lumen Studio", text: $vm.name)
                         .font(.ui(16, .regular))
                         .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier(AccessibilityID.addProfileName)
                 }
                 if vm.type == .business {
                     field("ABN (optional)") {

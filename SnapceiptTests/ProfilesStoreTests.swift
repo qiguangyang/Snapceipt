@@ -60,4 +60,18 @@ struct ProfilesStoreTests {
         #expect(store.profiles.count == 1)
         #expect(sync.calls.count == 1)        // exactly one upsert per add
     }
+
+    @Test func rescopeToNewUserLoadsThatUsersProfilesAndPicksDefault() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Profile.self, configurations: config)
+        let ctx = ModelContext(container)
+        let pA = Profile(userId: "user-A", name: "Alpha", type: "personal",
+                         accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)
+        ctx.insert(pA); try ctx.save()
+        let store = ProfilesStore(context: ctx, sync: MockSyncEngine(), userId: "")
+        #expect(store.profiles.isEmpty)            // scoped to "" — does NOT see user-A
+        store.rescope(to: "user-A")
+        #expect(store.profiles.count == 1)
+        #expect(store.activeProfileId == pA.id)    // re-resolved to the default profile
+    }
 }
