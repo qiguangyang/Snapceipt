@@ -18,7 +18,7 @@ enum ReceiptMapper {
             amountCents: signed,
             currency: "AUD",
             txnDate: draft.date,
-            mode: mode,
+            mode: mode.lowercased(),
             taxLabel: draft.taxLabel,
             deductiblePct: draft.deductible,
             paymentMethod: draft.paymentMethod,

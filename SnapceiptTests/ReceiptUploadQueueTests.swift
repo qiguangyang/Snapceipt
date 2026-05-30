@@ -56,13 +56,20 @@ struct ReceiptUploadQueueTests {
         struct Boom: Error {}
         let (ctx, api) = try fixture()
         let pr = PendingReceipt(transactionId: "t3", ocrText: "x", imageLocalPath: try tempJPEG(),
-                                width: 1, height: 1, uploadAttempts: 2)
+                                width: 1, height: 1)
         ctx.insert(pr); try ctx.save()
         api.uploadImageHandler = { _, _, _, _ in throw Boom() }
         let queue = ReceiptUploadQueue(api: api, context: ctx)
+        // Each drain = one attempt; a failing upload resets to "pending" until exhausted.
+        await queue.drain()
+        #expect(pr.uploadState == "pending")     // attempt 1: retry
+        #expect(pr.uploadAttempts == 1)
+        await queue.drain()
+        #expect(pr.uploadState == "pending")     // attempt 2: retry
+        #expect(pr.uploadAttempts == 2)
         await queue.drain()
         let rows = try ctx.fetch(FetchDescriptor<PendingReceipt>())
-        #expect(rows[0].uploadState == "failed")
+        #expect(rows[0].uploadState == "failed") // attempt 3: exhausted
         #expect(rows[0].uploadAttempts == 3)
     }
 }

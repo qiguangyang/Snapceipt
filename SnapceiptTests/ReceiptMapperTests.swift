@@ -49,6 +49,14 @@ struct ReceiptMapperTests {
         #expect(txn.mode == "business")
     }
 
+    @Test("mode is lowercased at the boundary (uppercase input -> lowercase)")
+    func modeLowercased() {
+        let (txn, _) = ReceiptMapper.map(
+            draft(categoryKey: "meals", total: "10.00", gst: nil, deductible: nil),
+            mode: "Business", profileId: "p1", userId: "u1")
+        #expect(txn.mode == "business")
+    }
+
     @Test("line items map to cents, sortOrder=index, quantity=1, child userId; transactionId=parent")
     func lineItemsMapped() {
         let (txn, items) = ReceiptMapper.map(

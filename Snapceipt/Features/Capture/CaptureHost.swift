@@ -28,6 +28,7 @@ struct CaptureHost: View {
     let onClose: () -> Void
 
     @State private var vm: CaptureViewModel?
+    @State private var isDraining = false
 
     var body: some View {
         Group {
@@ -53,7 +54,11 @@ struct CaptureHost: View {
     }
 
     private func drainQueues() async {
+        guard !isDraining else { return }
+        isDraining = true
+        defer { isDraining = false }
         await ReceiptUploadQueue(api: api, context: context).drain()
         await PendingExtractionReconciler(api: api, context: context, sync: sync).reconcile()
+        ReceiptCleanupPass(context: context).run()
     }
 }
