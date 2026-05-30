@@ -23,6 +23,13 @@ final class StubAPIClient: APIClient {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: 0)
     }
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        // Simulate the extraction round-trip so the `.scanning` stage is reliably
+        // observable by XCUITest (otherwise the synchronous decode advances
+        // .scanning -> .review in a single MainActor turn and SwiftUI never renders the
+        // Scan frame; a sub-second window also slips between XCUITest's ~1s polls). The
+        // 2s window sits comfortably inside the test's 5s scan-title / 8s Save waits.
+        // DEBUG-only stub.
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
         let json = """
         {"requestId":"stub-1",
          "receipt":{"merchant":"The Grounds","date":"\(capturedAt ?? "2026-05-28")","currencyCode":"AUD",

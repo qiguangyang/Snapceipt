@@ -108,8 +108,14 @@ struct ShellView: View {
             }
 
             // --- Floating raised-center tab bar ---
+            // `.accessibilityElement(children: .contain)` makes this an a11y CONTAINER:
+            // it carries the `shell.tabbar` identifier WITHOUT overriding the inner tab
+            // buttons' own identifiers (`tab.home`, `tabbar.snap`, …). Applying
+            // `.accessibilityIdentifier` directly to the composite TabBar would instead
+            // propagate down and clobber every child id to `shell.tabbar`.
             TabBar(router: router, accent: accent)
                 .padding(.bottom, 22)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
         // Re-skin the whole shell to the active profile's accent at runtime.
