@@ -166,6 +166,19 @@ final class PreviewAPIClient: APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: Epoch.nowMs())
     }
+    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        let json = """
+        {"requestId":"preview",
+         "receipt":{"merchant":"Preview Cafe","date":"2026-05-28","currencyCode":"AUD",
+           "total":12.00,"gst":1.09,"category":"meals","deductible":50,
+           "lineItems":[],"confidence":0.9,"needsReview":false},
+         "meta":{"model":"preview","source":"scan","latencyMs":1,"attempts":1,"stub":true}}
+        """
+        return try JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
+    }
+    func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        UploadedImage(imageKey: "u/u/preview.jpg", getUrl: "/images/u/u/preview.jpg", byteSize: jpeg.count)
+    }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))

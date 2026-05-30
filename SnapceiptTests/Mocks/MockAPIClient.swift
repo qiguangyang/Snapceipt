@@ -26,6 +26,14 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     /// Pages returned by successive `syncPull` calls; the first is dequeued each call.
     var pullPages: [PullResponse] = []
 
+    // MARK: Capture scripting
+
+    var extractHandler: ((_ ocrText: String, _ source: String, _ capturedAt: String?) async throws -> ExtractionResponse)?
+    var uploadImageHandler: ((_ jpeg: Data, _ transactionId: String?, _ width: Int, _ height: Int) async throws -> UploadedImage)?
+
+    private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
+    private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
+
     // MARK: Recorded calls
 
     private(set) var pushCalls: [[PushMutation]] = []
@@ -81,6 +89,18 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
             return PullResponse(changes: [], nextCursor: cursor ?? "", hasMore: false, serverTime: 0)
         }
         return pullPages.removeFirst()
+    }
+
+    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        extractCalls.append((ocrText, source, capturedAt))
+        guard let h = extractHandler else { throw MockAPIClientError.unscripted }
+        return try await h(ocrText, source, capturedAt)
+    }
+
+    func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        uploadCalls.append((transactionId, width, height, jpeg.count))
+        guard let h = uploadImageHandler else { throw MockAPIClientError.unscripted }
+        return try await h(jpeg, transactionId, width, height)
     }
 }
 

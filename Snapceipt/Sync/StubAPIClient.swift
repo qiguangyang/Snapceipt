@@ -22,5 +22,21 @@ final class StubAPIClient: APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: 0)
     }
+    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        let json = """
+        {"requestId":"stub-1",
+         "receipt":{"merchant":"The Grounds","date":"\(capturedAt ?? "2026-05-28")","currencyCode":"AUD",
+           "total":42.50,"gst":3.86,"category":"meals","deductible":50,
+           "lineItems":[{"name":"Flat White x2","price":9.00},{"name":"Big Brekkie","price":24.00}],
+           "confidence":0.92,"needsReview":false},
+         "meta":{"model":"stub","source":"\(source)","latencyMs":1,"attempts":1,"stub":true}}
+        """
+        return try JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
+    }
+    func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        UploadedImage(imageKey: "u/\(DevAccount.userId)/stub.jpg",
+                      getUrl: "/images/u/\(DevAccount.userId)/stub.jpg",
+                      byteSize: jpeg.count)
+    }
 }
 #endif

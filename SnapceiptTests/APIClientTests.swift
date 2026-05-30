@@ -194,6 +194,59 @@ struct APIClientTests {
         let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.app")
         #expect(token == nil)
     }
+
+    @Test("extract POSTs /extract with AUD/en-AU + a requestId and decodes the receipt")
+    func extractPostsAndDecodes() async throws {
+        let (client, _) = makeClient()
+        MockURLProtocol.setHandler { _ in
+            (200, ["Content-Type": "application/json"], self.json("""
+            {"requestId":"srv-1",
+             "receipt":{"merchant":"The Grounds","date":"2026-05-28","currencyCode":"AUD",
+               "total":42.50,"gst":3.86,"category":"meals","deductible":50,
+               "lineItems":[{"name":"Flat White","price":9.00}],"confidence":0.98,"needsReview":false},
+             "meta":{"model":"deepseek-chat","source":"scan","latencyMs":5,"attempts":1,"stub":false}}
+            """))
+        }
+        let resp = try await client.extract(ocrText: "THE GROUNDS\nTOTAL 42.50",
+                                            source: "scan", capturedAt: "2026-05-28")
+        #expect(resp.receipt.categoryKey == "meals")
+        #expect(resp.receipt.total == Decimal(string: "42.50"))
+        #expect(MockURLProtocol.lastRequest?.url?.path == "/extract")
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
+        let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
+        let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(obj?["ocrText"] as? String == "THE GROUNDS\nTOTAL 42.50")
+        #expect(obj?["source"] as? String == "scan")
+        #expect(obj?["defaultCurrency"] as? String == "AUD")
+        #expect(obj?["locale"] as? String == "en-AU")
+        #expect(obj?["capturedAt"] as? String == "2026-05-28")
+        #expect((obj?["requestId"] as? String)?.isEmpty == false)
+    }
+
+    @Test("uploadImage POSTs raw JPEG to /images with transactionId/width/height query params")
+    func uploadImagePostsRawJPEG() async throws {
+        let (client, _) = makeClient()
+        MockURLProtocol.setHandler { _ in
+            (200, ["Content-Type": "application/json"], self.json("""
+            {"imageKey":"u/u1/abc.jpg","getUrl":"/images/u/u1/abc.jpg","byteSize":1234}
+            """))
+        }
+        let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10])
+        let out = try await client.uploadImage(jpeg: jpeg, transactionId: "t1", width: 1200, height: 1600)
+        #expect(out.imageKey == "u/u1/abc.jpg")
+        #expect(out.getUrl == "/images/u/u1/abc.jpg")
+        #expect(out.byteSize == 1234)
+        let req = MockURLProtocol.lastRequest
+        #expect(req?.url?.path == "/images")
+        #expect(req?.httpMethod == "POST")
+        #expect(req?.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
+        let q = req?.url?.query ?? ""
+        #expect(q.contains("transactionId=t1"))
+        #expect(q.contains("width=1200"))
+        #expect(q.contains("height=1600"))
+        let sent = req?.httpBodyData() ?? Data()
+        #expect(sent == jpeg)
+    }
 }
 
 /// Test helper: URLProtocol strips httpBody into a stream, so read it back for assertions.

@@ -14,6 +14,8 @@ protocol APIClient {
     func me() async throws -> MeResponse
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
+    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
+    func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -88,6 +90,24 @@ final class LiveAPIClient: APIClient {
                               body: NoBody(), authenticated: true)
     }
 
+    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
+        // (UUIDv7 from the same `ID` helper the model inits use).
+        let body = ExtractBody(ocrText: ocrText, source: source,
+                               defaultCurrency: "AUD", locale: "en-AU",
+                               capturedAt: capturedAt, requestId: ID.uuidv7())
+        return try await send("POST", "/extract", body: body, authenticated: true)
+    }
+
+    func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        var items = [URLQueryItem(name: "width", value: String(width)),
+                     URLQueryItem(name: "height", value: String(height))]
+        if let transactionId { items.append(URLQueryItem(name: "transactionId", value: transactionId)) }
+        let data = try await performRawJPEG("/images", query: items, jpeg: jpeg)
+        do { return try decoder.decode(UploadedImage.self, from: data) }
+        catch { throw APIError.decoding }
+    }
+
     // MARK: - Request plumbing
 
     /// Send a request and decode a JSON body into `T`.
@@ -135,6 +155,34 @@ final class LiveAPIClient: APIClient {
             // Rebuild with the fresh bearer and retry exactly once.
             let retry = try makeRequest(method, path, query: query, body: body, authenticated: authenticated)
             let (data2, response2) = try await dataResponse(for: retry)
+            guard let http2 = response2 as? HTTPURLResponse else { throw APIError.transport }
+            return try validate(data2, http2)
+        }
+        return try validate(data, http)
+    }
+
+    /// POST a raw `image/jpeg` body (no JSON encoding); refresh-on-401 like `perform`.
+    private func performRawJPEG(_ path: String, query: [URLQueryItem], jpeg: Data) async throws -> Data {
+        func makeImageRequest() throws -> URLRequest {
+            var components = URLComponents(url: baseURL.appendingPathComponent(path),
+                                           resolvingAgainstBaseURL: false)
+            if !query.isEmpty { components?.queryItems = query }
+            guard let url = components?.url else { throw APIError.transport }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+            request.setValue(auth.deviceId, forHTTPHeaderField: "X-Device-Id")
+            if let bearer = auth.bearer() {
+                request.setValue(bearer, forHTTPHeaderField: "Authorization")
+            }
+            request.httpBody = jpeg
+            return request
+        }
+        let (data, response) = try await dataResponse(for: try makeImageRequest())
+        guard let http = response as? HTTPURLResponse else { throw APIError.transport }
+        if http.statusCode == 401, await tryRefresh() {
+            let (data2, response2) = try await dataResponse(for: try makeImageRequest())
             guard let http2 = response2 as? HTTPURLResponse else { throw APIError.transport }
             return try validate(data2, http2)
         }
@@ -226,6 +274,16 @@ final class LiveAPIClient: APIClient {
 /// a stray JSON `null`.
 struct NoBody: Encodable {
     func encode(to encoder: Encoder) throws {}
+}
+
+/// POST /extract request body. iOS hard-codes AUD/en-AU and always sends a requestId.
+private struct ExtractBody: Encodable {
+    let ocrText: String
+    let source: String            // "scan" | "email_in"
+    let defaultCurrency: String   // "AUD"
+    let locale: String            // "en-AU"
+    let capturedAt: String?       // "YYYY-MM-DD"
+    let requestId: String
 }
 
 /// Serializes token refreshes so that N concurrent 401s trigger at most one refresh
