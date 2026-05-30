@@ -23,17 +23,23 @@ struct SnapceiptApp: App {
     @State private var profiles: ProfilesStore
 
     init() {
+        let auth = AuthStore()
+#if DEBUG
+        // UI-test seam: under -uiTestStub/-uiTestReset/API_BASE_URL the app wires itself
+        // to a hermetic stub + in-memory store. Reset runs BEFORE api/container/userId so
+        // the session is cleared before AuthViewModel/userId read it. Compiled out of Release.
+        let launch = AppLaunch.current
+        launch.applyResetIfNeeded(authStore: auth)
+        let api: APIClient = launch.makeAPIClient(auth: auth)
+        let container = launch.makeContainer()
+#else
+        let api: APIClient = LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.app")!, auth: auth)
         let container = makeSnapceiptContainer()
+#endif
         self.container = container
         // Share the container's main context across the sync/profiles stores and the
         // views' `@Query`/`@Environment(\.modelContext)` so writes are mutually visible.
         let context = container.mainContext
-
-        let auth = AuthStore()
-        // Networking base URL. The canonical config/baseURL is owned by the sync task;
-        // this is the production host the /auth + /sync contract is served from.
-        let baseURL = URL(string: "https://api.snapceipt.app")!
-        let api: APIClient = LiveAPIClient(baseURL: baseURL, auth: auth)
 
         let toasts = ToastCenter()
         let sync = SyncEngine(api: api, context: context, auth: auth, toast: toasts)

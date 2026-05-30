@@ -14,7 +14,11 @@ enum OnboardingStep { case profile, camera, notifications }
 struct OnboardingView: View {
     /// Called once the first profile exists and permissions have been primed.
     let onFinished: () -> Void
+#if DEBUG
+    var requester: PermissionRequesting = AppLaunch.current.useStub ? NoopPermissionRequester() : LivePermissionRequester()
+#else
     var requester: PermissionRequesting = LivePermissionRequester()
+#endif
 
     @State private var step: OnboardingStep = .profile
 
