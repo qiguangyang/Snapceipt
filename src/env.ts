@@ -18,8 +18,13 @@ export type Env = {
   EMAIL: SendEmail;
   /** Secret: HS256 signing key for app-issued JWTs. */
   JWT_SIGNING_KEY: string;
-  /** Secret: DeepSeek API key (unused this phase). */
+  /** Secret: DeepSeek API key. When empty/undefined, /extract uses the stub seam. */
   DEEPSEEK_API_KEY: string;
+  /**
+   * Var: DeepSeek model id used in the request body + echoed as meta.model.
+   * Optional; the route falls back to "deepseek-chat" when unset.
+   */
+  DEEPSEEK_MODEL?: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
   /**
@@ -31,6 +36,14 @@ export type Env = {
    * normal runtime + unit/integration tests run with it unset.
    */
   E2E_TEST_MODE?: string;
+  /**
+   * E2E-ONLY extraction seam. When set to "1", POST /extract skips the DeepSeek
+   * network call and returns a deterministic stub from extractionHeuristic
+   * (needsReview:false, confidence:0.9, meta.stub:true). Also auto-engaged when
+   * DEEPSEEK_API_KEY is empty/undefined. MUST be undefined in production with a
+   * real key — never declared in wrangler.jsonc; only injected by the e2e harness.
+   */
+  E2E_EXTRACT_MODE?: string;
 };
 
 /**
