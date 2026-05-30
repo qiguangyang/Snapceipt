@@ -54,6 +54,7 @@ struct SignInView: View {
                             Color.clear
                         }
                         .accessibilityLabel("Sign in with Apple")
+                        .accessibilityIdentifier(AccessibilityID.signInApple)
                     )
 
                 if showEmailField {
@@ -73,7 +74,20 @@ struct SignInView: View {
                                     .stroke(Palette.line, lineWidth: 1)
                             )
                     }
+                    .accessibilityIdentifier(AccessibilityID.signInEmail)
                 }
+
+                #if DEBUG
+                Button {
+                    Task { await vm.devSignIn() }
+                } label: {
+                    Label("Dev sign in", systemImage: "wrench.and.screwdriver")
+                        .font(.ui(13, .semibold))
+                        .foregroundStyle(Palette.ink3)
+                }
+                .accessibilityIdentifier(AccessibilityID.signInDev)
+                .padding(.top, 6)
+                #endif
 
                 if case .error(let message) = vm.state {
                     Text(message)
