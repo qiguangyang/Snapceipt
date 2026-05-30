@@ -21,4 +21,15 @@ enum AccessibilityID {
     static let tabSnap = "tabbar.snap"
     static let addProfileName = "addprofile.name"
     static let captureClose = "capture.close"
+
+    // Capture flow
+    static let captureScanTitle = "capture.scan.title"
+    static let captureReviewMerchant = "capture.review.merchant"
+    static let captureReviewCategory = "capture.review.category"
+    static let captureReviewBadge = "capture.review.badge"
+    static let captureReviewProfileToggle = "capture.review.profileToggle"
+    static let captureSave = "capture.save"
+    static let captureSavedTitle = "capture.saved.title"
+    static let captureSnapAnother = "capture.snapAnother"
+    static let captureDone = "capture.done"
 }
