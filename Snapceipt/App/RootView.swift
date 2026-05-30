@@ -183,11 +183,14 @@ struct ShellView: View {
                     .font(.ui(13.5))
                     .foregroundStyle(Palette.ink3)
             }
+            // Home marker for UI tests. Deliberately on the content body (a sibling of
+            // the ProfileSwitcherHeader) — NOT the outer VStack — so it does not flatten
+            // onto / shadow the header button's `profile.switcher` identifier.
+            .accessibilityIdentifier(AccessibilityID.shellHome)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
-        .accessibilityIdentifier(AccessibilityID.shellHome)
     }
 
     // MARK: - Overlays
