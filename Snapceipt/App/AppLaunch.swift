@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 
 #if DEBUG
 /// Parses UI-test launch arguments/environment to decide how the app wires itself.
@@ -53,6 +54,17 @@ struct AppLaunch {
 
     func makeContainer() -> ModelContainer {
         makeSnapceiptContainer(inMemory: useStub)
+    }
+
+    /// Canned (image, rawText) for the camera-less capture UI test. Loaded from the
+    /// app bundle when `-uiTestStub` is set; nil otherwise (production uses the camera).
+    var cannedScan: (image: UIImage, rawText: String)? {
+        guard useStub,
+              let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
+              let data = try? Data(contentsOf: url),
+              let image = UIImage(data: data) else { return nil }
+        let rawText = "THE GROUNDS\n28/05/2026\nFlat White x2  9.00\nBig Brekkie 24.00\nGST 3.86\nTOTAL 42.50"
+        return (image, rawText)
     }
 }
 #endif

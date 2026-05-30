@@ -123,9 +123,9 @@ struct ShellView: View {
                 .presentationDragIndicator(.visible)
                 .environment(\.accent, accent)
         }
-        // --- Capture placeholder cover (full-screen, P1 stub) ---
+        // --- Capture cover (full-screen): the 4-stage CaptureFlow ---
         .overlay {
-            if router.overlay == .capture { capturePlaceholder }
+            if router.overlay == .capture { captureCover(accent: accent) }
         }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
@@ -239,32 +239,41 @@ struct ShellView: View {
         )
     }
 
-    /// Capture is P1 — surface a calm "coming soon" cover this phase.
+    /// The full-screen capture flow, presented when the Snap tab routes to `.capture`.
+    /// Under `-uiTestStub` it starts at the Scan stage with a canned image (no camera).
     @ViewBuilder
-    private var capturePlaceholder: some View {
-        ZStack {
-            Color.black.opacity(0.85).ignoresSafeArea()
-            VStack(spacing: 16) {
-                Icon(name: "camera", size: 40, color: .white)
-                Text("Capture is coming soon")
-                    .font(.display(22))
-                    .foregroundStyle(.white)
-                Button {
-                    router.dismissOverlay()
-                } label: {
-                    Text("Close")
-                        .font(.ui(16, .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 12)
-                        .background(Palette.paper.opacity(0.18))
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(AccessibilityID.captureClose)
-            }
-        }
+    private func captureCover(accent: AccentPalette) -> some View {
+        CaptureHost(
+            api: captureAPI,
+            sync: sync,
+            profiles: profiles,
+            reachability: reachability,
+            context: profiles.context,
+            userId: profiles.userId,
+            stub: captureStub,
+            onClose: { router.dismissOverlay() }
+        )
+        .environment(\.accent, accent)
         .transition(.opacity)
+    }
+
+    /// The APIClient the capture flow calls. Reuses the app's live/stub client built at
+    /// launch via `AppLaunch` (DEBUG) and falls back to the live client in Release.
+    private var captureAPI: APIClient {
+        #if DEBUG
+        return AppLaunch.current.makeAPIClient(auth: auth)
+        #else
+        return LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.app")!, auth: auth)
+        #endif
+    }
+
+    /// The canned (image, rawText) used by the camera-less UI test, or nil in production.
+    private var captureStub: (image: UIImage, rawText: String)? {
+        #if DEBUG
+        return AppLaunch.current.cannedScan
+        #else
+        return nil
+        #endif
     }
 }
 
