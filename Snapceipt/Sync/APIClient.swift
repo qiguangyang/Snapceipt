@@ -20,6 +20,9 @@ protocol APIClient {
     /// email the accountant pack. Returns the normalized `ExportResult`. (spec §4.2)
     func export(profileId: String, format: String, from: String, to: String,
                 toEmail: String?) async throws -> ExportResult
+    /// PUT /devices/me — upsert this device's apns token / quiet-hours / timezone /
+    /// push_enabled. Keyed by the X-Device-Id header (attached by makeRequest). (§4.2)
+    func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -124,6 +127,10 @@ final class LiveAPIClient: APIClient {
             return .sent(status: status, outboxId: outboxId)
         }
         throw APIError.decoding
+    }
+
+    func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
+        try await send("PUT", "/devices/me", body: body, authenticated: true)
     }
 
     // MARK: - Request plumbing

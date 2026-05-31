@@ -183,6 +183,9 @@ final class PreviewAPIClient: APIClient {
                 toEmail: String?) async throws -> ExportResult {
         .download(url: "/export/dl/preview-token", expiresAt: 1_790_000_000_000)
     }
+    func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
+        UpdateDeviceResponse(id: "preview-device")
+    }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))

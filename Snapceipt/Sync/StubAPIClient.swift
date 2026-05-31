@@ -53,5 +53,8 @@ final class StubAPIClient: APIClient {
         }
         return .download(url: "/export/dl/stub-token", expiresAt: 1_790_000_000_000)
     }
+    func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
+        UpdateDeviceResponse(id: "stub-device")
+    }
 }
 #endif

@@ -107,6 +107,22 @@ struct DeviceDTO: Decodable {
     let id: String
 }
 
+/// PUT /devices/me body (§4.2). All fields optional; the encoder OMITS nil keys
+/// (Swift's default for `Optional` Encodable), so a quiet-hours-only update never
+/// clobbers the apns token and vice-versa.
+struct UpdateDeviceBody: Encodable {
+    var apnsToken: String?
+    var quietHoursStartMin: Int?
+    var quietHoursEndMin: Int?
+    var timezone: String?
+    var pushEnabled: Bool?
+}
+
+/// PUT /devices/me response — the upserted device row (only `id` is asserted).
+struct UpdateDeviceResponse: Decodable {
+    let id: String
+}
+
 // MARK: - Sync push
 
 /// One mutation in a /sync/push batch.
