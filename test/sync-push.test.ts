@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { signAccess } from "../src/lib/jwt";
 import { uuidv7 } from "../src/lib/ids";
 import { SYNCABLE_TYPES } from "../src/schemas/entities";
-import { tableForEntityType } from "../src/lib/syncTables";
+import { tableForEntityType, PROFILE_ID_REQUIRED } from "../src/lib/syncTables";
 import { getProcessedMutation, recordProcessedMutation } from "../src/lib/db";
 
 const USER_ID = "01890000-0000-7000-8000-000000000001";
@@ -302,7 +302,7 @@ describe("POST /sync/push", () => {
 });
 
 describe("syncable table map", () => {
-  it("maps all 12 syncable entity types to a table (full coverage)", () => {
+  it("maps all 14 syncable entity types to a table (full coverage)", () => {
     const expected: Record<string, string> = {
       transaction: "transactions",
       lineItem: "line_items",
@@ -316,8 +316,10 @@ describe("syncable table map", () => {
       mileageTrip: "mileage_trips",
       wfhLog: "wfh_logs",
       taxSettings: "tax_settings",
+      vehicle: "vehicles",
+      vehicleYear: "vehicle_years",
     };
-    expect(SYNCABLE_TYPES).toHaveLength(12);
+    expect(SYNCABLE_TYPES).toHaveLength(14);
     for (const type of SYNCABLE_TYPES) {
       const meta = tableForEntityType(type);
       expect(meta, `missing table mapping for ${type}`).not.toBeNull();
@@ -325,6 +327,33 @@ describe("syncable table map", () => {
     }
     // Unknown types map to null.
     expect(tableForEntityType("notAType")).toBeNull();
+  });
+
+  it("requires profile_id for the new vehicle + vehicleYear tables", () => {
+    expect(PROFILE_ID_REQUIRED.has("vehicle")).toBe(true);
+    expect(PROFILE_ID_REQUIRED.has("vehicleYear")).toBe(true);
+  });
+
+  it("maps the new mileageTrip logbook columns", () => {
+    const meta = tableForEntityType("mileageTrip")!;
+    expect(meta.columns.vehicleId).toBe("vehicle_id");
+    expect(meta.columns.odometerStartM).toBe("odometer_start_m");
+    expect(meta.columns.odometerEndM).toBe("odometer_end_m");
+  });
+
+  it("maps the vehicle + vehicleYear domain columns", () => {
+    const v = tableForEntityType("vehicle")!;
+    expect(v.hasProfileId).toBe(true);
+    expect(v.columns.engineCc).toBe("engine_cc");
+    expect(v.columns.logbookStartDate).toBe("logbook_start_date");
+    expect(v.columns.businessUsePct).toBe("business_use_pct");
+
+    const vy = tableForEntityType("vehicleYear")!;
+    expect(vy.hasProfileId).toBe(true);
+    expect(vy.columns.vehicleId).toBe("vehicle_id");
+    expect(vy.columns.fyStartYear).toBe("fy_start_year");
+    expect(vy.columns.depreciationCents).toBe("depreciation_cents");
+    expect(vy.columns.claimCents).toBe("claim_cents");
   });
 });
 
