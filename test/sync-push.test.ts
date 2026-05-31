@@ -301,6 +301,266 @@ describe("POST /sync/push", () => {
   });
 });
 
+describe("POST /sync/push — logbook entities (vehicle, vehicleYear, extended mileageTrip)", () => {
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM processed_mutations");
+    await env.DB.exec("DELETE FROM mileage_trips");
+    await env.DB.exec("DELETE FROM vehicle_years");
+    await env.DB.exec("DELETE FROM vehicles");
+    await env.DB.exec("DELETE FROM profiles");
+    await env.DB.exec("DELETE FROM users");
+    await seedUserAndProfile();
+  });
+
+  function vehicleMutation(overrides: Record<string, unknown> = {}) {
+    const entityId = (overrides.entityId as string) ?? uuidv7();
+    return {
+      mutationId: uuidv7(),
+      entityType: "vehicle",
+      entityId,
+      op: "upsert" as const,
+      updatedAt: 1_000,
+      payload: {
+        id: entityId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "vehicle",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+        make: "Toyota",
+        model: "HiLux",
+        engineCc: 2800,
+        registration: "ABC123",
+        logbookStartDate: "2025-08-12",
+        logbookEndDate: "2025-11-04",
+        businessUsePct: 78,
+      } as Record<string, unknown>,
+      ...overrides,
+    };
+  }
+
+  function vehicleYearMutation(vehicleId: string, overrides: Record<string, unknown> = {}) {
+    const entityId = (overrides.entityId as string) ?? uuidv7();
+    return {
+      mutationId: uuidv7(),
+      entityType: "vehicleYear",
+      entityId,
+      op: "upsert" as const,
+      updatedAt: 1_000,
+      payload: {
+        id: entityId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "vehicleYear",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+        vehicleId,
+        fyStartYear: 2025,
+        fuelCents: 220000,
+        regoCents: 90000,
+        insuranceCents: 60000,
+        servicingCents: 30000,
+        otherCents: 12000,
+        depreciationCents: 100000,
+        businessUsePct: 78,
+        claimCents: 321360,
+      } as Record<string, unknown>,
+      ...overrides,
+    };
+  }
+
+  it("inserts a vehicle: applied, rev 1, columns persisted", async () => {
+    const m = vehicleMutation();
+    const json = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    expect(json.error).toBeUndefined();
+    const r = json.results[0];
+    expect(r.status).toBe("applied");
+    expect(r.entity.rev).toBe(1);
+    expect(r.entity.make).toBe("Toyota");
+    expect(r.entity.businessUsePct).toBe(78);
+    expect(r.entity.profileId).toBe(PROFILE_ID);
+
+    const row = await env.DB.prepare(
+      `SELECT make, model, engine_cc, business_use_pct, logbook_start_date FROM vehicles WHERE id = ?`,
+    )
+      .bind(m.entityId)
+      .first<any>();
+    expect(row.make).toBe("Toyota");
+    expect(row.engine_cc).toBe(2800);
+    expect(row.business_use_pct).toBe(78);
+    expect(row.logbook_start_date).toBe("2025-08-12");
+  });
+
+  it("inserts a vehicleYear referencing a vehicle: cents + claim persisted", async () => {
+    const v = vehicleMutation();
+    await push({ deviceId: DEVICE_ID, mutations: [v] });
+
+    const m = vehicleYearMutation(v.entityId);
+    const json = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    const r = json.results[0];
+    expect(r.status).toBe("applied");
+    expect(r.entity.fyStartYear).toBe(2025);
+    expect(r.entity.claimCents).toBe(321360);
+
+    const row = await env.DB.prepare(
+      `SELECT vehicle_id, fy_start_year, fuel_cents, depreciation_cents, claim_cents FROM vehicle_years WHERE id = ?`,
+    )
+      .bind(m.entityId)
+      .first<any>();
+    expect(row.vehicle_id).toBe(v.entityId);
+    expect(row.fy_start_year).toBe(2025);
+    expect(row.fuel_cents).toBe(220000);
+    expect(row.depreciation_cents).toBe(100000);
+    expect(row.claim_cents).toBe(321360);
+  });
+
+  it("persists the new mileageTrip logbook columns (vehicleId, odometer start/end)", async () => {
+    const v = vehicleMutation();
+    await push({ deviceId: DEVICE_ID, mutations: [v] });
+
+    const tripId = uuidv7();
+    const m = {
+      mutationId: uuidv7(),
+      entityType: "mileageTrip",
+      entityId: tripId,
+      op: "upsert" as const,
+      updatedAt: 1_000,
+      payload: {
+        id: tripId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "mileageTrip",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+        tripDate: "2025-09-01",
+        purpose: "Client visit",
+        distanceM: 23000,
+        isBusiness: true,
+        vehicleId: v.entityId,
+        odometerStartM: 45000000,
+        odometerEndM: 45023000,
+      } as Record<string, unknown>,
+    };
+    const json = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    const r = json.results[0];
+    expect(r.status).toBe("applied");
+    expect(r.entity.vehicleId).toBe(v.entityId);
+    expect(r.entity.odometerStartM).toBe(45000000);
+    expect(r.entity.odometerEndM).toBe(45023000);
+
+    const row = await env.DB.prepare(
+      `SELECT vehicle_id, odometer_start_m, odometer_end_m, distance_m FROM mileage_trips WHERE id = ?`,
+    )
+      .bind(tripId)
+      .first<any>();
+    expect(row.vehicle_id).toBe(v.entityId);
+    expect(row.odometer_start_m).toBe(45000000);
+    expect(row.odometer_end_m).toBe(45023000);
+    expect(row.distance_m).toBe(23000);
+  });
+
+  it("replaying the same vehicle mutationId is a duplicate no-op", async () => {
+    const m = vehicleMutation();
+    const first = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    expect(first.results[0].status).toBe("applied");
+
+    const second = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    expect(second.results[0].status).toBe("duplicate");
+    expect(second.results[0].entity.rev).toBe(1);
+
+    const row = await env.DB.prepare(`SELECT rev FROM vehicles WHERE id = ?`)
+      .bind(m.entityId)
+      .first<any>();
+    expect(row.rev).toBe(1);
+  });
+
+  it("stale updatedAt loses LWW on a vehicle: conflict, server row echoed", async () => {
+    const entityId = uuidv7();
+    const win = vehicleMutation({ entityId, updatedAt: 9_999_999_999_999 });
+    win.payload.id = entityId;
+    const a = (await (await push({ deviceId: DEVICE_ID, mutations: [win] })).json()) as any;
+    expect(a.results[0].status).toBe("applied");
+    const serverUpdatedAt = a.results[0].entity.updatedAt;
+
+    const stale = vehicleMutation({ entityId, updatedAt: 1 });
+    stale.payload.id = entityId;
+    stale.payload.make = "Should Not Persist";
+    const b = (await (await push({ deviceId: DEVICE_ID, mutations: [stale] })).json()) as any;
+    expect(b.results[0].status).toBe("conflict");
+    expect(b.results[0].entity.updatedAt).toBe(serverUpdatedAt);
+    expect(b.results[0].entity.make).toBe("Toyota");
+
+    const row = await env.DB.prepare(`SELECT make, rev FROM vehicles WHERE id = ?`)
+      .bind(entityId)
+      .first<any>();
+    expect(row.make).toBe("Toyota");
+    expect(row.rev).toBe(1);
+  });
+
+  it("delete tombstones a vehicleYear, bumps rev, never hard-deletes", async () => {
+    const v = vehicleMutation();
+    await push({ deviceId: DEVICE_ID, mutations: [v] });
+    const m = vehicleYearMutation(v.entityId);
+    await push({ deviceId: DEVICE_ID, mutations: [m] });
+
+    const delTs = Date.now() + 60_000;
+    const del = {
+      mutationId: uuidv7(),
+      entityType: "vehicleYear",
+      entityId: m.entityId,
+      op: "delete" as const,
+      updatedAt: delTs,
+      payload: {
+        id: m.entityId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "vehicleYear",
+        createdAt: 1_000,
+        updatedAt: delTs,
+        deletedAt: delTs,
+        rev: 1,
+        lastEditedDeviceId: DEVICE_ID,
+      } as Record<string, unknown>,
+    };
+    const res = (await (await push({ deviceId: DEVICE_ID, mutations: [del] })).json()) as any;
+    expect(res.results[0].status).toBe("applied");
+    expect(res.results[0].entity.deletedAt).not.toBeNull();
+    expect(res.results[0].entity.rev).toBe(2);
+
+    const row = await env.DB.prepare(`SELECT deleted_at, rev FROM vehicle_years WHERE id = ?`)
+      .bind(m.entityId)
+      .first<any>();
+    expect(row).not.toBeNull();
+    expect(row.deleted_at).not.toBeNull();
+    expect(row.rev).toBe(2);
+  });
+
+  it("rejects a vehicle upsert that omits profileId (NOT NULL profile_id table)", async () => {
+    const m = vehicleMutation();
+    delete m.payload.profileId;
+    const res = await push({ deviceId: DEVICE_ID, mutations: [m] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.error).toBeUndefined();
+    expect(json.results[0].status).toBe("rejected");
+    expect(json.results[0].reason).toBe("VALIDATION_FAILED");
+
+    const row = await env.DB.prepare(`SELECT id FROM vehicles WHERE id = ?`)
+      .bind(m.entityId)
+      .first<any>();
+    expect(row).toBeNull();
+  });
+});
+
 describe("syncable table map", () => {
   it("maps all 14 syncable entity types to a table (full coverage)", () => {
     const expected: Record<string, string> = {
