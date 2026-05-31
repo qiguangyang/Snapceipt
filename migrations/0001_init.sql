@@ -306,6 +306,9 @@ CREATE TABLE mileage_trips (
   rate_cents_per_km     INTEGER,
   claim_cents           INTEGER,
   auto_tracked          INTEGER NOT NULL DEFAULT 0,
+  vehicle_id            TEXT REFERENCES vehicles(id),
+  odometer_start_m      INTEGER,
+  odometer_end_m        INTEGER,
   created_at            INTEGER NOT NULL,
   updated_at            INTEGER NOT NULL,
   deleted_at            INTEGER,
@@ -332,6 +335,51 @@ CREATE TABLE wfh_logs (
 );
 CREATE INDEX ix_wfh_user_updated ON wfh_logs(user_id, updated_at);
 CREATE UNIQUE INDEX ux_wfh_profile_date ON wfh_logs(profile_id, log_date) WHERE deleted_at IS NULL;
+
+CREATE TABLE vehicles (
+  id                    TEXT PRIMARY KEY,
+  user_id               TEXT NOT NULL REFERENCES users(id),
+  profile_id            TEXT NOT NULL REFERENCES profiles(id),
+  make                  TEXT,
+  model                 TEXT,
+  engine_cc             INTEGER,
+  registration          TEXT,
+  logbook_start_date    TEXT,
+  logbook_end_date      TEXT,
+  business_use_pct      INTEGER,
+  created_at            INTEGER NOT NULL,
+  updated_at            INTEGER NOT NULL,
+  deleted_at            INTEGER,
+  rev                   INTEGER NOT NULL DEFAULT 0,
+  last_edited_device_id TEXT
+);
+CREATE INDEX ix_vehicle_user_updated ON vehicles(user_id, updated_at);
+CREATE INDEX ix_vehicle_profile      ON vehicles(profile_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE vehicle_years (
+  id                    TEXT PRIMARY KEY,
+  user_id               TEXT NOT NULL REFERENCES users(id),
+  profile_id            TEXT NOT NULL REFERENCES profiles(id),
+  vehicle_id            TEXT NOT NULL REFERENCES vehicles(id),
+  fy_start_year         INTEGER NOT NULL,
+  odometer_open_m       INTEGER,
+  odometer_close_m      INTEGER,
+  fuel_cents            INTEGER NOT NULL DEFAULT 0,
+  rego_cents            INTEGER NOT NULL DEFAULT 0,
+  insurance_cents       INTEGER NOT NULL DEFAULT 0,
+  servicing_cents       INTEGER NOT NULL DEFAULT 0,
+  other_cents           INTEGER NOT NULL DEFAULT 0,
+  depreciation_cents    INTEGER NOT NULL DEFAULT 0,
+  business_use_pct      INTEGER,
+  claim_cents           INTEGER,
+  created_at            INTEGER NOT NULL,
+  updated_at            INTEGER NOT NULL,
+  deleted_at            INTEGER,
+  rev                   INTEGER NOT NULL DEFAULT 0,
+  last_edited_device_id TEXT
+);
+CREATE INDEX ix_vehicle_year_user_updated ON vehicle_years(user_id, updated_at);
+CREATE UNIQUE INDEX ux_vehicle_year ON vehicle_years(vehicle_id, fy_start_year) WHERE deleted_at IS NULL;
 
 -- =========================================================================
 -- 7. Quotes & Quote Line Items
@@ -407,7 +455,7 @@ CREATE TABLE tax_settings (
   gst_rate_bps                INTEGER NOT NULL DEFAULT 1000,
   financial_year_start_month  INTEGER NOT NULL DEFAULT 7,
   meals_deductible_pct        INTEGER NOT NULL DEFAULT 50,
-  wfh_rate_cents_per_hour     INTEGER NOT NULL DEFAULT 67,
+  wfh_rate_cents_per_hour     INTEGER NOT NULL DEFAULT 70,
   mileage_rate_cents_per_km   INTEGER NOT NULL DEFAULT 88,
   created_at                  INTEGER NOT NULL,
   updated_at                  INTEGER NOT NULL,

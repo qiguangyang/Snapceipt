@@ -18,6 +18,7 @@ const SYNCABLE = [
   "users", "devices", "profiles", "categories", "smart_rules",
   "transactions", "line_items", "receipt_images", "budgets", "loyalty_cards",
   "mileage_trips", "wfh_logs", "quotes", "quote_line_items", "tax_settings",
+  "vehicles", "vehicle_years",
 ];
 
 // Server-only operational tables (NOT synced to device).
@@ -135,5 +136,52 @@ describe("0001_init schema", () => {
     expect(got?.entity_id).toBe("t1");
     // Tenant-scoped: u2 replaying the same mutationId does not see u1's row.
     expect(await getProcessedMutation(env.DB, "mut-1", "u2")).toBeNull();
+  });
+
+  it("adds the logbook-method columns to mileage_trips", async () => {
+    const cols = await columnsOf("mileage_trips");
+    for (const c of ["vehicle_id", "odometer_start_m", "odometer_end_m"]) {
+      expect(cols.has(c), `mileage_trips missing column ${c}`).toBe(true);
+    }
+  });
+
+  it("creates the vehicles table with its sync + domain columns", async () => {
+    const cols = await columnsOf("vehicles");
+    for (const c of [
+      "id", "user_id", "profile_id", "make", "model", "engine_cc",
+      "registration", "logbook_start_date", "logbook_end_date", "business_use_pct",
+      "created_at", "updated_at", "deleted_at", "rev", "last_edited_device_id",
+    ]) {
+      expect(cols.has(c), `vehicles missing column ${c}`).toBe(true);
+    }
+    const ix = await indexNames();
+    expect(ix.has("ix_vehicle_user_updated")).toBe(true);
+    expect(ix.has("ix_vehicle_profile")).toBe(true);
+  });
+
+  it("creates the vehicle_years table with its sync + domain columns", async () => {
+    const cols = await columnsOf("vehicle_years");
+    for (const c of [
+      "id", "user_id", "profile_id", "vehicle_id", "fy_start_year",
+      "odometer_open_m", "odometer_close_m", "fuel_cents", "rego_cents",
+      "insurance_cents", "servicing_cents", "other_cents", "depreciation_cents",
+      "business_use_pct", "claim_cents",
+      "created_at", "updated_at", "deleted_at", "rev", "last_edited_device_id",
+    ]) {
+      expect(cols.has(c), `vehicle_years missing column ${c}`).toBe(true);
+    }
+    const ix = await indexNames();
+    expect(ix.has("ux_vehicle_year")).toBe(true);
+    expect(ix.has("ix_vehicle_year_user_updated")).toBe(true);
+  });
+
+  it("defaults tax_settings.wfh_rate_cents_per_hour to 70 (current ATO rate)", async () => {
+    const { results } = await env.DB.prepare(`PRAGMA table_info(tax_settings)`).all<{
+      name: string;
+      dflt_value: string | null;
+    }>();
+    const wfh = results.find((r) => r.name === "wfh_rate_cents_per_hour");
+    expect(wfh, "wfh_rate_cents_per_hour column missing").toBeDefined();
+    expect(Number(wfh!.dflt_value)).toBe(70);
   });
 });
