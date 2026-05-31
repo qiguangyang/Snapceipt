@@ -178,7 +178,17 @@ struct ShellView: View {
         case .activity:
             StubTabView(title: "Activity", accent: accent)
         case .reports:
-            StubTabView(title: "Reports", accent: accent)
+            ReportsView(
+                context: profiles.context,
+                userId: profiles.userId,
+                profileId: profiles.activeProfileId,
+                profileName: profiles.activeProfile?.name ?? "",
+                startMonth: 7,
+                onOpenExport: { router.present(.export) },
+                onOpenMileage: { router.present(.mileage) },
+                onOpenWFH: { router.present(.wfh) }
+            )
+            .environment(\.accent, accent)
         case .profile:
             StubTabView(title: "Profile", accent: accent)
         case .snap:
@@ -288,7 +298,21 @@ struct ShellView: View {
         case .addProfile:
             AddProfileView(vm: makeAddProfileVM())
         case .export:
-            EmptyView()  // real ExportSheet wired in Task 8
+            ExportSheet(
+                api: captureAPI,   // reuse the shell's existing live/stub APIClient (no duplicate property)
+                profileId: profiles.activeProfileId,
+                profileName: profiles.activeProfile?.name ?? "",
+                from: exportWindow.from,
+                to: exportWindow.to,
+                periodLabel: exportWindow.label,
+                receiptsCount: exportWindow.receiptsCount,
+                deductibleCents: exportWindow.deductibleCents,
+                savedAccountantEmail: exportWindow.savedAccountantEmail,
+                onSaveAccountantEmail: { saveAccountantEmail($0) },
+                onClose: { router.dismissOverlay() }
+            )
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh:
@@ -333,6 +357,57 @@ struct ShellView: View {
         #endif
     }
 
+    /// The default-period (Month) export range + detail-card values, scoped to the
+    /// active profile. The Reports default period is Month (spec §3); the Export sheet
+    /// inherits it (spec §3.8). Receipts count = transactions in range with a note/gst
+    /// signal of a real receipt is a backend concept; locally we show the in-range txn count.
+    private var exportWindow: (from: String, to: String, label: String,
+                               receiptsCount: Int, deductibleCents: Int,
+                               savedAccountantEmail: String?) {
+        let now = Date()
+        let window = Period.month.window(now: now, startMonth: 7)
+        let iso = ExportDateFormatter.shared
+        let pid = profiles.activeProfileId
+        let td = FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+        let rows = (try? profiles.context.fetch(td)) ?? []
+        let snaps = rows.map {
+            TransactionQuery.Txn(txnDate: $0.txnDate, amountCents: $0.amountCents,
+                                 catKey: $0.catKey, deductiblePct: $0.deductiblePct, gstCents: $0.gstCents)
+        }
+        let inRange = rows.filter { iso.date(from: $0.txnDate).map { $0 >= window.start && $0 < window.end } ?? false }
+        // "Deductible total" for the export DETAIL card = the per-transaction deductible
+        // over the SELECTED (Month) period only — NOT the FY-to-date pill. We reuse
+        // `deductibleYTD` by passing the Month window as `fyWindow:` with EMPTY logbook
+        // claims, so it reduces to Σ round(−amount × pct/100) over in-window txns. (spec §6)
+        let deductible = TransactionQuery.deductibleYTD(snaps, fyWindow: window,
+                                                        vehicleYearClaims: [], wfhClaims: [])
+        var sd = FetchDescriptor<TaxSettings>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+        sd.fetchLimit = 1
+        let saved = (try? profiles.context.fetch(sd))?.first?.accountantEmail
+        return (iso.string(from: window.start), iso.string(from: window.end.addingTimeInterval(-86_400)),
+                window.label, inRange.count, deductible, saved)
+    }
+
+    /// Persist the accountant email on the active profile's TaxSettings + enqueue sync.
+    /// Mirrors `TaxSettingsSeeder.ensure`'s fetch-then-branch (no `modelContext` probing).
+    private func saveAccountantEmail(_ email: String) {
+        let pid = profiles.activeProfileId
+        var sd = FetchDescriptor<TaxSettings>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+        sd.fetchLimit = 1
+        let row: TaxSettings
+        if let existing = (try? profiles.context.fetch(sd))?.first {
+            row = existing
+        } else {
+            row = TaxSettings(userId: profiles.userId, profileId: pid)
+            profiles.context.insert(row)
+        }
+        row.accountantEmail = email
+        row.updatedAt = Epoch.nowMs()
+        try? profiles.context.save()
+        sync.enqueue(op: "upsert", entityType: .taxSettings, entity: row)
+    }
+
     /// The canned (image, rawText) used by the camera-less UI test, or nil in production.
     private var captureStub: (image: UIImage, rawText: String)? {
         #if DEBUG
@@ -341,6 +416,17 @@ struct ShellView: View {
         return nil
         #endif
     }
+}
+
+/// Shared "yyyy-MM-dd" UTC formatter for export range parsing/formatting.
+enum ExportDateFormatter {
+    static let shared: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }
 
 #if DEBUG
