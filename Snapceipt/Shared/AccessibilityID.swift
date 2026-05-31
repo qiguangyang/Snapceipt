@@ -87,4 +87,35 @@ enum AccessibilityID {
     static let exportEmailField = "export.emailField"
     static let exportGenerate = "export.generate"
     static let exportStatus = "export.status"
+
+    // Budgets (F3)
+    static let homeBudgetTracker = "home.budgetTracker"
+    static let homeBudgetEditLink = "home.budget.edit"
+    static let homeBudgetEmptyCTA = "home.budget.emptyCTA"
+    static let homeAlertsBell = "home.alerts.bell"
+    static let budgetRowPrefix = "budget.row."          // + budget.id
+    static let budgetListScreen = "budget.list.screen"
+    static let budgetListAdd = "budget.list.add"
+    static let budgetEditorScreen = "budget.editor.screen"
+    static let budgetEditorScopeProfile = "budget.editor.scope.profile"
+    static let budgetEditorScopeCategory = "budget.editor.scope.category"
+    static let budgetEditorCap = "budget.editor.cap"
+    static let budgetEditorThreshold = "budget.editor.threshold"
+    static let budgetEditorSave = "budget.editor.save"
+    static let budgetEditorDelete = "budget.editor.delete"
+
+    // Alerts (F3)
+    static let alertsScreen = "alerts.screen"
+    static let alertRowPrefix = "alert.row."            // + item.id
+
+    // Notifications settings (F3)
+    static let notifSettingsScreen = "notif.settings.screen"
+    static let notifPushToggle = "notif.push.toggle"
+    static let notifQuietStart = "notif.quiet.start"
+    static let notifQuietEnd = "notif.quiet.end"
+    static let notifBasToggle = "notif.bas.toggle"
+
+    // Profile tab (F3 entry rows)
+    static let profileRowNotifications = "profile.row.notifications"
+    static let profileRowBudgets = "profile.row.budgets"
 }

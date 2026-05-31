@@ -159,6 +159,28 @@ struct ShellView: View {
                     .transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .budgets {
+                BudgetListView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               onClose: { router.dismissOverlay() },
+                               onEdit: { router.openBudget($0) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .budgetEditor(id) = router.overlay {
+                BudgetEditorView(context: profiles.context, sync: sync, userId: profiles.userId,
+                                 profileId: profiles.activeProfileId, budgetId: id,
+                                 onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .alerts || router.overlay == .notificationSettings {
+                Color.clear  // AlertsSheet (Task 9) / NotificationsSettingsView (Task 10) wired later
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -202,47 +224,71 @@ struct ShellView: View {
         }
     }
 
-    /// Home-tab stub: the profile-switcher header (Task 13) over a placeholder body.
+    /// Home tab: profile-switcher header + alerts bell, quick actions, budget tracker.
     @ViewBuilder
     private func homeStub(accent: AccentPalette) -> some View {
-        VStack(spacing: 0) {
-            ProfileSwitcherHeader(
-                store: profiles,
-                onTapSwitch: { router.go(.overlay(.profilePicker)) }
-            )
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-
-            HStack(spacing: 12) {
-                quickAction(title: "Mileage", icon: "car", id: AccessibilityID.homeQuickMileage,
-                            accent: accent) { router.present(.mileage) }
-                quickAction(title: "WFH log", icon: "wfh", id: AccessibilityID.homeQuickWFH,
-                            accent: accent) { router.present(.wfh) }
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-
-            Spacer()
-            VStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(accent.soft).frame(width: 96, height: 96)
-                    Icon(name: "receipt", size: 34, color: accent.base)
+        ScrollView {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    ProfileSwitcherHeader(
+                        store: profiles,
+                        onTapSwitch: { router.go(.overlay(.profilePicker)) }
+                    )
+                    Button { router.present(.alerts) } label: {
+                        ZStack(alignment: .topTrailing) {
+                            IconCircle(name: "bell", tint: accent.base, soft: accent.soft, size: 40, iconSize: 20)
+                            if unreadAlertCount > 0 {
+                                Circle().fill(Palette.alert).frame(width: 10, height: 10).offset(x: 2, y: -2)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(AccessibilityID.homeAlertsBell)
                 }
-                Text("Snap a receipt")
-                    .font(.display(20))
-                    .foregroundStyle(Palette.ink)
-                Text("Your dashboard lands in the next build.")
-                    .font(.ui(13.5))
-                    .foregroundStyle(Palette.ink3)
+                .padding(.horizontal, 18).padding(.top, 12)
+
+                HStack(spacing: 12) {
+                    quickAction(title: "Mileage", icon: "car", id: AccessibilityID.homeQuickMileage,
+                                accent: accent) { router.present(.mileage) }
+                    quickAction(title: "WFH log", icon: "wfh", id: AccessibilityID.homeQuickWFH,
+                                accent: accent) { router.present(.wfh) }
+                }
+                .padding(.horizontal, 18).padding(.top, 14)
+
+                BudgetTrackerView(
+                    context: profiles.context, sync: sync,
+                    userId: profiles.userId, profileId: profiles.activeProfileId,
+                    onEdit: { router.present(.budgets) },
+                    onTapBudget: { router.openBudget($0) },
+                    onAdd: { router.openBudget(nil) }
+                )
+                .padding(.horizontal, 18).padding(.top, 16)
             }
-            // Home marker for UI tests. Deliberately on the content body (a sibling of
-            // the ProfileSwitcherHeader) — NOT the outer VStack — so it does not flatten
-            // onto / shadow the header button's `profile.switcher` identifier.
+            // Home a11y CONTAINER: `.contain` lets `shell.home` carry this identifier
+            // WITHOUT flattening the subtree (which would clobber `profile.switcher`,
+            // the bell, the budget-row ids, and the quick-action ids).
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier(AccessibilityID.shellHome)
-            Spacer()
+            .padding(.bottom, 110)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
+    }
+
+    /// Unread alert count for the Home bell dot, derived from live budgets + the cache.
+    private var unreadAlertCount: Int {
+        let pid = profiles.activeProfileId
+        let bd = FetchDescriptor<Budget>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+        let budgets = (try? profiles.context.fetch(bd)) ?? []
+        let model = BudgetListViewModel(context: profiles.context, sync: sync,
+                                        userId: profiles.userId, profileId: pid)
+        let inputs = model.rows().map {
+            AlertFeed.Input(budgetId: $0.budget.id, label: $0.budget.label, capCents: $0.budget.capCents,
+                            alertThresholdPct: $0.budget.alertThresholdPct, spentCents: $0.spentCents,
+                            alertSentAt: $0.budget.alertSentAt)
+        }
+        _ = budgets
+        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Date()))
     }
 
     /// One Home quick-action tile -> opens a logbook overlay.
