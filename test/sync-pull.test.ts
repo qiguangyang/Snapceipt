@@ -268,3 +268,180 @@ describe("GET /sync/pull", () => {
     expect(typeof body.nextCursor).toBe("string");
   });
 });
+
+describe("GET /sync/pull — logbook entities", () => {
+  async function seedVehicle(opts: {
+    id: string;
+    userId: string;
+    profileId: string;
+    updatedAt: number;
+    deletedAt?: number | null;
+    businessUsePct?: number;
+  }) {
+    await env.DB.prepare(
+      `INSERT INTO vehicles
+         (id, user_id, profile_id, make, model, engine_cc, registration,
+          logbook_start_date, logbook_end_date, business_use_pct,
+          created_at, updated_at, deleted_at, rev, last_edited_device_id)
+       VALUES (?, ?, ?, 'Toyota', 'HiLux', 2800, 'ABC123',
+               '2025-08-12', '2025-11-04', ?, ?, ?, ?, 1, ?)`,
+    )
+      .bind(
+        opts.id, opts.userId, opts.profileId, opts.businessUsePct ?? 78,
+        opts.updatedAt, opts.updatedAt, opts.deletedAt ?? null, DEVICE_A,
+      )
+      .run();
+  }
+
+  async function seedVehicleYear(opts: {
+    id: string;
+    userId: string;
+    profileId: string;
+    vehicleId: string;
+    updatedAt: number;
+    deletedAt?: number | null;
+  }) {
+    await env.DB.prepare(
+      `INSERT INTO vehicle_years
+         (id, user_id, profile_id, vehicle_id, fy_start_year,
+          fuel_cents, rego_cents, insurance_cents, servicing_cents, other_cents,
+          depreciation_cents, business_use_pct, claim_cents,
+          created_at, updated_at, deleted_at, rev, last_edited_device_id)
+       VALUES (?, ?, ?, ?, 2025, 220000, 90000, 60000, 30000, 12000,
+               100000, 78, 321360, ?, ?, ?, 1, ?)`,
+    )
+      .bind(
+        opts.id, opts.userId, opts.profileId, opts.vehicleId,
+        opts.updatedAt, opts.updatedAt, opts.deletedAt ?? null, DEVICE_A,
+      )
+      .run();
+  }
+
+  async function seedMileageTrip(opts: {
+    id: string;
+    userId: string;
+    profileId: string;
+    vehicleId: string;
+    updatedAt: number;
+  }) {
+    await env.DB.prepare(
+      `INSERT INTO mileage_trips
+         (id, user_id, profile_id, trip_date, purpose, distance_m, is_business,
+          auto_tracked, vehicle_id, odometer_start_m, odometer_end_m,
+          created_at, updated_at, deleted_at, rev, last_edited_device_id)
+       VALUES (?, ?, ?, '2025-09-01', 'Client visit', 23000, 1,
+               0, ?, 45000000, 45023000, ?, ?, NULL, 1, ?)`,
+    )
+      .bind(
+        opts.id, opts.userId, opts.profileId, opts.vehicleId,
+        opts.updatedAt, opts.updatedAt, DEVICE_A,
+      )
+      .run();
+  }
+
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM mileage_trips");
+    await env.DB.exec("DELETE FROM vehicle_years");
+    await env.DB.exec("DELETE FROM vehicles");
+    await env.DB.exec("DELETE FROM transactions");
+    await env.DB.exec("DELETE FROM profiles");
+    await seedUser(USER_A);
+  });
+
+  it("pulls a vehicle with camelCase wire fields", async () => {
+    const token = await tokenFor(USER_A);
+    const profileId = uuidv7();
+    const vehicleId = uuidv7();
+    await seedProfile(profileId, USER_A, 1000);
+    await seedVehicle({ id: vehicleId, userId: USER_A, profileId, updatedAt: 2000 });
+
+    const body = (await (await pull(token)).json()) as any;
+    const v = body.changes.find((c: any) => c.type === "vehicle");
+    expect(v).toBeDefined();
+    expect(v.id).toBe(vehicleId);
+    expect(v.profileId).toBe(profileId);
+    expect(v.make).toBe("Toyota");
+    expect(v.engineCc).toBe(2800);
+    expect(v.logbookStartDate).toBe("2025-08-12");
+    expect(v.businessUsePct).toBe(78);
+    expect(v.userId).toBe(USER_A);
+  });
+
+  it("pulls a vehicleYear with camelCase cents + claim fields", async () => {
+    const token = await tokenFor(USER_A);
+    const profileId = uuidv7();
+    const vehicleId = uuidv7();
+    const vyId = uuidv7();
+    await seedProfile(profileId, USER_A, 1000);
+    await seedVehicle({ id: vehicleId, userId: USER_A, profileId, updatedAt: 2000 });
+    await seedVehicleYear({ id: vyId, userId: USER_A, profileId, vehicleId, updatedAt: 3000 });
+
+    const body = (await (await pull(token)).json()) as any;
+    const vy = body.changes.find((c: any) => c.type === "vehicleYear");
+    expect(vy).toBeDefined();
+    expect(vy.id).toBe(vyId);
+    expect(vy.vehicleId).toBe(vehicleId);
+    expect(vy.fyStartYear).toBe(2025);
+    expect(vy.fuelCents).toBe(220000);
+    expect(vy.depreciationCents).toBe(100000);
+    expect(vy.claimCents).toBe(321360);
+  });
+
+  it("pulls a mileageTrip with the new odometer/vehicle wire fields", async () => {
+    const token = await tokenFor(USER_A);
+    const profileId = uuidv7();
+    const vehicleId = uuidv7();
+    await seedProfile(profileId, USER_A, 1000);
+    await seedVehicle({ id: vehicleId, userId: USER_A, profileId, updatedAt: 2000 });
+    await seedMileageTrip({ id: uuidv7(), userId: USER_A, profileId, vehicleId, updatedAt: 4000 });
+
+    const body = (await (await pull(token)).json()) as any;
+    const trip = body.changes.find((c: any) => c.type === "mileageTrip");
+    expect(trip).toBeDefined();
+    expect(trip.vehicleId).toBe(vehicleId);
+    expect(trip.odometerStartM).toBe(45000000);
+    expect(trip.odometerEndM).toBe(45023000);
+    expect(trip.distanceM).toBe(23000);
+  });
+
+  it("includes a vehicle tombstone and orders the logbook stream globally", async () => {
+    const token = await tokenFor(USER_A);
+    const profileId = uuidv7();
+    const vehicleId = uuidv7();
+    const vyId = uuidv7();
+    await seedProfile(profileId, USER_A, 1000);
+    await seedVehicle({ id: vehicleId, userId: USER_A, profileId, updatedAt: 2000 });
+    await seedVehicleYear({
+      id: vyId,
+      userId: USER_A,
+      profileId,
+      vehicleId,
+      updatedAt: 3000,
+      deletedAt: 3000, // tombstone MUST be returned
+    });
+
+    const body = (await (await pull(token)).json()) as any;
+    expect(body.changes).toHaveLength(3); // profile + vehicle + vehicleYear(tombstone)
+    const updatedAts = body.changes.map((c: any) => c.updatedAt);
+    expect(updatedAts).toEqual([1000, 2000, 3000]);
+    const tomb = body.changes.find((c: any) => c.type === "vehicleYear");
+    expect(tomb.deletedAt).toBe(3000);
+    expect(body.hasMore).toBe(false);
+  });
+
+  it("scopes logbook rows to the authed user only", async () => {
+    const tokenA = await tokenFor(USER_A);
+    await seedUser(USER_B);
+    const profA = uuidv7();
+    const profB = uuidv7();
+    await seedProfile(profA, USER_A, 1000);
+    await seedProfile(profB, USER_B, 1000);
+    await seedVehicle({ id: uuidv7(), userId: USER_A, profileId: profA, updatedAt: 2000 });
+    await seedVehicle({ id: uuidv7(), userId: USER_B, profileId: profB, updatedAt: 2000 });
+
+    const body = (await (await pull(tokenA)).json()) as any;
+    const vehicles = body.changes.filter((c: any) => c.type === "vehicle");
+    expect(vehicles).toHaveLength(1);
+    for (const c of body.changes) expect(c.userId).toBe(USER_A);
+  });
+});
