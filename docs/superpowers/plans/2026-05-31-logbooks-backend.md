@@ -73,7 +73,7 @@ Edit the single forward-only init migration. Tests rebuild the DB from it via `a
     }
     const ix = await indexNames();
     expect(ix.has("ux_vehicle_year")).toBe(true);
-    expect(ix.has("ix_vehicle_year_user_up")).toBe(true);
+    expect(ix.has("ix_vehicle_year_user_updated")).toBe(true);
   });
 
   it("defaults tax_settings.wfh_rate_cents_per_hour to 70 (current ATO rate)", async () => {
@@ -191,7 +191,7 @@ CREATE TABLE vehicle_years (
   last_edited_device_id TEXT
 );
 CREATE UNIQUE INDEX ux_vehicle_year         ON vehicle_years(vehicle_id, fy_start_year) WHERE deleted_at IS NULL;
-CREATE INDEX        ix_vehicle_year_user_up ON vehicle_years(user_id, updated_at);
+CREATE INDEX        ix_vehicle_year_user_updated ON vehicle_years(user_id, updated_at);
 ```
 
   NOTE: `mileage_trips` is created (line ~296) BEFORE `vehicles` (inserted after line ~334), so `mileage_trips.vehicle_id REFERENCES vehicles(id)` forward-references a table not yet defined. This is safe: the migration opens with `PRAGMA foreign_keys = OFF;` (line 5), and SQLite only resolves FK target tables at write time, not at `CREATE TABLE` parse time — the existing `transactions.mileage_trip_id REFERENCES mileage_trips(id)` (line 184) already relies on this same forward-reference pattern. Do NOT reorder the tables.

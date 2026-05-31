@@ -110,7 +110,7 @@ CREATE TABLE vehicle_years (
   last_edited_device_id TEXT
 );
 CREATE UNIQUE INDEX ux_vehicle_year         ON vehicle_years(vehicle_id, fy_start_year) WHERE deleted_at IS NULL;
-CREATE INDEX        ix_vehicle_year_user_up ON vehicle_years(user_id, updated_at);
+CREATE INDEX        ix_vehicle_year_user_updated ON vehicle_years(user_id, updated_at);
 ```
 iOS `VehicleYear` @Model mirrors. `entityType { .vehicleYear }`. One row per (vehicle, FY).
 

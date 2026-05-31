@@ -404,7 +404,7 @@ describe("GET /sync/pull — logbook entities", () => {
     expect(trip.distanceM).toBe(23000);
   });
 
-  it("includes a vehicle tombstone and orders the logbook stream globally", async () => {
+  it("includes a vehicleYear tombstone and orders the logbook stream globally", async () => {
     const token = await tokenFor(USER_A);
     const profileId = uuidv7();
     const vehicleId = uuidv7();
