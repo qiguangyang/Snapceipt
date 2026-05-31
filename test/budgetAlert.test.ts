@@ -204,4 +204,30 @@ describe("budgetCronLogic", () => {
     expect(spy).not.toHaveBeenCalled();
     expect(await alertSentAt("bf")).toBeNull(); // no device pushed -> unset
   });
+
+  it("a throwing sendPush for one device does not abort the run; remaining devices are still attempted", async () => {
+    // Seed a second device alongside the existing one (D has token 'tok-hex').
+    await env.DB.prepare(
+      `INSERT INTO devices(id,user_id,platform,apns_token,push_enabled,created_at,updated_at)
+       VALUES('d2',?,'ios','tok-second',1,1,1)`,
+    ).bind(U).run();
+
+    await addBudget("berr", { categoryId: null, capCents: 10000, thresholdPct: 90 });
+    await addTxn("t1", -9500, "2026-05-03", null);
+
+    // First token throws (e.g. expired APNs token); second succeeds.
+    const spy = vi.spyOn(apns, "sendPush").mockImplementation((_env, token, _payload) => {
+      if (token === "tok-hex") return Promise.reject(new Error("APNs 410 Gone"));
+      return Promise.resolve({ stub: true });
+    });
+
+    // Must not throw out of budgetCronLogic.
+    await expect(budgetCronLogic(env.DB, env, NOW)).resolves.toBeUndefined();
+
+    // Both devices were attempted.
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    // Second device succeeded -> pushed > 0 -> alert_sent_at is stamped.
+    expect(await alertSentAt("berr")).toBe(NOW);
+  });
 });

@@ -125,8 +125,12 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
     let pushed = 0;
     for (const d of devices) {
       if (inQuietHours(d, nowMs)) continue;
-      await apns.sendPush(env, d.apns_token, payload);
-      pushed++;
+      try {
+        await apns.sendPush(env, d.apns_token, payload);
+        pushed++;
+      } catch (err) {
+        console.warn(`[budgetAlert] sendPush failed for token ${d.apns_token}:`, err);
+      }
     }
 
     // Stamp only if at least one device was actually pushed (quiet-suppressed
