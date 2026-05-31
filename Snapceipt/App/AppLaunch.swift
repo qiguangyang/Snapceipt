@@ -65,6 +65,22 @@ struct AppLaunch {
                                    deductiblePct: 100, gstCents: 7_27))
         context.insert(VehicleYear(userId: DevAccount.userId, profileId: p1.id, vehicleId: "v1",
                                    fyStartYear: FinancialYear.of(Date(), startMonth: 7).startYear, claimCents: 250_00))
+        // F3: seed budgets on p1 (active under -uiTestSeed).
+        // 1) whole-profile budget WELL OVER cap (the seeded -120 + -80 = 200 > 150 cap -> red).
+        let overBudget = Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                                label: "Whole profile", capCents: 150_00, alertThresholdPct: 90)
+        context.insert(overBudget)
+        // 2) a meals budget UNDER cap (200 spent of 600).
+        context.insert(Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                              label: "Dining", capCents: 600_00, alertThresholdPct: 90))
+        // 3) an ALREADY-ALERTED budget this month (alertSentAt = now) over threshold -> AlertsSheet item.
+        let alerted = Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                             label: "Coffee", capCents: 100_00, alertThresholdPct: 90,
+                             alertSentAt: Epoch.nowMs())
+        context.insert(alerted)
+        // give "Coffee" enough spend to be at/over threshold (>= 90 of 100): add a -95 txn this month.
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Cafe",
+                                   catKey: "meals", amountCents: -95_00, txnDate: dayISO(2)))
         try? context.save()
     }
 
