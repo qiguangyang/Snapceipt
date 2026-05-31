@@ -67,13 +67,15 @@ export async function sendExportEmail(env: Env, msg: ExportEmail): Promise<void>
   // EOL) with NO Node `os`/`mime-types` imports, so it bundles cleanly in workerd —
   // the default "mimetext" (node) entrypoint does `import { EOL } from "os"` +
   // `import * as o from "mime-types"`, which is unnecessary baggage under workerd.
-  const { createMimeMessage } = await import("mimetext/browser");
+  const { createMimeMessage, Mailbox } = await import("mimetext/browser");
   const { EmailMessage } = await import("cloudflare:email");
 
   const mime = createMimeMessage();
   mime.setSender({ name: "Snapceipt", addr: MAGIC_LINK_SENDER });
   mime.setRecipient(msg.to);
-  mime.setHeader("Reply-To", msg.replyTo);
+  // mimetext's built-in Reply-To field expects a Mailbox instance (it
+  // validates via validateMailboxSingle), so we construct one explicitly.
+  mime.setHeader("Reply-To", new Mailbox(msg.replyTo, { type: "Reply-To" } as any));
   mime.setSubject(`Snapceipt export — ${msg.profileName} — ${msg.periodLabel}`);
   mime.addMessage({
     contentType: "text/plain",

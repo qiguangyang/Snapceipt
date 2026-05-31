@@ -34,6 +34,12 @@ describe("buildExportPdf", () => {
     // It is a real, openable PDF and paginated (80 rows overflow one page).
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThan(1);
+
+    // pdf-lib encodes text operands (Tj strings) in its content streams using
+    // PDFHexString or other encodings that are not round-trippable via a
+    // simple latin1 decode, so literal text such as "FY2025-26" or "$123.45"
+    // does not appear verbatim in the raw bytes. Structural assertions
+    // (magic bytes + page count) are sufficient here.
   });
 
   it("renders a $0 summary for empty data on a single page", async () => {
