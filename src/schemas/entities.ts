@@ -121,6 +121,35 @@ export const loyaltyCardEntity = baseEnvelope.extend({
   sortOrder: z.number().int().optional(),
 });
 
+/** vehicle — the user's car for the ATO logbook method (one per profile in v1). */
+export const vehicleEntity = baseEnvelope.extend({
+  type: z.literal("vehicle"),
+  make: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  engineCc: z.number().int().nonnegative().nullable().optional(),
+  registration: z.string().nullable().optional(),
+  logbookStartDate: isoDate.nullable().optional(),
+  logbookEndDate: isoDate.nullable().optional(),
+  businessUsePct: pct.nullable().optional(),
+});
+
+/** vehicleYear — one row per (vehicle, FY): annual running-cost totals + cached claim. */
+export const vehicleYearEntity = baseEnvelope.extend({
+  type: z.literal("vehicleYear"),
+  vehicleId: uuid,
+  fyStartYear: z.number().int(),
+  odometerOpenM: z.number().int().nonnegative().nullable().optional(),
+  odometerCloseM: z.number().int().nonnegative().nullable().optional(),
+  fuelCents: cents.optional(),
+  regoCents: cents.optional(),
+  insuranceCents: cents.optional(),
+  servicingCents: cents.optional(),
+  otherCents: cents.optional(),
+  depreciationCents: cents.optional(),
+  businessUsePct: pct.nullable().optional(),
+  claimCents: cents.nullable().optional(),
+});
+
 /** Every syncable type (SPINE). Types without a specialized schema validate via baseEnvelope. */
 export const SYNCABLE_TYPES = [
   "transaction",
@@ -135,6 +164,8 @@ export const SYNCABLE_TYPES = [
   "mileageTrip",
   "wfhLog",
   "taxSettings",
+  "vehicle",
+  "vehicleYear",
 ] as const;
 
 export type SyncableType = (typeof SYNCABLE_TYPES)[number];
@@ -145,6 +176,8 @@ const SPECIALIZED: Partial<Record<SyncableType, z.ZodTypeAny>> = {
   profile: profileEntity,
   budget: budgetEntity,
   loyaltyCard: loyaltyCardEntity,
+  vehicle: vehicleEntity,
+  vehicleYear: vehicleYearEntity,
 };
 
 /** Returns the strictest available schema for an entityType; baseEnvelope is the fallback. */

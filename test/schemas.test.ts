@@ -6,6 +6,8 @@ import {
   profileEntity,
   budgetEntity,
   loyaltyCardEntity,
+  vehicleEntity,
+  vehicleYearEntity,
   entitySchemaFor,
   SYNCABLE_TYPES,
 } from "../src/schemas/entities";
@@ -164,7 +166,9 @@ describe("entitySchemaFor / SYNCABLE_TYPES", () => {
     expect(SYNCABLE_TYPES).toContain("transaction");
     expect(SYNCABLE_TYPES).toContain("taxSettings");
     expect(SYNCABLE_TYPES).toContain("quoteLineItem");
-    expect(SYNCABLE_TYPES.length).toBe(12);
+    expect(SYNCABLE_TYPES).toContain("vehicle");
+    expect(SYNCABLE_TYPES).toContain("vehicleYear");
+    expect(SYNCABLE_TYPES.length).toBe(14);
   });
 
   it("returns the specialized schema for known types", () => {
@@ -300,5 +304,64 @@ describe("auth bodies", () => {
 
   it("rejects an empty refresh token", () => {
     expect(refreshBody.safeParse({ refreshToken: "" }).success).toBe(false);
+  });
+});
+
+describe("vehicleEntity / vehicleYearEntity", () => {
+  it("accepts a full vehicle payload", () => {
+    const r = vehicleEntity.safeParse(
+      env({
+        type: "vehicle",
+        make: "Toyota",
+        model: "HiLux",
+        engineCc: 2800,
+        registration: "ABC123",
+        logbookStartDate: "2025-08-12",
+        logbookEndDate: "2025-11-04",
+        businessUsePct: 78,
+      }),
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a business_use_pct over 100", () => {
+    const r = vehicleEntity.safeParse(env({ type: "vehicle", businessUsePct: 150 }));
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects a malformed logbookStartDate", () => {
+    const r = vehicleEntity.safeParse(env({ type: "vehicle", logbookStartDate: "12/08/2025" }));
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts a full vehicleYear payload with integer cents", () => {
+    const r = vehicleYearEntity.safeParse(
+      env({
+        type: "vehicleYear",
+        vehicleId: "0190f8a0-5555-7000-8000-000000000005",
+        fyStartYear: 2025,
+        fuelCents: 220000,
+        regoCents: 90000,
+        insuranceCents: 60000,
+        servicingCents: 30000,
+        otherCents: 12000,
+        depreciationCents: 100000,
+        businessUsePct: 78,
+        claimCents: 321360,
+      }),
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a non-integer cents field on vehicleYear", () => {
+    const r = vehicleYearEntity.safeParse(
+      env({ type: "vehicleYear", vehicleId: "0190f8a0-5555-7000-8000-000000000005", fyStartYear: 2025, fuelCents: 12.5 }),
+    );
+    expect(r.success).toBe(false);
+  });
+
+  it("entitySchemaFor returns the specialized vehicle schemas", () => {
+    expect(entitySchemaFor("vehicle")).toBe(vehicleEntity);
+    expect(entitySchemaFor("vehicleYear")).toBe(vehicleYearEntity);
   });
 });
