@@ -12,6 +12,8 @@ enum Overlay: Equatable, Identifiable {
     case profilePicker
     case addProfile
     case capture
+    case mileage
+    case wfh
 
     var id: Self { self }
 }

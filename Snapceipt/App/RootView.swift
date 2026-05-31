@@ -129,9 +129,31 @@ struct ShellView: View {
                 .presentationDragIndicator(.visible)
                 .environment(\.accent, accent)
         }
-        // --- Capture cover (full-screen): the 4-stage CaptureFlow ---
+        // --- Full-screen overlays ---
         .overlay {
             if router.overlay == .capture { captureCover(accent: accent) }
+        }
+        .overlay {
+            if router.overlay == .mileage {
+                MileageScreen(context: profiles.context, sync: sync,
+                              userId: profiles.userId,
+                              profileId: profiles.activeProfileId,
+                              startMonth: 7,
+                              onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent)
+                    .transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .wfh {
+                WFHScreen(context: profiles.context, sync: sync,
+                          userId: profiles.userId,
+                          profileId: profiles.activeProfileId,
+                          startMonth: 7,
+                          onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent)
+                    .transition(.opacity)
+            }
         }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
@@ -177,6 +199,15 @@ struct ShellView: View {
             .padding(.horizontal, 18)
             .padding(.top, 12)
 
+            HStack(spacing: 12) {
+                quickAction(title: "Mileage", icon: "car", id: AccessibilityID.homeQuickMileage,
+                            accent: accent) { router.present(.mileage) }
+                quickAction(title: "WFH log", icon: "wfh", id: AccessibilityID.homeQuickWFH,
+                            accent: accent) { router.present(.wfh) }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+
             Spacer()
             VStack(spacing: 12) {
                 ZStack {
@@ -200,6 +231,26 @@ struct ShellView: View {
         .background(Palette.cream)
     }
 
+    /// One Home quick-action tile -> opens a logbook overlay.
+    @ViewBuilder
+    private func quickAction(title: String, icon: String, id: String,
+                             accent: AccentPalette, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(Palette.line2, lineWidth: 1))
+            .cardShadow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
     // MARK: - Overlays
 
     /// The bottom-sheet overlays (`profilePicker` / `addProfile`) routed through
@@ -207,10 +258,15 @@ struct ShellView: View {
     /// so it is excluded here. Clearing the binding (swipe-down) clears the router.
     private var sheetBinding: Binding<Overlay?> {
         Binding(
-            get: { router.overlay == .capture ? nil : router.overlay },
+            get: {
+                switch router.overlay {
+                case .capture, .mileage, .wfh: return nil
+                default: return router.overlay
+                }
+            },
             set: { newValue in
-                // Only the sheet overlays clear through here; don't stomp `.capture`.
-                if newValue == nil, router.overlay != .capture {
+                let fullScreen: Set<Overlay> = [.capture, .mileage, .wfh]
+                if newValue == nil, let cur = router.overlay, !fullScreen.contains(cur) {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -233,6 +289,8 @@ struct ShellView: View {
             AddProfileView(vm: makeAddProfileVM())
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
+        case .mileage, .wfh:
+            EmptyView()  // handled by the full-screen overlays
         }
     }
 

@@ -32,4 +32,38 @@ enum AccessibilityID {
     static let captureSavedTitle = "capture.saved.title"
     static let captureSnapAnother = "capture.snapAnother"
     static let captureDone = "capture.done"
+
+    // Home quick actions
+    static let homeQuickMileage = "home.quick.mileage"
+    static let homeQuickWFH = "home.quick.wfh"
+
+    // Logbooks — shared
+    static let logbookClose = "logbook.close"
+    static let logbookAdd = "logbook.add"
+
+    // Mileage
+    static let mileageScreen = "mileage.screen"
+    static let mileageAddVehicle = "mileage.addVehicle"
+    static let mileageStartLogbook = "mileage.startLogbook"
+    static let mileageEditCosts = "mileage.editCosts"
+    static let mileageAddTrip = "mileage.addTrip"
+    static let mileageClaim = "mileage.claim"
+    static let vehicleSheetMake = "vehicle.sheet.make"
+    static let vehicleSheetModel = "vehicle.sheet.model"
+    static let vehicleSheetSave = "vehicle.sheet.save"
+    static let logbookSheetStart = "logbook.sheet.start"
+    static let logbookSheetSave = "logbook.sheet.save"
+    static let tripSheetOdoStart = "trip.sheet.odoStart"
+    static let tripSheetOdoEnd = "trip.sheet.odoEnd"
+    static let tripSheetBusiness = "trip.sheet.business"
+    static let tripSheetSave = "trip.sheet.save"
+    static let costsSheetFuel = "costs.sheet.fuel"
+    static let costsSheetSave = "costs.sheet.save"
+
+    // WFH
+    static let wfhScreen = "wfh.screen"
+    static let wfhLogHours = "wfh.logHours"
+    static let wfhClaim = "wfh.claim"
+    static let wfhSheetHours = "wfh.sheet.hours"
+    static let wfhSheetSave = "wfh.sheet.save"
 }

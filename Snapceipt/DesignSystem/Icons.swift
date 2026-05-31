@@ -22,6 +22,12 @@ enum Icons {
         "wallet": "M4 7.5A1.5 1.5 0 0 1 5.5 6H18a1 1 0 0 1 1 1v1.5M4 7.5V18a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-3.5M4 7.5h14.5M16 11.5h3.5v3H16a1.5 1.5 0 0 1 0-3Z",
         "building": "M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15M14 20V9h4a1 1 0 0 1 1 1v10M4 20h16M8 8h3M8 12h3M8 16h3",
         "star": "M12 3.5l2.6 5.3 5.9.86-4.25 4.14 1 5.85L12 17.1l-5.25 2.6 1-5.85L3.5 9.66l5.9-.86L12 3.5Z",
+        "car": "M5 16.5h14M5.5 16.5v2M18.5 16.5v2M4.5 16.5l1.2-5a2 2 0 0 1 1.9-1.4h8.8a2 2 0 0 1 1.9 1.4l1.2 5M4.5 16.5h15M7.5 13.5h2M14.5 13.5h2",
+        "wfh": "M3 11 12 4.5 21 11M5 9.7V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.7M9.5 20v-4.2a2.5 2.5 0 0 1 5 0V20",
+        "pin": "M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+        "clock": "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.5V12l3 2",
+        "info": "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 7.6h.01",
+        "arrowRight": "M5 12h14M13 6l6 6-6 6",
     ]
     // ADD THE REMAINING theme.jsx ICONS HERE the same way (arrowUp, arrowDown, arrowRight,
     // car, wfh, search, flash, image, share, tag, calendar, edit, filter, dots, cup, cart,
