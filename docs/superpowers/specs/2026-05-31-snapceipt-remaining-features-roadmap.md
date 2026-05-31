@@ -165,7 +165,7 @@ This roadmap is updated (check the box / note the spec path) as each feature lan
 
 | # | Feature | Spec | Plan(s) | Status |
 |---|---|---|---|---|
-| F1 | Logbooks (mileage + WFH) | [design](2026-05-31-logbooks-design.md) | [backend](../plans/2026-05-31-logbooks-backend.md) · [ios](../plans/2026-05-31-logbooks-ios.md) | plans ready → implement |
+| F1 | Logbooks (mileage + WFH) | [design](2026-05-31-logbooks-design.md) | [backend](../plans/2026-05-31-logbooks-backend.md) · [ios](../plans/2026-05-31-logbooks-ios.md) | ✅ **implemented** (backend `npm test` 211 / e2e 9; iOS 200 unit + UI green) |
 | F2 | Reports & insights | — | — | queued |
 | F3 | Budgets + push | — | — | queued |
 | F4 | Loyalty barcodes | — | — | queued |
