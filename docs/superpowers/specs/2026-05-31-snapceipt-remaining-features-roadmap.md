@@ -165,7 +165,7 @@ This roadmap is updated (check the box / note the spec path) as each feature lan
 
 | # | Feature | Spec | Plan(s) | Status |
 |---|---|---|---|---|
-| F1 | Logbooks (mileage + WFH) | _next_ | — | brainstorming next |
+| F1 | Logbooks (mileage + WFH) | [2026-05-31-logbooks-design.md](2026-05-31-logbooks-design.md) | _next_ | spec approved → planning |
 | F2 | Reports & insights | — | — | queued |
 | F3 | Budgets + push | — | — | queued |
 | F4 | Loyalty barcodes | — | — | queued |
