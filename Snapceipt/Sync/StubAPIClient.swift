@@ -51,7 +51,7 @@ final class StubAPIClient: APIClient {
         if format == "accountant" {
             return .sent(status: "sent", outboxId: "stub-outbox")
         }
-        return .download(url: "/export/dl/stub-token", expiresAt: 1_790_000_000)
+        return .download(url: "/export/dl/stub-token", expiresAt: 1_790_000_000_000)
     }
 }
 #endif

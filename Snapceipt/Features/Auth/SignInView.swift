@@ -181,7 +181,7 @@ final class PreviewAPIClient: APIClient {
     }
     func export(profileId: String, format: String, from: String, to: String,
                 toEmail: String?) async throws -> ExportResult {
-        .download(url: "/export/dl/preview-token", expiresAt: 1_790_000_000)
+        .download(url: "/export/dl/preview-token", expiresAt: 1_790_000_000_000)
     }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,

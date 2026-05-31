@@ -19,7 +19,7 @@ struct ExportClientTests {
         let client = makeClient()
         MockURLProtocol.setHandler { _ in
             (200, ["Content-Type": "application/json"],
-             self.json(#"{"url":"/export/dl/tok123","expiresAt":1790000000}"#))
+             self.json(#"{"url":"/export/dl/tok123","expiresAt":1790000000000}"#))
         }
         let result = try await client.export(profileId: "p1", format: "csv",
                                               from: "2026-06-01", to: "2026-06-30", toEmail: nil)
@@ -27,9 +27,17 @@ struct ExportClientTests {
             Issue.record("expected .download"); return
         }
         #expect(url == "/export/dl/tok123")
-        #expect(expiresAt == 1790000000)
+        #expect(expiresAt == 1790000000000)
         #expect(MockURLProtocol.lastRequest?.url?.path == "/export")
         #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
+        // Assert request body contains the expected keys and no toEmail (nil case)
+        let bodyData = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
+        let bodyObj = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+        #expect(bodyObj?["profileId"] as? String == "p1")
+        #expect(bodyObj?["format"] as? String == "csv")
+        #expect(bodyObj?["from"] as? String == "2026-06-01")
+        #expect(bodyObj?["to"] as? String == "2026-06-30")
+        #expect(bodyObj?["toEmail"] == nil)
     }
 
     @Test("accountant export decodes the sent result")
@@ -63,5 +71,24 @@ struct ExportClientTests {
             #expect(e.code == "VALIDATION_FAILED")
             #expect(e.status == 400)
         }
+    }
+}
+
+/// URLProtocol moves httpBody into a stream; this helper reads it back for assertions.
+private extension URLRequest {
+    func httpBodyData() -> Data? {
+        if let httpBody { return httpBody }
+        guard let stream = httpBodyStream else { return nil }
+        stream.open(); defer { stream.close() }
+        var data = Data()
+        let bufSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }
