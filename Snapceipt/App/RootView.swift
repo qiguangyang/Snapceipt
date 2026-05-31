@@ -274,13 +274,20 @@ struct ShellView: View {
         Binding(
             get: {
                 switch router.overlay {
-                case .capture, .mileage, .wfh: return nil
+                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
+                    return nil
                 default: return router.overlay
                 }
             },
             set: { newValue in
-                let fullScreen: Set<Overlay> = [.capture, .mileage, .wfh]
-                if newValue == nil, let cur = router.overlay, !fullScreen.contains(cur) {
+                // The full-screen overlays (presented via `.overlay`, not `.sheet`) must
+                // never be dismissed-as-sheet here. `.budgetEditor` carries an associated
+                // value, so it is matched separately rather than via a Set membership test.
+                let fullScreen: Set<String> = [Overlay.capture.id, Overlay.mileage.id, Overlay.wfh.id,
+                                               Overlay.budgets.id, Overlay.alerts.id,
+                                               Overlay.notificationSettings.id]
+                if newValue == nil, let cur = router.overlay,
+                   !fullScreen.contains(cur.id), !cur.id.hasPrefix("budgetEditor") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -319,7 +326,7 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
-        case .mileage, .wfh:
+        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
             EmptyView()  // handled by the full-screen overlays
         }
     }

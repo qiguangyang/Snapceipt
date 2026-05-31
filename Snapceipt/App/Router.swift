@@ -15,8 +15,25 @@ enum Overlay: Equatable, Identifiable {
     case mileage
     case wfh
     case export
+    case budgets
+    case budgetEditor(id: String?)   // nil id = add a new budget
+    case alerts
+    case notificationSettings
 
-    var id: Self { self }
+    var id: String {
+        switch self {
+        case .profilePicker: return "profilePicker"
+        case .addProfile: return "addProfile"
+        case .capture: return "capture"
+        case .mileage: return "mileage"
+        case .wfh: return "wfh"
+        case .export: return "export"
+        case .budgets: return "budgets"
+        case .budgetEditor(let id): return "budgetEditor-\(id ?? "new")"
+        case .alerts: return "alerts"
+        case .notificationSettings: return "notificationSettings"
+        }
+    }
 }
 
 /// Routes the shell understands. Tab routes swap the active tab; overlay routes
@@ -58,4 +75,23 @@ enum Route: Equatable {
 
     /// Dismiss any presented overlay.
     func dismissOverlay() { overlay = nil }
+
+    /// Open the budget editor for `id` (nil = add). Used by row taps + tapped pushes.
+    func openBudget(_ id: String?) { overlay = .budgetEditor(id: id) }
+
+    /// Parse `snapceipt://budget/<id>` -> the budget id, or nil for any other URL.
+    static func parseBudgetDeepLink(_ url: URL) -> String? {
+        guard url.scheme == "snapceipt", url.host == "budget" else { return nil }
+        let id = url.pathComponents.first(where: { $0 != "/" })
+        guard let id, !id.isEmpty else { return nil }
+        return id
+    }
+
+    /// If `url` is a budget deep-link, route to its editor and return true.
+    @discardableResult
+    func handleBudgetDeepLink(_ url: URL) -> Bool {
+        guard let id = Router.parseBudgetDeepLink(url) else { return false }
+        openBudget(id)
+        return true
+    }
 }
