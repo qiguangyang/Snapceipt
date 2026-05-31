@@ -457,6 +457,7 @@ CREATE TABLE tax_settings (
   meals_deductible_pct        INTEGER NOT NULL DEFAULT 50,
   wfh_rate_cents_per_hour     INTEGER NOT NULL DEFAULT 70,
   mileage_rate_cents_per_km   INTEGER NOT NULL DEFAULT 88,
+  accountant_email            TEXT,
   created_at                  INTEGER NOT NULL,
   updated_at                  INTEGER NOT NULL,
   deleted_at                  INTEGER,

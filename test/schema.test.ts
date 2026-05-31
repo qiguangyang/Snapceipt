@@ -185,6 +185,30 @@ describe("0001_init schema", () => {
     expect(Number(wfh!.dflt_value)).toBe(70);
   });
 
+  it("adds the nullable accountant_email column to tax_settings", async () => {
+    const cols = await columnsOf("tax_settings");
+    expect(cols.has("accountant_email"), "tax_settings missing accountant_email").toBe(true);
+
+    // It is nullable: a tax_settings row inserted without it succeeds.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO users(id,created_at,updated_at) VALUES('uacct',1,1)`),
+      env.DB.prepare(`INSERT INTO profiles(id,user_id,name,type,accent_1,accent_2,accent_3,created_at,updated_at)
+                      VALUES('pacct','uacct','Business','business','#0E7C72','#DCF0ED','#0A5950',1,1)`),
+      env.DB.prepare(`INSERT INTO tax_settings(id,user_id,profile_id,created_at,updated_at,rev)
+                      VALUES('ts1','uacct','pacct',1,1,1)`),
+    ]);
+    const row = await env.DB.prepare(`SELECT accountant_email FROM tax_settings WHERE id='ts1'`)
+      .first<{ accountant_email: string | null }>();
+    expect(row?.accountant_email).toBeNull();
+
+    // And it round-trips a value.
+    await env.DB.prepare(`UPDATE tax_settings SET accountant_email=? WHERE id='ts1'`)
+      .bind("cpa@example.com").run();
+    const updated = await env.DB.prepare(`SELECT accountant_email FROM tax_settings WHERE id='ts1'`)
+      .first<{ accountant_email: string | null }>();
+    expect(updated?.accountant_email).toBe("cpa@example.com");
+  });
+
   it("round-trips a vehicle through the tenant-scoped helpers", async () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT OR IGNORE INTO users(id,created_at,updated_at) VALUES('uv',1,1)`),

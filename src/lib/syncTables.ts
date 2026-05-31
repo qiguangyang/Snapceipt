@@ -220,6 +220,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       mealsDeductiblePct: "meals_deductible_pct",
       wfhRateCentsPerHour: "wfh_rate_cents_per_hour",
       mileageRateCentsPerKm: "mileage_rate_cents_per_km",
+      accountantEmail: "accountant_email",
     },
   },
 };
