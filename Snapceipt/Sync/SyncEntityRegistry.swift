@@ -45,6 +45,8 @@ final class SyncEntityRegistry {
         register(.mileageTrip, MileageTripSyncMapper())
         register(.wfhLog, WFHLogSyncMapper())
         register(.taxSettings, TaxSettingsSyncMapper())
+        register(.vehicle, VehicleSyncMapper())
+        register(.vehicleYear, VehicleYearSyncMapper())
     }
 
     private func register<M: SyncRowMapper>(_ type: EntityType, _ mapper: M) {
@@ -588,6 +590,9 @@ private struct MileageTripSyncMapper: SyncRowMapper {
         if let v = env.int("rateCentsPerKm") { row.rateCentsPerKm = v }
         if let v = env.int("claimCents") { row.claimCents = v }
         if let v = env.bool("autoTracked") { row.autoTracked = v }
+        if let v = env.string("vehicleId") { row.vehicleId = v }
+        if let v = env.int("odometerStartM") { row.odometerStartM = v }
+        if let v = env.int("odometerEndM") { row.odometerEndM = v }
     }
 
     func payload(_ r: MileageTrip) -> [String: JSONValue] {
@@ -601,6 +606,9 @@ private struct MileageTripSyncMapper: SyncRowMapper {
         f["rateCentsPerKm"] = num(r.rateCentsPerKm)
         f["claimCents"] = num(r.claimCents)
         f["autoTracked"] = boolv(r.autoTracked)
+        f["vehicleId"] = str(r.vehicleId)
+        f["odometerStartM"] = num(r.odometerStartM)
+        f["odometerEndM"] = num(r.odometerEndM)
         return f
     }
 }
@@ -677,6 +685,96 @@ private struct TaxSettingsSyncMapper: SyncRowMapper {
 }
 
 extension TaxSettings: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - Vehicle
+
+private struct VehicleSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = Vehicle(userId: env.userId, profileId: env.profileId)
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        row.profileId = env.profileId
+        if let v = env.string("make") { row.make = v }
+        if let v = env.string("model") { row.model = v }
+        if let v = env.int("engineCc") { row.engineCc = v }
+        if let v = env.string("registration") { row.registration = v }
+        if let v = env.string("logbookStartDate") { row.logbookStartDate = v }
+        if let v = env.string("logbookEndDate") { row.logbookEndDate = v }
+        if let v = env.int("businessUsePct") { row.businessUsePct = v }
+    }
+
+    func payload(_ r: Vehicle) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["make"] = str(r.make)
+        f["model"] = str(r.model)
+        f["engineCc"] = num(r.engineCc)
+        f["registration"] = str(r.registration)
+        f["logbookStartDate"] = str(r.logbookStartDate)
+        f["logbookEndDate"] = str(r.logbookEndDate)
+        f["businessUsePct"] = num(r.businessUsePct)
+        return f
+    }
+}
+
+extension Vehicle: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - VehicleYear
+
+private struct VehicleYearSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = VehicleYear(userId: env.userId, profileId: env.profileId,
+                                vehicleId: env.string("vehicleId") ?? "",
+                                fyStartYear: env.int("fyStartYear") ?? 0)
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        row.profileId = env.profileId
+        if let v = env.string("vehicleId") { row.vehicleId = v }
+        if let v = env.int("fyStartYear") { row.fyStartYear = v }
+        if let v = env.int("odometerOpenM") { row.odometerOpenM = v }
+        if let v = env.int("odometerCloseM") { row.odometerCloseM = v }
+        if let v = env.int("fuelCents") { row.fuelCents = v }
+        if let v = env.int("regoCents") { row.regoCents = v }
+        if let v = env.int("insuranceCents") { row.insuranceCents = v }
+        if let v = env.int("servicingCents") { row.servicingCents = v }
+        if let v = env.int("otherCents") { row.otherCents = v }
+        if let v = env.int("depreciationCents") { row.depreciationCents = v }
+        if let v = env.int("businessUsePct") { row.businessUsePct = v }
+        if let v = env.int("claimCents") { row.claimCents = v }
+    }
+
+    func payload(_ r: VehicleYear) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["vehicleId"] = .string(r.vehicleId)
+        f["fyStartYear"] = num(r.fyStartYear)
+        f["odometerOpenM"] = num(r.odometerOpenM)
+        f["odometerCloseM"] = num(r.odometerCloseM)
+        f["fuelCents"] = num(r.fuelCents)
+        f["regoCents"] = num(r.regoCents)
+        f["insuranceCents"] = num(r.insuranceCents)
+        f["servicingCents"] = num(r.servicingCents)
+        f["otherCents"] = num(r.otherCents)
+        f["depreciationCents"] = num(r.depreciationCents)
+        f["businessUsePct"] = num(r.businessUsePct)
+        f["claimCents"] = num(r.claimCents)
+        return f
+    }
+}
+
+extension VehicleYear: SyncableMutableEnvelope, MutableSyncRow {
     func setRev(_ rev: Int) { self.rev = rev }
     func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
 }
