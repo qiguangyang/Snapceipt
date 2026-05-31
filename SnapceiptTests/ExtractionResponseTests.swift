@@ -65,6 +65,12 @@ struct ExtractionResponseTests {
         parsed.merchant = "Woolworths"
         parsed.total = Decimal(string: "22.00")!
         parsed.tax = Decimal(string: "2.00")!
+        // Pin the parsed date (UTC) so this test is date-deterministic. The parsed
+        // date wins over capturedAt — `ymd(parsed.date) ?? capturedAt` only falls back
+        // to capturedAt when ymd is nil, which never happens for a non-nil Date.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        parsed.date = cal.date(from: DateComponents(year: 2026, month: 5, day: 28, hour: 12))!
         let draft = ExtractedReceipt(parsed: parsed, capturedAt: "2026-05-30")
         #expect(draft.merchant == "Woolworths")
         #expect(draft.total == Decimal(string: "22.00"))
@@ -73,6 +79,6 @@ struct ExtractionResponseTests {
         #expect(draft.deductible == 100)         // fallback default deductible
         #expect(draft.extractionStatus == "pending")
         #expect(draft.needsReview == true)
-        #expect(draft.date == "2026-05-30")
+        #expect(draft.date == "2026-05-28")   // parsed date wins over capturedAt
     }
 }
