@@ -7,16 +7,19 @@ enum InsightBuilder {
     enum Mode { case business, personal }
 
     /// Build the insight string. `window` is the current period; `prevWindow` is the
-    /// same-length immediately-prior period (used for the delta). Empty data -> fallback.
+    /// same-length immediately-prior period (used for the delta). `periodWord` is the
+    /// noun for the window ("month"/"quarter"/"year") so the copy ("this <word>" /
+    /// "last <word>") stays truthful for whichever period the caller selected — never
+    /// "this month" over a quarter/FY window. Empty data -> fallback.
     static func insight(mode: Mode, txns: [TransactionQuery.Txn],
-                        window: Period.Window, prevWindow: Period.Window) -> String {
+                        window: Period.Window, prevWindow: Period.Window,
+                        periodWord: String = "period") -> String {
         let cats = TransactionQuery.byCategory(txns, window: window)
         guard let top = cats.first else {
             return "Add a few receipts and your insights will appear here."
         }
 
         let label = catLabel(top.catKey)
-        let periodWord = (mode == .business) ? "period" : "month"
         var line = "\(label) is your biggest expense this \(periodWord) — \(fmt(top.spendCents))."
 
         // Period-over-period delta (current vs prior window total expense).

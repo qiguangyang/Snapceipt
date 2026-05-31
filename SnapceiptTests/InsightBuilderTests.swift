@@ -35,9 +35,10 @@ struct InsightBuilderTests {
         let w = Period.month.window(now: iso("2026-06-15"), startMonth: 7)
         let prev = Period.month.window(now: iso("2026-05-15"), startMonth: 7)
         let s = InsightBuilder.insight(mode: .business, txns: fixtureThisMonth(),
-                                       window: w, prevWindow: prev)
+                                       window: w, prevWindow: prev, periodWord: Period.month.word)
         #expect(s.contains("Meals & Coffee"))
         #expect(s.contains("$120.00"))
+        #expect(s.contains("this month"))
     }
 
     @Test("reports a period-over-period delta when prior data exists")
@@ -46,8 +47,20 @@ struct InsightBuilderTests {
         let prev = Period.month.window(now: iso("2026-05-15"), startMonth: 7)
         let all = fixtureThisMonth() + fixturePrevMonth()
         // This month spend 200, last month 300 -> spent 100 less.
-        let s = InsightBuilder.insight(mode: .personal, txns: all, window: w, prevWindow: prev)
+        let s = InsightBuilder.insight(mode: .personal, txns: all, window: w, prevWindow: prev,
+                                       periodWord: Period.month.word)
         #expect(s.contains("less"))
         #expect(s.contains("$100.00"))
+        #expect(s.contains("last month"))
+    }
+
+    @Test("period word follows the selected period — FY window says year, not month")
+    func periodWordFollowsWindow() {
+        let w = Period.fy.window(now: iso("2026-06-15"), startMonth: 7)
+        let prev = Period.fy.window(now: iso("2025-06-15"), startMonth: 7)
+        let s = InsightBuilder.insight(mode: .personal, txns: fixtureThisMonth(),
+                                       window: w, prevWindow: prev, periodWord: Period.fy.word)
+        #expect(s.contains("this year"))
+        #expect(!s.contains("this month"))
     }
 }

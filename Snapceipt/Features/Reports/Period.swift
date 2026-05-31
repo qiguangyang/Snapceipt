@@ -58,6 +58,16 @@ enum Period: String, CaseIterable, Equatable {
         }
     }
 
+    /// The bare period noun for insight copy ("month" / "quarter" / "year"), so the
+    /// insight's "this <word>" / "last <word>" matches the window it summarises.
+    var word: String {
+        switch self {
+        case .month: return "month"
+        case .quarter: return "quarter"
+        case .fy: return "year"
+        }
+    }
+
     /// The trend-card caption: "This month" / "This quarter" / "FY2025-26".
     func headline(now: Date, startMonth: Int = 7) -> String {
         switch self {

@@ -123,7 +123,8 @@ final class ReportsViewModel {
         let prevNow = prevAnchor(window: window)
         let prevWindow = period.window(now: prevNow, startMonth: startMonth)
         insight = InsightBuilder.insight(mode: isBusiness ? .business : .personal,
-                                         txns: txns, window: window, prevWindow: prevWindow)
+                                         txns: txns, window: window, prevWindow: prevWindow,
+                                         periodWord: period.word)
     }
 
     /// An anchor date inside the immediately-prior period (one day before this
