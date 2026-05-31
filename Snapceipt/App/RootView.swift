@@ -287,6 +287,8 @@ struct ShellView: View {
             .background(Palette.cream)
         case .addProfile:
             AddProfileView(vm: makeAddProfileVM())
+        case .export:
+            EmptyView()  // real ExportSheet wired in Task 8
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh:

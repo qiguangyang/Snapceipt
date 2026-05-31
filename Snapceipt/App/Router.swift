@@ -14,6 +14,7 @@ enum Overlay: Equatable, Identifiable {
     case capture
     case mileage
     case wfh
+    case export
 
     var id: Self { self }
 }

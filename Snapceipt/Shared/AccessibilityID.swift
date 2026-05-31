@@ -66,4 +66,25 @@ enum AccessibilityID {
     static let wfhClaim = "wfh.claim"
     static let wfhSheetHours = "wfh.sheet.hours"
     static let wfhSheetSave = "wfh.sheet.save"
+
+    // Reports
+    static let reportsScreen = "reports.screen"
+    static let reportsExportPill = "reports.exportPill"
+    static let reportsPeriod = "reports.period"
+    static let reportsNet = "reports.net"
+    static let reportsDonut = "reports.donut"
+    static let reportsDeductiblePill = "reports.pill.deductible"
+    static let reportsGstPill = "reports.pill.gst"
+    static let reportsLogbookVehicle = "reports.logbook.vehicle"
+    static let reportsLogbookWFH = "reports.logbook.wfh"
+    static let reportsInsight = "reports.insight"
+
+    // Export sheet
+    static let exportSheet = "export.sheet"
+    static let exportFormatPDF = "export.format.pdf"
+    static let exportFormatCSV = "export.format.csv"
+    static let exportFormatAccountant = "export.format.accountant"
+    static let exportEmailField = "export.emailField"
+    static let exportGenerate = "export.generate"
+    static let exportStatus = "export.status"
 }
