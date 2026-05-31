@@ -29,7 +29,7 @@ final class TaxSettings: Syncable {
         gstRateBps: Int = 1000,
         financialYearStartMonth: Int = 7,
         mealsDeductiblePct: Int = 50,
-        wfhRateCentsPerHour: Int = 67,
+        wfhRateCentsPerHour: Int = 70,
         mileageRateCentsPerKm: Int = 88,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),

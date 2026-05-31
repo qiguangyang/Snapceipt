@@ -18,6 +18,9 @@ final class MileageTrip: Syncable {
     var rateCentsPerKm: Int?
     var claimCents: Int?
     var autoTracked: Bool
+    var vehicleId: String?           // FK -> vehicles(id); the trip's car
+    var odometerStartM: Int?         // metres
+    var odometerEndM: Int?           // metres; must be > start
 
     var createdAt: Int
     var updatedAt: Int
@@ -40,6 +43,9 @@ final class MileageTrip: Syncable {
         rateCentsPerKm: Int? = nil,
         claimCents: Int? = nil,
         autoTracked: Bool = false,
+        vehicleId: String? = nil,
+        odometerStartM: Int? = nil,
+        odometerEndM: Int? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -58,6 +64,9 @@ final class MileageTrip: Syncable {
         self.rateCentsPerKm = rateCentsPerKm
         self.claimCents = claimCents
         self.autoTracked = autoTracked
+        self.vehicleId = vehicleId
+        self.odometerStartM = odometerStartM
+        self.odometerEndM = odometerEndM
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
