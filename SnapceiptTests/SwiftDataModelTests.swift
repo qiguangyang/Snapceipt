@@ -134,9 +134,9 @@ struct SwiftDataModelTests {
         #expect(!got.mutationId.isEmpty)
     }
 
-    @Test("EntityType still has exactly the 12 syncable cases")
+    @Test("EntityType still has exactly the 14 syncable cases")
     func entityTypeCount() {
-        #expect(EntityType.allCases.count == 12)
+        #expect(EntityType.allCases.count == 14)
     }
 
     @Test("the full schema builds an in-memory container without throwing")

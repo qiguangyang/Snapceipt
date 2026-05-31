@@ -1,6 +1,6 @@
 import Foundation
 
-/// The 12 syncable entity types. Raw values are the camelCase strings the
+/// The 14 syncable entity types. Raw values are the camelCase strings the
 /// backend `SYNCABLE_TABLES` keys + `PushMutation.entityType` use verbatim.
 enum EntityType: String, CaseIterable, Codable, Sendable {
     case transaction
@@ -15,4 +15,6 @@ enum EntityType: String, CaseIterable, Codable, Sendable {
     case mileageTrip
     case wfhLog
     case taxSettings
+    case vehicle
+    case vehicleYear
 }
