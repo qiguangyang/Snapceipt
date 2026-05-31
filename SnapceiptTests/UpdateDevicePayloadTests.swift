@@ -41,4 +41,11 @@ struct UpdateDevicePayloadTests {
         #expect(mock.updateDeviceCalls[0].apnsToken == "abc")
         #expect(mock.updateDeviceCalls[0].pushEnabled == false)
     }
+
+    @Test("device token hex-encodes lowercased, no separators")
+    func hexEncode() {
+        let data = Data([0xDE, 0xAD, 0xBE, 0xEF, 0x01])
+        #expect(NotificationDelegate.hexToken(data) == "deadbeef01")
+        #expect(NotificationDelegate.hexToken(Data()) == "")
+    }
 }

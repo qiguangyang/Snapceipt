@@ -22,6 +22,10 @@ struct SnapceiptApp: App {
     @State private var sync: SyncEngine
     @State private var profiles: ProfilesStore
 
+    /// UIKit app delegate bridging APNs token registration + notification taps. The
+    /// Router/APIClient refs it routes through are injected from `init()` below.
+    @UIApplicationDelegateAdaptor(NotificationDelegate.self) private var notificationDelegate
+
     init() {
         let auth = AuthStore()
 #if DEBUG
@@ -49,13 +53,20 @@ struct SnapceiptApp: App {
         let userId = auth.session?.userId ?? ""
         let profiles = ProfilesStore(context: context, sync: sync, userId: userId)
 
+        let router = Router()
+
         _auth = State(initialValue: auth)
         _authVM = State(initialValue: AuthViewModel(api: api, auth: auth))
-        _router = State(initialValue: Router())
+        _router = State(initialValue: router)
         _toasts = State(initialValue: toasts)
         _reachability = State(initialValue: Reachability())
         _sync = State(initialValue: sync)
         _profiles = State(initialValue: profiles)
+
+        // Inject the SAME Router + APIClient instances into the APNs delegate (UIKit
+        // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
+        NotificationDelegate.router = router
+        NotificationDelegate.api = api
     }
 
     var body: some Scene {
@@ -70,6 +81,8 @@ struct SnapceiptApp: App {
                 .environment(profiles)
                 .modelContainer(container)
                 .onOpenURL { url in
+                    // Budget deep-link (snapceipt://budget/<id>) routes to the editor first.
+                    if router.handleBudgetDeepLink(url) { return }
                     // Magic-link Universal Link / custom-scheme deep link.
                     Task { await authVM.handleDeepLink(url) }
                 }
