@@ -187,7 +187,8 @@ struct ShellView: View {
         }
         .overlay {
             if router.overlay == .notificationSettings {
-                Color.clear  // NotificationsSettingsView wired in Task 10
+                NotificationsSettingsView(api: captureAPI, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
             }
         }
         // --- Global toasts on top of everything ---
@@ -225,7 +226,11 @@ struct ShellView: View {
             )
             .environment(\.accent, accent)
         case .profile:
-            StubTabView(title: "Profile", accent: accent)
+            ProfileTabView(
+                onOpenNotifications: { router.present(.notificationSettings) },
+                onOpenBudgets: { router.present(.budgets) }
+            )
+            .environment(\.accent, accent)
         case .snap:
             // Never the active tab (Router routes .snap to the capture overlay),
             // but render Home as a safe fallback.

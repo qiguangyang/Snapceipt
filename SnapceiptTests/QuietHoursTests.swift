@@ -39,3 +39,45 @@ struct QuietHoursTests {
         #expect(body.timezone == "Australia/Perth")
     }
 }
+
+@MainActor
+@Suite("NotificationsSettingsViewModel")
+struct NotificationsSettingsViewModelTests {
+    @Test("toggling push + setting quiet hours calls updateDevice with the right payload")
+    func updatesDevice() async throws {
+        let mock = MockAPIClient()
+        mock.updateDeviceHandler = { _ in UpdateDeviceResponse(id: "d") }
+        let suiteName = "sc.test.notif.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let vm = NotificationsSettingsViewModel(api: mock, defaults: defaults,
+                                                timezone: "Australia/Sydney")
+        vm.pushEnabled = true
+        vm.quietHoursEnabled = true   // REQUIRED: persist() only sends the minutes when quiet hours are ON
+        vm.quietStartMin = 1320
+        vm.quietEndMin = 420
+        await vm.persist()
+        #expect(mock.updateDeviceCalls.count == 1)
+        let body = mock.updateDeviceCalls[0]
+        #expect(body.pushEnabled == true)
+        #expect(body.quietHoursStartMin == 1320)
+        #expect(body.quietHoursEndMin == 420)
+        #expect(body.timezone == "Australia/Sydney")
+        #expect(body.apnsToken == nil)
+        defaults.removePersistentDomain(forName: suiteName)  // clean up by SUITE name, not .description
+    }
+
+    @Test("quiet hours off sends nil minutes")
+    func quietOff() async throws {
+        let mock = MockAPIClient()
+        mock.updateDeviceHandler = { _ in UpdateDeviceResponse(id: "d") }
+        let suiteName = "sc.test.notif.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let vm = NotificationsSettingsViewModel(api: mock, defaults: defaults,
+                                                timezone: "Australia/Perth")
+        vm.quietHoursEnabled = false
+        await vm.persist()
+        #expect(mock.updateDeviceCalls[0].quietHoursStartMin == nil)
+        #expect(mock.updateDeviceCalls[0].quietHoursEndMin == nil)
+        defaults.removePersistentDomain(forName: suiteName)  // clean up by SUITE name, not .description
+    }
+}
