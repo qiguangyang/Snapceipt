@@ -11,6 +11,7 @@ import { deviceRoutes } from "./routes/devices";
 import { syncRoutes } from "./routes/sync";
 import { imageRoutes } from "./routes/images";
 import { extractRoutes } from "./routes/extract";
+import { exportRoutes } from "./routes/export";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -57,6 +58,12 @@ app.use("/extract/*", rateLimit("extract"));
 // is the wildcard. Mount both so the exact-path POST is also limited.
 app.use("/images", rateLimit("default"));
 app.use("/images/*", rateLimit("default"));
+// Export generation — file build + email; 60/user/hr. Mount on BOTH the exact
+// path (POST /export) AND the wildcard (GET /export/dl/*) so the limiter runs
+// for the actual POST too. The public download stays gated by PUBLIC_PATHS, not
+// the limiter (a fresh anonymous client opening a 7-day link is fine).
+app.use("/export", rateLimit("export"));
+app.use("/export/*", rateLimit("export"));
 
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
@@ -71,4 +78,6 @@ app.route("/sync", syncRoutes);
 app.route("/images", imageRoutes);
 // Protected: receipt extraction (DeepSeek + stub). Rate tier "extract" above.
 app.route("/extract", extractRoutes);
+// Protected: POST /export (+ public GET /export/dl/:token via PUBLIC_PATHS).
+app.route("/export", exportRoutes);
 app.route("/", miscRoutes);

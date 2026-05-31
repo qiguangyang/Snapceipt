@@ -42,12 +42,14 @@ export const RATE_LIMIT_TIERS = {
   sync: { name: "sync", limit: 600, windowMs: HOUR_MS, dimension: "user" },
   /** receipt extraction — calls an external API; keep it tight. */
   extract: { name: "extract", limit: 30, windowMs: HOUR_MS, dimension: "user" },
+  /** export generation — file build + email; 60/user/hr. */
+  export: { name: "export", limit: 60, windowMs: HOUR_MS, dimension: "user" },
   /** every other protected route. */
   default: { name: "default", limit: 300, windowMs: MINUTE_MS, dimension: "user" },
 } as const satisfies Record<string, RateLimitTier>;
 
 /** The factory's selectable route classes. */
-export type RateLimitKind = "auth" | "sync" | "extract" | "default";
+export type RateLimitKind = "auth" | "sync" | "extract" | "export" | "default";
 
 type RateLimitCtx = {
   req: { header: (n: string) => string | undefined };
@@ -146,7 +148,9 @@ export function rateLimit(kind: RateLimitKind): MiddlewareHandler<AppEnv> {
         ? RATE_LIMIT_TIERS.sync
         : kind === "extract"
           ? RATE_LIMIT_TIERS.extract
-          : RATE_LIMIT_TIERS.default;
+          : kind === "export"
+            ? RATE_LIMIT_TIERS.export
+            : RATE_LIMIT_TIERS.default;
     const identity = clientKeyForRoute(c, tier);
     const reset = await consume(kv, tier, identity, now);
     if (reset !== null) reject(reset);
