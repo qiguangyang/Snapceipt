@@ -84,4 +84,30 @@ struct MileageViewModelTests {
         #expect(vm.vehicle == nil)
         #expect(vm.currentClaimCents(fyStartYear: 2025) == nil)
     }
+
+    @Test("MileageViewModel is scoped to its profile — foreign-profile rows are excluded")
+    func heroScoped() throws {
+        let (ctx, sync) = try makeFixture()
+
+        // p2 vehicle + trip: must NOT be visible to the p1 VM
+        let p2Vehicle = Vehicle(userId: "u1", profileId: "p2", make: "Ford", model: "Ranger")
+        ctx.insert(p2Vehicle)
+        let p2Trip = MileageTrip(userId: "u1", profileId: "p2", tripDate: "2025-08-05",
+                                 distanceM: 50_000, isBusiness: true, vehicleId: p2Vehicle.id)
+        ctx.insert(p2Trip)
+        try ctx.save()
+
+        // p1 VM: inserts its own vehicle + trip via the real API
+        let vm = makeVM(ctx, sync)   // profileId == "p1"
+        vm.saveVehicle(make: "Toyota", model: "HiLux", engineCc: nil, registration: nil)
+        vm.addTrip(date: "2025-08-10", odometerStartM: 0, odometerEndM: 20_000,
+                   isBusiness: true, purpose: "Client", fromLabel: nil, toLabel: nil)
+
+        // VM should see exactly the p1 vehicle and exactly one trip
+        #expect(vm.vehicle?.profileId == "p1")
+        #expect(vm.vehicle?.id != p2Vehicle.id)
+        #expect(vm.trips.count == 1)
+        #expect(vm.trips[0].profileId == "p1")
+        #expect(vm.trips.allSatisfy { $0.id != p2Trip.id })
+    }
 }

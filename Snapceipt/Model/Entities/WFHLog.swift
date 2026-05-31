@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// A work-from-home day entry (fixed 67c/hr method). Mirrors D1 `wfh_logs`.
+/// A work-from-home day entry (fixed 70c/hr method). Mirrors D1 `wfh_logs`.
 @Model
 final class WFHLog: Syncable {
     @Attribute(.unique) var id: String
