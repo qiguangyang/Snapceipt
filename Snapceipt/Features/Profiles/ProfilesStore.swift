@@ -182,6 +182,7 @@ final class ProfilesStore {
         try? context.save()
         reload()
         sync.enqueue(op: "upsert", entityType: .profile, entity: p)
+        TaxSettingsSeeder.ensure(profileId: p.id, userId: userId, context: context, sync: sync)
         setActive(p.id)
     }
 }

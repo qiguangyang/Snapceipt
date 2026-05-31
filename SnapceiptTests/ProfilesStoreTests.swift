@@ -11,7 +11,7 @@ struct ProfilesStoreTests {
         // can't leak in.
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Profile.self, configurations: config)
+        let container = try ModelContainer(for: Profile.self, TaxSettings.self, configurations: config)
         let context = ModelContext(container)
         let sync = MockSyncEngine()
         let store = ProfilesStore(context: context, sync: sync, userId: "u1")
@@ -58,12 +58,14 @@ struct ProfilesStoreTests {
         #expect(p.isDefault == true)
         #expect(store.activeProfileId == p.id)
         #expect(store.profiles.count == 1)
-        #expect(sync.calls.count == 1)        // exactly one upsert per add
+        #expect(sync.calls.count == 2)        // profile upsert + taxSettings seed
+        #expect(sync.calls[0].entityType == .profile)
+        #expect(sync.calls[1].entityType == .taxSettings)
     }
 
     @Test func rescopeToNewUserLoadsThatUsersProfilesAndPicksDefault() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Profile.self, configurations: config)
+        let container = try ModelContainer(for: Profile.self, TaxSettings.self, configurations: config)
         let ctx = ModelContext(container)
         let pA = Profile(userId: "user-A", name: "Alpha", type: "personal",
                          accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)

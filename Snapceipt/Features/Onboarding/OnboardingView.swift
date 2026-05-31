@@ -190,6 +190,9 @@ private struct FirstProfileForm: View {
         context.insert(profile)
         try? context.save()
         sync?.enqueue(op: "upsert", entityType: .profile, entity: profile)
+        if let sync {
+            TaxSettingsSeeder.ensure(profileId: profile.id, userId: userId, context: context, sync: sync)
+        }
         onCreated()
     }
 

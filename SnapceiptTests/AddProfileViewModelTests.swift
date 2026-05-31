@@ -20,7 +20,7 @@ struct AddProfileViewModelTests {
     private func makeFixture() throws -> (ModelContext, ProfilesStore, MockSyncEngine) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Profile.self, configurations: config)
+        let container = try ModelContainer(for: Profile.self, TaxSettings.self, configurations: config)
         let context = ModelContext(container)
         let sync = MockSyncEngine()
         let store = ProfilesStore(context: context, sync: sync, userId: "u1")
@@ -74,10 +74,11 @@ struct AddProfileViewModelTests {
         let created = try #require(vm.create())
 
         #expect(store.activeProfileId == created.id)
-        #expect(sync.calls.count == 1)
-        #expect(sync.calls.first?.op == "upsert")
-        #expect(sync.calls.first?.entityType == .profile)
-        #expect(sync.calls.first?.entityId == created.id)
+        #expect(sync.calls.count == 2)  // profile upsert + taxSettings seed
+        #expect(sync.calls[0].op == "upsert")
+        #expect(sync.calls[0].entityType == .profile)
+        #expect(sync.calls[0].entityId == created.id)
+        #expect(sync.calls[1].entityType == .taxSettings)
     }
 
     @Test("create() returns nil and writes nothing when invalid")
