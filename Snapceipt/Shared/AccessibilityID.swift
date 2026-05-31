@@ -78,6 +78,7 @@ enum AccessibilityID {
     static let reportsLogbookVehicle = "reports.logbook.vehicle"
     static let reportsLogbookWFH = "reports.logbook.wfh"
     static let reportsInsight = "reports.insight"
+    static let reportsUnderBudget = "reports.underBudget"
 
     // Export sheet
     static let exportSheet = "export.sheet"

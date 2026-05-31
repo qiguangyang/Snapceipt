@@ -96,4 +96,41 @@ struct ReportsViewModelTests {
         #expect(vm.netCents == monthNet)
         #expect(vm.insight.isEmpty == false)
     }
+
+    @Test("personal profile with budgets exposes the under-budget pair when under")
+    func underBudget() throws {
+        let ctx = try makeCtx()
+        let p = Profile(userId: "u1", name: "Home", type: "personal",
+                        accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A")
+        p.id = "pp"; ctx.insert(p)
+        ctx.insert(Budget(userId: "u1", profileId: "pp", categoryId: nil, label: "All", capCents: 600_00))
+        ctx.insert(Transaction(userId: "u1", profileId: "pp", catKey: "meals",
+                               amountCents: -200_00, txnDate: "2026-06-05"))
+        try? ctx.save()
+        let vm = ReportsViewModel(context: ctx, userId: "u1", profileId: "pp",
+                                  startMonth: 7, now: iso("2026-06-15"))
+        let ub = try #require(vm.underBudget)
+        #expect(ub.spentCents == 200_00)
+        #expect(ub.capCents == 600_00)
+    }
+
+    @Test("under-budget is nil for a business profile and when over budget")
+    func underBudgetHidden() throws {
+        let ctx = try makeCtx(); seed(ctx)   // business p1, no budgets
+        let vmBiz = ReportsViewModel(context: ctx, userId: "u1", profileId: "p1",
+                                     startMonth: 7, now: iso("2026-06-15"))
+        #expect(vmBiz.underBudget == nil)
+
+        let ctx2 = try makeCtx()
+        let p = Profile(userId: "u1", name: "Home", type: "personal",
+                        accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A")
+        p.id = "pp"; ctx2.insert(p)
+        ctx2.insert(Budget(userId: "u1", profileId: "pp", categoryId: nil, label: "All", capCents: 100_00))
+        ctx2.insert(Transaction(userId: "u1", profileId: "pp", catKey: "meals",
+                                amountCents: -200_00, txnDate: "2026-06-05"))
+        try? ctx2.save()
+        let vmOver = ReportsViewModel(context: ctx2, userId: "u1", profileId: "pp",
+                                      startMonth: 7, now: iso("2026-06-15"))
+        #expect(vmOver.underBudget == nil)   // over cap -> hidden
+    }
 }

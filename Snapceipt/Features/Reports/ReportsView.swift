@@ -34,6 +34,7 @@ struct ReportsView: View {
                         Segmented(options: periodOptions, selection: $periodSelection)
                             .accessibilityIdentifier(AccessibilityID.reportsPeriod)
                         netCard(vm)
+                        if !vm.isBusiness, let ub = vm.underBudget { underBudgetCard(ub) }
                         donutCard(vm)
                         if vm.isBusiness {
                             taxPills(vm)
@@ -91,6 +92,21 @@ struct ReportsView: View {
                 BarPair(data: vm.barData)
             }
         }
+    }
+
+    private func underBudgetCard(_ ub: (spentCents: Int, capCents: Int)) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    IconCircle(name: "check", tint: accent.base, soft: accent.soft, size: 34, iconSize: 17)
+                    Text("You're under budget").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                }
+                Text("\(fmt(ub.spentCents)) of \(fmt(ub.capCents)) used")
+                    .font(.ui(13)).foregroundStyle(Palette.ink2).monospacedDigit()
+                ProgressBar(value: Double(ub.spentCents), max: Double(Swift.max(1, ub.capCents)), tint: accent.base)
+            }
+        }
+        .accessibilityIdentifier(AccessibilityID.reportsUnderBudget)
     }
 
     private func donutCard(_ vm: ReportsViewModel) -> some View {

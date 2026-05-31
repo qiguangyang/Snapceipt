@@ -40,6 +40,10 @@ final class ReportsViewModel {
     private(set) var vehicleClaimCents: Int = 0
     private(set) var wfhClaimCents: Int = 0
 
+    /// Personal-only under-budget summary: (Σspent, Σcap) for the current month when the
+    /// profile has budgets AND is under (Σspent < Σcap). nil for business / no budgets / over.
+    private(set) var underBudget: (spentCents: Int, capCents: Int)? = nil
+
     private var txns: [TransactionQuery.Txn] = []
 
     init(context: ModelContext, userId: String, profileId: String,
@@ -98,6 +102,20 @@ final class ReportsViewModel {
         deductibleYTDCents = TransactionQuery.deductibleYTD(
             txns, fyWindow: fyWindow, vehicleYearClaims: vehicleClaims, wfhClaims: wfhClaimsInFY)
         gstYTDCents = TransactionQuery.gstYTD(txns, fyWindow: fyWindow)
+
+        // Personal under-budget card (F3): current-month Σspent vs Σcap of live budgets.
+        if !isBusiness {
+            let bd = FetchDescriptor<Budget>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+            let budgets = (try? context.fetch(bd)) ?? []
+            if !budgets.isEmpty {
+                let budgetTxns = rows.map {
+                    BudgetSpend.Txn(txnDate: $0.txnDate, amountCents: $0.amountCents, categoryId: $0.categoryId)
+                }
+                let totalSpent = budgets.reduce(0) { $0 + BudgetSpend.spent(budget: $1, txns: budgetTxns, now: now) }
+                let totalCap = budgets.reduce(0) { $0 + $1.capCents }
+                underBudget = (totalSpent < totalCap) ? (totalSpent, totalCap) : nil
+            } else { underBudget = nil }
+        } else { underBudget = nil }
 
         // Fixed rolling-5 trend.
         barData = TransactionQuery.monthlyTrend(txns, now: now)
