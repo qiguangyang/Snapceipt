@@ -47,6 +47,7 @@ struct WFHScreen: View {
                 Color.clear
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.wfhScreen)
         .transition(.opacity)
         .task {

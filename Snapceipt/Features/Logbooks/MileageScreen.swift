@@ -45,6 +45,7 @@ struct MileageScreen: View {
                 Color.clear
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.mileageScreen)
         .transition(.opacity)
         .task {
