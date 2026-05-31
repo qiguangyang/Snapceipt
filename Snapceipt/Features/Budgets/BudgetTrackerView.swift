@@ -41,6 +41,7 @@ struct BudgetTrackerView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.homeBudgetTracker)
         .task {
             if vm == nil {

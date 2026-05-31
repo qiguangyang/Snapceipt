@@ -15,11 +15,7 @@ final class BudgetsUITests: UITestCase {
                       "Budget tracker missing on Home")
 
         // Add a budget via the Edit link -> list -> Add CTA -> editor -> Save.
-        // NOTE: the Home container applies `.accessibilityElement(children: .contain)`,
-        // so the tracker's `home.budgetTracker` identifier propagates to its child
-        // controls (the Edit button + each budget-row button all report that id). The
-        // Edit control is therefore matched by its visible label "Edit".
-        let edit = app.buttons["Edit"].firstMatch
+        let edit = app.buttons[AccessibilityID.homeBudgetEditLink].firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 5), "Edit link missing")
         edit.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.budgetListScreen].waitForExistence(timeout: 5),
