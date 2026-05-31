@@ -25,7 +25,7 @@ extension JSONValue: Encodable {
 // MARK: - Registry
 
 /// Single source of truth mapping `EntityType` → row glue + payload codec. Every one
-/// of the 12 syncable types is registered so a pulled envelope of any type upserts
+/// of the 14 syncable types is registered so a pulled envelope of any type upserts
 /// into the right `@Model` (no silent drop).
 final class SyncEntityRegistry {
     @MainActor static let shared = SyncEntityRegistry()
