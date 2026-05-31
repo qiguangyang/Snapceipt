@@ -177,8 +177,17 @@ struct ShellView: View {
             }
         }
         .overlay {
-            if router.overlay == .alerts || router.overlay == .notificationSettings {
-                Color.clear  // AlertsSheet (Task 9) / NotificationsSettingsView (Task 10) wired later
+            if router.overlay == .alerts {
+                AlertsSheet(context: profiles.context, sync: sync, userId: profiles.userId,
+                            profileId: profiles.activeProfileId,
+                            onOpenBudget: { router.openBudget($0) },
+                            onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .notificationSettings {
+                Color.clear  // NotificationsSettingsView wired in Task 10
             }
         }
         // --- Global toasts on top of everything ---

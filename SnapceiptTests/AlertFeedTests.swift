@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Snapceipt
 
 @Suite("AlertFeed + cache")
@@ -69,5 +70,41 @@ struct AlertFeedTests {
         let reopened = AlertCache(defaults: defaults)
         #expect(reopened.isDismissed("b1-2026-06"))
         defaults.removePersistentDomain(forName: suiteName)
+    }
+}
+
+@MainActor
+@Suite("AlertsViewModel")
+struct AlertsViewModelTests {
+    private func ms(_ s: String) -> Int {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
+        return Int(f.date(from: s)!.timeIntervalSince1970 * 1000)
+    }
+    private func date(_ s: String) -> Date {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: s)!
+    }
+
+    @Test("derives feed from an alerted over-threshold budget; dismiss removes it")
+    func deriveAndDismiss() throws {
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let b = Budget(userId: "u1", profileId: "p1", categoryId: nil, label: "All",
+                       capCents: 100_00, alertThresholdPct: 90, alertSentAt: ms("2026-06-10"))
+        ctx.insert(b)
+        ctx.insert(Transaction(userId: "u1", profileId: "p1", catKey: "meals",
+                               amountCents: -95_00, txnDate: "2026-06-03"))
+        try ctx.save()
+        let suiteName = "sc.test.alertsvm.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let vm = AlertsViewModel(context: ctx, userId: "u1", profileId: "p1",
+                                 now: date("2026-06-15"), cache: AlertCache(defaults: defaults))
+        #expect(vm.items.count == 1)
+        let id = vm.items[0].id
+        vm.dismiss(id)
+        #expect(vm.items.isEmpty)
+        defaults.removePersistentDomain(forName: suiteName)  // clean up by SUITE name, not .description
     }
 }
