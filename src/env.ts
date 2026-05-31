@@ -28,6 +28,16 @@ export type Env = {
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
   /**
+   * APNs auth-key (.p8 PKCS8 PEM). When undefined/empty, sendPush runs in STUB
+   * mode: it logs and returns { stub: true } with no network call. Set via
+   * `wrangler secret put APNS_KEY` once the key is provisioned.
+   */
+  APNS_KEY?: string;
+  /** APNs auth-key id (the .p8 Key ID) — the JWT `kid` header. Optional => stub. */
+  APNS_KEY_ID?: string;
+  /** Apple developer Team ID — the JWT `iss` claim. Optional => stub. */
+  APNS_TEAM_ID?: string;
+  /**
    * E2E-ONLY test seam. When set to "1", POST /auth/magic-link/request ALSO
    * returns the raw magic-link token in its 202 body so a black-box HTTP client
    * can complete auth without reading the email. MUST be undefined in
