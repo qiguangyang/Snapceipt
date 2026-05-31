@@ -19,7 +19,8 @@ export interface ProcessedMutation {
 const SCOPED_TABLES = new Set([
   "users", "devices", "profiles", "categories", "smart_rules",
   "transactions", "line_items", "receipt_images", "budgets", "loyalty_cards",
-  "mileage_trips", "wfh_logs", "quotes", "quote_line_items", "tax_settings",
+  "mileage_trips", "wfh_logs", "vehicles", "vehicle_years", "quotes",
+  "quote_line_items", "tax_settings",
   "auth_identities", "email_tokens", "sessions", "email_outbox",
 ]);
 

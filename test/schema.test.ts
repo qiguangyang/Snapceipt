@@ -184,4 +184,29 @@ describe("0001_init schema", () => {
     expect(wfh, "wfh_rate_cents_per_hour column missing").toBeDefined();
     expect(Number(wfh!.dflt_value)).toBe(70);
   });
+
+  it("round-trips a vehicle through the tenant-scoped helpers", async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO users(id,created_at,updated_at) VALUES('uv',1,1)`),
+      env.DB.prepare(`INSERT INTO profiles(id,user_id,name,type,accent_1,accent_2,accent_3,created_at,updated_at)
+                      VALUES('pv','uv','Personal','personal','#0E7C72','#DCF0ED','#0A5950',1,1)`),
+      env.DB.prepare(`INSERT INTO vehicles(id,user_id,profile_id,make,model,business_use_pct,created_at,updated_at,rev)
+                      VALUES('veh1','uv','pv','Toyota','HiLux',78,5,5,1)`),
+      env.DB.prepare(`INSERT INTO vehicle_years(id,user_id,profile_id,vehicle_id,fy_start_year,fuel_cents,claim_cents,created_at,updated_at,rev)
+                      VALUES('vy1','uv','pv','veh1',2025,412000,321360,5,5,1)`),
+    ]);
+
+    const vehicles = await scopedAll<{ id: string; make: string; business_use_pct: number }>(
+      env.DB, "vehicles", "uv",
+    );
+    expect(vehicles).toHaveLength(1);
+    expect(vehicles[0]!.make).toBe("Toyota");
+    expect(vehicles[0]!.business_use_pct).toBe(78);
+
+    const vy = await scopedGet<{ id: string; fy_start_year: number; claim_cents: number }>(
+      env.DB, "vehicle_years", "uv", "vy1",
+    );
+    expect(vy?.fy_start_year).toBe(2025);
+    expect(vy?.claim_cents).toBe(321360);
+  });
 });
