@@ -307,4 +307,125 @@ describe("e2e (real HTTP): health -> banks 501 -> auth gate -> magic-link -> pus
     expect(refreshed.refreshToken).not.toBe(session.refreshToken);
     expect(refreshed.user.id).toBe(userId);
   });
+
+  it("round-trips logbook entities (vehicle, vehicleYear, mileageTrip) push -> pull", async () => {
+    const email = `e2e-logbook+${Date.now()}@example.com`;
+    const deviceId = crypto.randomUUID();
+    const ip = "203.0.113.42";
+
+    // Authenticate via the e2e magic-link seam.
+    const reqRes = await api("/auth/magic-link/request", {
+      method: "POST",
+      headers: { "cf-connecting-ip": ip },
+      body: { email },
+    });
+    expect(reqRes.status).toBe(202);
+    const verifyRes = await api("/auth/magic-link/verify", {
+      method: "POST",
+      headers: { "cf-connecting-ip": ip, "x-device-id": deviceId },
+      body: { token: reqRes.json.devToken },
+    });
+    expect(verifyRes.status).toBe(200);
+    const userId: string = verifyRes.json.user.id;
+    const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
+
+    const profileId = crypto.randomUUID();
+    const vehicleId = crypto.randomUUID();
+    const vehicleYearId = crypto.randomUUID();
+    const tripId = crypto.randomUUID();
+    const t = Date.now();
+
+    // Push profile -> vehicle -> vehicleYear -> mileageTrip (FK order: vehicle before its year/trip).
+    const pushRes = await api("/sync/push", {
+      method: "POST",
+      headers: authHeaders,
+      body: {
+        deviceId,
+        mutations: [
+          {
+            mutationId: crypto.randomUUID(),
+            entityType: "profile",
+            entityId: profileId,
+            op: "upsert",
+            updatedAt: t,
+            payload: {
+              id: profileId, userId, type: "profile", name: "Business",
+              profileType: "business", accent1: "#000", accent2: "#111", accent3: "#222",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            mutationId: crypto.randomUUID(),
+            entityType: "vehicle",
+            entityId: vehicleId,
+            op: "upsert",
+            updatedAt: t,
+            payload: {
+              id: vehicleId, userId, profileId, type: "vehicle",
+              make: "Toyota", model: "HiLux", engineCc: 2800, registration: "ABC123",
+              logbookStartDate: "2025-08-12", logbookEndDate: "2025-11-04", businessUsePct: 78,
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            mutationId: crypto.randomUUID(),
+            entityType: "vehicleYear",
+            entityId: vehicleYearId,
+            op: "upsert",
+            updatedAt: t,
+            payload: {
+              id: vehicleYearId, userId, profileId, type: "vehicleYear",
+              vehicleId, fyStartYear: 2025, fuelCents: 220000, regoCents: 90000,
+              insuranceCents: 60000, servicingCents: 30000, otherCents: 12000,
+              depreciationCents: 100000, businessUsePct: 78, claimCents: 321360,
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            mutationId: crypto.randomUUID(),
+            entityType: "mileageTrip",
+            entityId: tripId,
+            op: "upsert",
+            updatedAt: t,
+            payload: {
+              id: tripId, userId, profileId, type: "mileageTrip",
+              tripDate: "2025-09-01", purpose: "Client visit", distanceM: 23000, isBusiness: true,
+              vehicleId, odometerStartM: 45000000, odometerEndM: 45023000,
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+        ],
+      },
+    });
+    expect(pushRes.status).toBe(200);
+    expect(pushRes.json.results.map((r: any) => r.status)).toEqual([
+      "applied", "applied", "applied", "applied",
+    ]);
+
+    // Pull everything back and assert the camelCase wire shapes.
+    const pullRes = await api("/sync/pull?limit=500", { headers: authHeaders });
+    expect(pullRes.status).toBe(200);
+    const changes = pullRes.json.changes as any[];
+
+    const pulledVehicle = changes.find((c) => c.id === vehicleId && c.type === "vehicle");
+    expect(pulledVehicle).toBeDefined();
+    expect(pulledVehicle.make).toBe("Toyota");
+    expect(pulledVehicle.engineCc).toBe(2800);
+    expect(pulledVehicle.logbookStartDate).toBe("2025-08-12");
+    expect(pulledVehicle.businessUsePct).toBe(78);
+
+    const pulledYear = changes.find((c) => c.id === vehicleYearId && c.type === "vehicleYear");
+    expect(pulledYear).toBeDefined();
+    expect(pulledYear.vehicleId).toBe(vehicleId);
+    expect(pulledYear.fyStartYear).toBe(2025);
+    expect(pulledYear.fuelCents).toBe(220000);
+    expect(pulledYear.claimCents).toBe(321360);
+
+    const pulledTrip = changes.find((c) => c.id === tripId && c.type === "mileageTrip");
+    expect(pulledTrip).toBeDefined();
+    expect(pulledTrip.vehicleId).toBe(vehicleId);
+    expect(pulledTrip.odometerStartM).toBe(45000000);
+    expect(pulledTrip.odometerEndM).toBe(45023000);
+    expect(pulledTrip.distanceM).toBe(23000);
+  });
 });
