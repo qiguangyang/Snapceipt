@@ -13,6 +13,7 @@ final class TaxSettings: Syncable {
     var mealsDeductiblePct: Int
     var wfhRateCentsPerHour: Int
     var mileageRateCentsPerKm: Int
+    var accountantEmail: String?    // per-profile saved accountant address; nullable
 
     var createdAt: Int
     var updatedAt: Int
@@ -31,6 +32,7 @@ final class TaxSettings: Syncable {
         mealsDeductiblePct: Int = 50,
         wfhRateCentsPerHour: Int = 70,
         mileageRateCentsPerKm: Int = 88,
+        accountantEmail: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -45,6 +47,7 @@ final class TaxSettings: Syncable {
         self.mealsDeductiblePct = mealsDeductiblePct
         self.wfhRateCentsPerHour = wfhRateCentsPerHour
         self.mileageRateCentsPerKm = mileageRateCentsPerKm
+        self.accountantEmail = accountantEmail
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

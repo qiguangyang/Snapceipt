@@ -671,6 +671,7 @@ private struct TaxSettingsSyncMapper: SyncRowMapper {
         if let v = env.int("mealsDeductiblePct") { row.mealsDeductiblePct = v }
         if let v = env.int("wfhRateCentsPerHour") { row.wfhRateCentsPerHour = v }
         if let v = env.int("mileageRateCentsPerKm") { row.mileageRateCentsPerKm = v }
+        if let v = env.string("accountantEmail") { row.accountantEmail = v }
     }
 
     func payload(_ r: TaxSettings) -> [String: JSONValue] {
@@ -680,6 +681,7 @@ private struct TaxSettingsSyncMapper: SyncRowMapper {
         f["mealsDeductiblePct"] = num(r.mealsDeductiblePct)
         f["wfhRateCentsPerHour"] = num(r.wfhRateCentsPerHour)
         f["mileageRateCentsPerKm"] = num(r.mileageRateCentsPerKm)
+        f["accountantEmail"] = str(r.accountantEmail)
         return f
     }
 }
