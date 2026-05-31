@@ -19,6 +19,9 @@ const putBody = z.object({
   osVersion: z.string().optional(),
   model: z.string().optional(),
   pushEnabled: z.boolean().optional(),
+  quietHoursStartMin: z.number().int().min(0).max(1439).optional(),
+  quietHoursEndMin: z.number().int().min(0).max(1439).optional(),
+  timezone: z.string().min(1).optional(),
 });
 
 /**
@@ -34,20 +37,26 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     throw new ApiError("VALIDATION_FAILED", "Missing X-Device-Id header");
   }
   const userId = c.var.userId;
-  const { apnsToken, osVersion, model, pushEnabled } = c.req.valid("json");
+  const { apnsToken, osVersion, model, pushEnabled, quietHoursStartMin, quietHoursEndMin, timezone } =
+    c.req.valid("json");
   const now = nowMs();
 
   await c.env.DB.prepare(
-    `INSERT INTO devices (id, user_id, platform, model, os_version, apns_token, push_enabled, last_seen_at, created_at, updated_at)
-     VALUES (?, ?, 'ios', ?, ?, ?, COALESCE(?, 1), ?, ?, ?)
+    `INSERT INTO devices (id, user_id, platform, model, os_version, apns_token, push_enabled,
+                          quiet_hours_start_min, quiet_hours_end_min, timezone,
+                          last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
-       model        = COALESCE(excluded.model, devices.model),
-       os_version   = COALESCE(excluded.os_version, devices.os_version),
-       apns_token   = COALESCE(excluded.apns_token, devices.apns_token),
-       push_enabled = COALESCE(excluded.push_enabled, devices.push_enabled),
-       last_seen_at = excluded.last_seen_at,
-       updated_at   = excluded.updated_at,
-       deleted_at   = NULL
+       model                 = COALESCE(excluded.model, devices.model),
+       os_version            = COALESCE(excluded.os_version, devices.os_version),
+       apns_token            = COALESCE(excluded.apns_token, devices.apns_token),
+       push_enabled          = COALESCE(excluded.push_enabled, devices.push_enabled),
+       quiet_hours_start_min = COALESCE(excluded.quiet_hours_start_min, devices.quiet_hours_start_min),
+       quiet_hours_end_min   = COALESCE(excluded.quiet_hours_end_min, devices.quiet_hours_end_min),
+       timezone              = COALESCE(excluded.timezone, devices.timezone),
+       last_seen_at          = excluded.last_seen_at,
+       updated_at            = excluded.updated_at,
+       deleted_at            = NULL
      WHERE devices.user_id = excluded.user_id`,
   )
     .bind(
@@ -57,6 +66,9 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       osVersion ?? null,
       apnsToken ?? null,
       pushEnabled !== undefined ? (pushEnabled ? 1 : 0) : null,
+      quietHoursStartMin ?? null,
+      quietHoursEndMin ?? null,
+      timezone ?? null,
       now,
       now,
       now,
@@ -64,7 +76,8 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     .run();
 
   const row = await c.env.DB.prepare(
-    `SELECT id, platform, model, os_version, apns_token, push_enabled, last_seen_at
+    `SELECT id, platform, model, os_version, apns_token, push_enabled,
+            quiet_hours_start_min, quiet_hours_end_min, timezone, last_seen_at
        FROM devices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   )
     .bind(deviceId, userId)
@@ -75,6 +88,9 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       os_version: string | null;
       apns_token: string | null;
       push_enabled: number;
+      quiet_hours_start_min: number | null;
+      quiet_hours_end_min: number | null;
+      timezone: string | null;
       last_seen_at: number | null;
     }>();
   // The scoped upsert is a no-op when the device id belongs to a different user.
@@ -87,6 +103,9 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     osVersion: row.os_version,
     hasApnsToken: row.apns_token !== null,
     pushEnabled: row.push_enabled === 1,
+    quietHoursStartMin: row.quiet_hours_start_min,
+    quietHoursEndMin: row.quiet_hours_end_min,
+    timezone: row.timezone,
     lastSeenAt: row.last_seen_at,
   });
 });
