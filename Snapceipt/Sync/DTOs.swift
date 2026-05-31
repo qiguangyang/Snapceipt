@@ -51,6 +51,33 @@ struct RefreshBody: Encodable {
     let refreshToken: String
 }
 
+// MARK: - Export (spec §4.2)
+
+/// POST /export body: { profileId, format, from, to, toEmail? }.
+/// `toEmail` required iff format == "accountant".
+struct ExportRequestBody: Encodable {
+    let profileId: String
+    let format: String    // "pdf" | "csv" | "accountant"
+    let from: String      // "YYYY-MM-DD"
+    let to: String        // "YYYY-MM-DD"
+    var toEmail: String?
+}
+
+/// Decoded POST /export response (the union of both server shapes; one side present).
+/// pdf/csv -> { url, expiresAt }; accountant -> { status, outboxId }.
+struct ExportResponse: Decodable {
+    let url: String?
+    let expiresAt: Int?
+    let status: String?
+    let outboxId: String?
+}
+
+/// The normalized export outcome the UI consumes.
+enum ExportResult: Equatable {
+    case download(url: String, expiresAt: Int)
+    case sent(status: String, outboxId: String)
+}
+
 // MARK: - Auth responses
 
 /// Returned by /auth/apple, /auth/magic-link/verify, /auth/refresh.

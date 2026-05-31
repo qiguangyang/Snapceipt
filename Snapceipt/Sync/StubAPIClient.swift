@@ -45,5 +45,13 @@ final class StubAPIClient: APIClient {
                       getUrl: "/images/u/\(DevAccount.userId)/stub.jpg",
                       byteSize: jpeg.count)
     }
+    func export(profileId: String, format: String, from: String, to: String,
+                toEmail: String?) async throws -> ExportResult {
+        // Deterministic stub for the hermetic UI test (no network).
+        if format == "accountant" {
+            return .sent(status: "sent", outboxId: "stub-outbox")
+        }
+        return .download(url: "/export/dl/stub-token", expiresAt: 1_790_000_000)
+    }
 }
 #endif

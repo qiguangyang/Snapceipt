@@ -30,9 +30,11 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
 
     var extractHandler: ((_ ocrText: String, _ source: String, _ capturedAt: String?) async throws -> ExtractionResponse)?
     var uploadImageHandler: ((_ jpeg: Data, _ transactionId: String?, _ width: Int, _ height: Int) async throws -> UploadedImage)?
+    var exportHandler: ((_ profileId: String, _ format: String, _ from: String, _ to: String, _ toEmail: String?) async throws -> ExportResult)?
 
     private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
+    private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
 
     // MARK: Recorded calls
 
@@ -101,6 +103,13 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         uploadCalls.append((transactionId, width, height, jpeg.count))
         guard let h = uploadImageHandler else { throw MockAPIClientError.unscripted }
         return try await h(jpeg, transactionId, width, height)
+    }
+
+    func export(profileId: String, format: String, from: String, to: String,
+                toEmail: String?) async throws -> ExportResult {
+        exportCalls.append((profileId, format, from, to, toEmail))
+        guard let h = exportHandler else { throw MockAPIClientError.unscripted }
+        return try await h(profileId, format, from, to, toEmail)
     }
 }
 

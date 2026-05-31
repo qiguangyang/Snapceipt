@@ -16,6 +16,10 @@ protocol APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage
+    /// POST /export — generate a CSV/PDF (share via the returned download url) or
+    /// email the accountant pack. Returns the normalized `ExportResult`. (spec §4.2)
+    func export(profileId: String, format: String, from: String, to: String,
+                toEmail: String?) async throws -> ExportResult
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -106,6 +110,20 @@ final class LiveAPIClient: APIClient {
         let data = try await performRawJPEG("/images", query: items, jpeg: jpeg)
         do { return try decoder.decode(UploadedImage.self, from: data) }
         catch { throw APIError.decoding }
+    }
+
+    func export(profileId: String, format: String, from: String, to: String,
+                toEmail: String?) async throws -> ExportResult {
+        let body = ExportRequestBody(profileId: profileId, format: format,
+                                     from: from, to: to, toEmail: toEmail)
+        let resp: ExportResponse = try await send("POST", "/export", body: body, authenticated: true)
+        if let url = resp.url, let expiresAt = resp.expiresAt {
+            return .download(url: url, expiresAt: expiresAt)
+        }
+        if let status = resp.status, let outboxId = resp.outboxId {
+            return .sent(status: status, outboxId: outboxId)
+        }
+        throw APIError.decoding
     }
 
     // MARK: - Request plumbing

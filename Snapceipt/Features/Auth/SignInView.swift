@@ -179,6 +179,10 @@ final class PreviewAPIClient: APIClient {
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
         UploadedImage(imageKey: "u/u/preview.jpg", getUrl: "/images/u/u/preview.jpg", byteSize: jpeg.count)
     }
+    func export(profileId: String, format: String, from: String, to: String,
+                toEmail: String?) async throws -> ExportResult {
+        .download(url: "/export/dl/preview-token", expiresAt: 1_790_000_000)
+    }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))
