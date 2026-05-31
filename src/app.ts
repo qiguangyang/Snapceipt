@@ -58,10 +58,12 @@ app.use("/extract/*", rateLimit("extract"));
 // is the wildcard. Mount both so the exact-path POST is also limited.
 app.use("/images", rateLimit("default"));
 app.use("/images/*", rateLimit("default"));
-// Export generation — file build + email; 60/user/hr. Mount on BOTH the exact
-// path (POST /export) AND the wildcard (GET /export/dl/*) so the limiter runs
-// for the actual POST too. The public download stays gated by PUBLIC_PATHS, not
-// the limiter (a fresh anonymous client opening a 7-day link is fine).
+// Export generation — file build + email; 60/hr. Mount on BOTH the exact path
+// (POST /export) AND the wildcard so the limiter runs for the actual POST too.
+// The wildcard also covers the public GET /export/dl/* download: since that
+// route is unauthenticated, the "export" tier (dimension: user) falls back to
+// IP-keyed limiting (60/IP/hr) — benign anti-abuse on the public endpoint; a
+// normal accountant opening a 7-day link is well under the cap.
 app.use("/export", rateLimit("export"));
 app.use("/export/*", rateLimit("export"));
 
