@@ -10,7 +10,7 @@ struct ReportsView: View {
     let profileId: String
     let profileName: String
     let startMonth: Int
-    let onOpenExport: () -> Void
+    let onOpenExport: (Period) -> Void
     let onOpenMileage: () -> Void
     let onOpenWFH: () -> Void
 
@@ -64,7 +64,7 @@ struct ReportsView: View {
         HStack {
             Text("Reports").font(.display(28)).foregroundStyle(Palette.ink)
             Spacer()
-            Button { onOpenExport() } label: {
+            Button { onOpenExport(vm?.period ?? Period(rawValue: periodSelection) ?? .month) } label: {
                 HStack(spacing: 6) {
                     Icon(name: "chart", size: 16, color: accent.base)
                     Text("Export").font(.ui(13.5, .semibold)).foregroundStyle(accent.base)

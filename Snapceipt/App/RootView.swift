@@ -77,6 +77,10 @@ struct ShellView: View {
     @Bindable var toasts: ToastCenter
     @Bindable var reachability: Reachability
 
+    /// Tracks whichever Reports period was active when the user tapped Export, so
+    /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
+    @State private var exportPeriod: Period = .month
+
     var body: some View {
         let accent = profiles.accent
 
@@ -184,7 +188,7 @@ struct ShellView: View {
                 profileId: profiles.activeProfileId,
                 profileName: profiles.activeProfile?.name ?? "",
                 startMonth: 7,
-                onOpenExport: { router.present(.export) },
+                onOpenExport: { period in exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
                 onOpenWFH: { router.present(.wfh) }
             )
@@ -357,15 +361,15 @@ struct ShellView: View {
         #endif
     }
 
-    /// The default-period (Month) export range + detail-card values, scoped to the
-    /// active profile. The Reports default period is Month (spec §3); the Export sheet
-    /// inherits it (spec §3.8). Receipts count = transactions in range with a note/gst
-    /// signal of a real receipt is a backend concept; locally we show the in-range txn count.
+    /// The export range + detail-card values for the currently-selected Reports period,
+    /// scoped to the active profile. `exportPeriod` is set when the user taps Export in
+    /// ReportsView, so this window reflects whichever period was active (spec §2.8/§6).
+    /// Receipts count = transactions in range; locally we show the in-range txn count.
     private var exportWindow: (from: String, to: String, label: String,
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
         let now = Date()
-        let window = Period.month.window(now: now, startMonth: 7)
+        let window = exportPeriod.window(now: now, startMonth: 7)
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId
         let td = FetchDescriptor<Transaction>(
@@ -377,9 +381,9 @@ struct ShellView: View {
         }
         let inRange = rows.filter { iso.date(from: $0.txnDate).map { $0 >= window.start && $0 < window.end } ?? false }
         // "Deductible total" for the export DETAIL card = the per-transaction deductible
-        // over the SELECTED (Month) period only — NOT the FY-to-date pill. We reuse
-        // `deductibleYTD` by passing the Month window as `fyWindow:` with EMPTY logbook
-        // claims, so it reduces to Σ round(−amount × pct/100) over in-window txns. (spec §6)
+        // over the SELECTED period only — NOT the FY-to-date pill. We reuse
+        // `deductibleYTD` by passing the selected-period window as `fyWindow:` with EMPTY
+        // logbook claims, so it reduces to Σ round(−amount × pct/100) over in-window txns. (spec §6)
         let deductible = TransactionQuery.deductibleYTD(snaps, fyWindow: window,
                                                         vehicleYearClaims: [], wfhClaims: [])
         var sd = FetchDescriptor<TaxSettings>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
