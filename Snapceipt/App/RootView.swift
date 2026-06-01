@@ -334,7 +334,8 @@ struct ShellView: View {
         Binding(
             get: {
                 switch router.overlay {
-                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
+                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+                     .loyalty, .loyaltyAdd, .loyaltyCard:
                     return nil
                 default: return router.overlay
                 }
@@ -345,9 +346,11 @@ struct ShellView: View {
                 // value, so it is matched separately rather than via a Set membership test.
                 let fullScreen: Set<String> = [Overlay.capture.id, Overlay.mileage.id, Overlay.wfh.id,
                                                Overlay.budgets.id, Overlay.alerts.id,
-                                               Overlay.notificationSettings.id]
+                                               Overlay.notificationSettings.id,
+                                               Overlay.loyalty.id, Overlay.loyaltyAdd.id]
                 if newValue == nil, let cur = router.overlay,
-                   !fullScreen.contains(cur.id), !cur.id.hasPrefix("budgetEditor") {
+                   !fullScreen.contains(cur.id),
+                   !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -386,7 +389,8 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
-        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
+        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+             .loyalty, .loyaltyAdd, .loyaltyCard:
             EmptyView()  // handled by the full-screen overlays
         }
     }
