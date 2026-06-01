@@ -119,4 +119,20 @@ enum AccessibilityID {
     // Profile tab (F3 entry rows)
     static let profileRowNotifications = "profile.row.notifications"
     static let profileRowBudgets = "profile.row.budgets"
+
+    // Home quick action (F4)
+    static let homeQuickLoyalty = "home.quick.loyalty"
+
+    // Loyalty (F4)
+    static let loyaltyWalletScreen = "loyalty.wallet.screen"
+    static let loyaltyCardRowPrefix = "loyalty.card.row."     // + card.id
+    static let loyaltyWalletAdd = "loyalty.wallet.add"
+    static let loyaltyAddScreen = "loyalty.add.screen"
+    static let loyaltyAddScan = "loyalty.add.scan"
+    static let loyaltyAddBrandPrefix = "loyalty.add.brand."   // + brand.key
+    static let loyaltyAddNumber = "loyalty.add.number"
+    static let loyaltyAddSave = "loyalty.add.save"
+    static let loyaltyDetailScreen = "loyalty.detail.screen"
+    static let loyaltyDetailBarcode = "loyalty.detail.barcode"
+    static let loyaltyDetailDone = "loyalty.detail.done"
 }
