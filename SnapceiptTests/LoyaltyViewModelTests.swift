@@ -68,3 +68,74 @@ struct LoyaltyWalletViewModelTests {
         #expect(v.nextSortOrder() == 0)
     }
 }
+
+@MainActor
+@Suite("AddLoyaltyViewModel")
+struct AddLoyaltyViewModelTests {
+    private func makeFixture() throws -> (ModelContext, MockSyncEngine) {
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        return (ModelContext(container), MockSyncEngine())
+    }
+
+    private func vm(_ ctx: ModelContext, _ sync: MockSyncEngine) -> AddLoyaltyViewModel {
+        AddLoyaltyViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
+    }
+
+    @Test("brands exposes the catalog plus the custom path")
+    func brandsExposed() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        #expect(v.brands.count == LoyaltyBrand.catalog.count + 1)
+        #expect(v.brands.last?.key == "custom")
+    }
+
+    @Test("not savable until a brand is selected")
+    func canSave() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        #expect(v.canSave == false)
+        v.selectedBrand = LoyaltyBrand.catalog.first
+        #expect(v.canSave == true)
+    }
+
+    @Test("save creates a card scoped to the active profile with brand fields + enqueues upsert")
+    func saveCreates() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        let brand = LoyaltyBrand.catalog.first { $0.key == "everydayRewards" }!
+        v.selectedBrand = brand
+        v.number = "9352999000000"
+        v.scannedFormat = .ean13
+        let saved = v.save(sortOrder: 3)
+        #expect(saved != nil)
+        let rows = try ctx.fetch(FetchDescriptor<LoyaltyCard>(predicate: #Predicate { $0.deletedAt == nil }))
+        #expect(rows.count == 1)
+        let row = rows[0]
+        #expect(row.profileId == "p1")
+        #expect(row.brand == "Everyday Rewards")
+        #expect(row.subBrand == "Woolworths")
+        #expect(row.color1 == "#1A8A3C")
+        #expect(row.color2 == "#0C5C26")
+        #expect(row.number == "9352999000000")
+        #expect(row.barcodeFormat == "ean13")
+        #expect(row.sortOrder == 3)
+        #expect(sync.calls.count == 1)
+        #expect(sync.calls[0].op == "upsert")
+        #expect(sync.calls[0].entityType == .loyaltyCard)
+    }
+
+    @Test("custom brand uses the typed name + neutral colors")
+    func saveCustom() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.selectedBrand = LoyaltyBrand.custom
+        v.customName = "Local Cafe"
+        v.number = "AB-2299"
+        let saved = v.save(sortOrder: 0)
+        #expect(saved != nil)
+        let row = try ctx.fetch(FetchDescriptor<LoyaltyCard>(predicate: #Predicate { $0.deletedAt == nil }))[0]
+        #expect(row.brand == "Local Cafe")
+        #expect(row.subBrand == nil)
+        #expect(row.barcodeFormat == nil)   // no scanned format
+    }
+}
