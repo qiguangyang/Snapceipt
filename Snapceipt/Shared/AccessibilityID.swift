@@ -159,6 +159,8 @@ enum AccessibilityID {
     static let emailInAddress = "emailin.address"
     static let emailInCopy = "emailin.copy"
     static let emailInRotate = "emailin.rotate"
+    static let emailInError = "emailin.error"
+    static let emailInRetry = "emailin.retry"
     static let emailInListRowPrefix = "emailin.row."     // + transaction.id
     static let emailInReviewScreen = "emailin.review.screen"
     static let emailInReviewMerchant = "emailin.review.merchant"

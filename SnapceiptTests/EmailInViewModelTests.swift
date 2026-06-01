@@ -70,4 +70,30 @@ struct EmailInViewModelTests {
         #expect(api.profileInboxCalls == ["p1"])
         #expect(api.rotateProfileInboxCalls == ["p1"])
     }
+
+    @Test("loadAddress failure surfaces an errorMessage and leaves address nil")
+    func loadAddressFailure() async throws {
+        let (ctx, sync, api) = try fixture()
+        api.profileInboxHandler = { _ in throw MockAPIClientError.unscripted }
+        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
+
+        await vm.loadAddress()
+
+        #expect(vm.address == nil)
+        #expect(vm.errorMessage != nil)
+        #expect(vm.isLoadingAddress == false)
+        #expect(api.profileInboxCalls == ["p1"])
+    }
+
+    @Test("rotate failure surfaces an errorMessage")
+    func rotateFailure() async throws {
+        let (ctx, sync, api) = try fixture()
+        api.rotateProfileInboxHandler = { _ in throw MockAPIClientError.unscripted }
+        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
+
+        await vm.rotate()
+
+        #expect(vm.errorMessage != nil)
+        #expect(api.rotateProfileInboxCalls == ["p1"])
+    }
 }

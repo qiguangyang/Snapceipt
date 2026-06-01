@@ -47,11 +47,23 @@ struct EmailInView: View {
         Card(padding: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Forward receipts to").font(.ui(13, .semibold)).foregroundStyle(Palette.ink3)
-                Text(vm.address?.address ?? "Loading…")
+                Text(vm.address?.address ?? (vm.isLoadingAddress ? "Loading…" : "—"))
                     .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
                     .textSelection(.enabled).lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier(AccessibilityID.emailInAddress)
+                if let err = vm.errorMessage {
+                    HStack(spacing: 10) {
+                        Text(err).font(.ui(12.5)).foregroundStyle(Palette.alert)
+                            .accessibilityIdentifier(AccessibilityID.emailInError)
+                        if vm.address == nil {
+                            Button("Retry") { Task { await vm.loadAddress() } }
+                                .font(.ui(12.5, .semibold)).foregroundStyle(accent.base)
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier(AccessibilityID.emailInRetry)
+                        }
+                    }
+                }
                 HStack(spacing: 10) {
                     actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
                         if let a = vm.address?.address { UIPasteboard.general.string = a }

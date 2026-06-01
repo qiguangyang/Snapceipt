@@ -53,6 +53,7 @@ final class EmailInViewModel {
     }
 
     func rotate() async {
+        errorMessage = nil
         do {
             address = try await api.rotateProfileInbox(profileId: profileId)
         } catch {
