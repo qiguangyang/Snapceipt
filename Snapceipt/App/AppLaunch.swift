@@ -104,6 +104,14 @@ struct AppLaunch {
         context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: quote.id,
                                      itemDescription: "Brand identity package", quantity: 1,
                                      unitPriceCents: 200_00, sortOrder: 0))
+        // F6: two email-in receipts on the business profile — one failed (needs review),
+        // one done — so EmailInUITests can exercise the failed-first list + review flow.
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "",
+                                   catKey: "office", amountCents: 0, txnDate: dayISO(4),
+                                   isAi: true, source: "email_in", extractionStatus: "failed"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Officeworks",
+                                   catKey: "office", amountCents: -45_00, txnDate: dayISO(2),
+                                   isAi: true, gstCents: 4_09, source: "email_in", extractionStatus: "done"))
         try? context.save()
     }
 

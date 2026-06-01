@@ -152,4 +152,18 @@ enum AccessibilityID {
     static let clientPickerScreen = "client.picker.screen"
     static let clientPickerAdd = "client.picker.add"
     static let clientRowPrefix = "client.row."           // + client.id
+
+    // Email-in
+    static let profileRowEmailIn = "profile.row.emailin"
+    static let emailInScreen = "emailin.screen"
+    static let emailInAddress = "emailin.address"
+    static let emailInCopy = "emailin.copy"
+    static let emailInRotate = "emailin.rotate"
+    static let emailInError = "emailin.error"
+    static let emailInRetry = "emailin.retry"
+    static let emailInListRowPrefix = "emailin.row."     // + transaction.id
+    static let emailInReviewScreen = "emailin.review.screen"
+    static let emailInReviewMerchant = "emailin.review.merchant"
+    static let emailInReviewAmount = "emailin.review.amount"
+    static let emailInReviewSave = "emailin.review.save"
 }

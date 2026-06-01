@@ -13,8 +13,21 @@ export default defineWorkersConfig({
     // the workers-pool `npm test` never tries to collect it.
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     setupFiles: ["./test/apply-migrations.ts"],
+    // Run suites serially against a single warmed workerd runtime. The
+    // vitest-pool-workers runtime lazy-fetches its own npm modules (loupe,
+    // devalue, core-js-pure, ...) over a loopback "fallback service" socket the
+    // first time each suite touches them. Booting many runtimes in parallel
+    // makes those cold-start fetches race and intermittently fail ("No such
+    // module .../loupe/...", connect(): Connection refused / EADDRNOTAVAIL),
+    // which can escalate to MiniflareCoreError ERR_RUNTIME_FAILURE ("no tests").
+    // A single reused worker with no file parallelism warms the module graph
+    // once and runs deterministically green. Test isolation is unaffected
+    // (isolatedStorage stays on by default, so each test still gets fresh D1/KV).
+    fileParallelism: false,
     poolOptions: {
       workers: {
+        // One reused runtime instead of one-per-suite (see fileParallelism note).
+        singleWorker: true,
         // Load main, compatibility_date/flags and bindings from wrangler.jsonc
         // so tests use the same config as `wrangler dev`/`deploy`.
         wrangler: { configPath: "./wrangler.jsonc" },

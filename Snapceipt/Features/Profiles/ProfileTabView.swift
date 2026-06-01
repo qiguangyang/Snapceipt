@@ -5,6 +5,7 @@ import SwiftUI
 struct ProfileTabView: View {
     let onOpenNotifications: () -> Void
     let onOpenBudgets: () -> Void
+    let onOpenEmailIn: () -> Void
 
     @Environment(\.accent) private var accent
 
@@ -17,6 +18,8 @@ struct ProfileTabView: View {
                     id: AccessibilityID.profileRowNotifications, action: onOpenNotifications)
                 row(icon: "wallet", title: "Budgets",
                     id: AccessibilityID.profileRowBudgets, action: onOpenBudgets)
+                row(icon: "envelope", title: "Email-in receipts",
+                    id: AccessibilityID.profileRowEmailIn, action: onOpenEmailIn)
             }
             .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 110)
         }

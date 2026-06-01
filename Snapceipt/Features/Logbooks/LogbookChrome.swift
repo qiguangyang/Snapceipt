@@ -5,6 +5,8 @@ struct LbHeader: View {
     let title: String
     let onClose: () -> Void
     let onAdd: () -> Void
+    /// When false, the trailing add button is omitted (its slot kept for symmetry).
+    var showsAdd: Bool = true
     @Environment(\.accent) private var accent
 
     var body: some View {
@@ -22,14 +24,19 @@ struct LbHeader: View {
             Text(title).font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
 
-            Button(action: onAdd) {
-                Icon(name: "plus", size: 20, color: .white, lineWidth: 2.3)
-                    .frame(width: 40, height: 40)
-                    .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-                    .shadow(color: accent.base.opacity(0.4), radius: 7, x: 0, y: 6)
+            if showsAdd {
+                Button(action: onAdd) {
+                    Icon(name: "plus", size: 20, color: .white, lineWidth: 2.3)
+                        .frame(width: 40, height: 40)
+                        .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                        .shadow(color: accent.base.opacity(0.4), radius: 7, x: 0, y: 6)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.logbookAdd)
+            } else {
+                // Keep the title centered by reserving the add button's footprint.
+                Color.clear.frame(width: 40, height: 40)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(AccessibilityID.logbookAdd)
         }
         .padding(.top, 54).padding(.horizontal, 18).padding(.bottom, 12)
     }

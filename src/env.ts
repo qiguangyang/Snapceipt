@@ -54,6 +54,12 @@ export type Env = {
    * real key — never declared in wrangler.jsonc; only injected by the e2e harness.
    */
   E2E_EXTRACT_MODE?: string;
+  /**
+   * E2E-ONLY email seam. When "1", the email-in OCR step returns a deterministic
+   * stub instead of calling Workers AI, so the suite is hermetic. Also implicitly
+   * engaged when the AI binding is absent. MUST be undefined in production.
+   */
+  E2E_EMAIL_MODE?: string;
 };
 
 /**

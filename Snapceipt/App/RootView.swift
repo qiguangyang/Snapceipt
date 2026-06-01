@@ -235,6 +235,25 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .emailIn {
+                EmailInView(context: profiles.context, sync: sync, api: captureAPI,
+                            userId: profiles.userId, profileId: profiles.activeProfileId,
+                            onClose: { router.dismissOverlay() },
+                            onReview: { router.present(.emailInReview(id: $0)) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .emailInReview(id) = router.overlay {
+                EmailInReviewView(
+                    vm: EmailInViewModel(context: profiles.context, sync: sync, api: captureAPI,
+                                         userId: profiles.userId, profileId: profiles.activeProfileId),
+                    transactionId: id,
+                    onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -272,7 +291,8 @@ struct ShellView: View {
         case .profile:
             ProfileTabView(
                 onOpenNotifications: { router.present(.notificationSettings) },
-                onOpenBudgets: { router.present(.budgets) }
+                onOpenBudgets: { router.present(.budgets) },
+                onOpenEmailIn: { router.present(.emailIn) }
             )
             .environment(\.accent, accent)
         case .snap:
@@ -394,7 +414,8 @@ struct ShellView: View {
             get: {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor:
+                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+                     .emailIn, .emailInReview:
                     return nil
                 default: return router.overlay
                 }
@@ -407,11 +428,11 @@ struct ShellView: View {
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
-                                               Overlay.quotes.id]
+                                               Overlay.quotes.id, Overlay.emailIn.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
-                   !cur.id.hasPrefix("quoteEditor") {
+                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -451,7 +472,8 @@ struct ShellView: View {
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor:
+             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+             .emailIn, .emailInReview:
             EmptyView()  // handled by the full-screen overlays
         }
     }

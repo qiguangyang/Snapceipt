@@ -61,5 +61,13 @@ final class StubAPIClient: APIClient {
                           subtotalCents: 40_000, gstCents: 4_000, totalCents: 44_000,
                           pdfUrl: "/quotes/dl/stub-token", expiresAt: 1_790_000_000_000, emailed: false)
     }
+    func profileInbox(profileId: String) async throws -> InboxAddressResponse {
+        InboxAddressResponse(profileId: profileId, token: "stubtokeninitial",
+                             address: "r.stubtokeninitial@in.snapceipt.app")
+    }
+    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
+        InboxAddressResponse(profileId: profileId, token: "stubtokenrotated",
+                             address: "r.stubtokenrotated@in.snapceipt.app")
+    }
 }
 #endif

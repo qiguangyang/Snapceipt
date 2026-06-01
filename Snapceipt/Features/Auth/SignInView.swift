@@ -191,6 +191,14 @@ final class PreviewAPIClient: APIClient {
                           subtotalCents: 0, gstCents: 0, totalCents: 0,
                           pdfUrl: nil, expiresAt: nil, emailed: false)
     }
+    func profileInbox(profileId: String) async throws -> InboxAddressResponse {
+        InboxAddressResponse(profileId: profileId, token: "previewtoken",
+                             address: "r.previewtoken@in.snapceipt.app")
+    }
+    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
+        InboxAddressResponse(profileId: profileId, token: "previewtoken2",
+                             address: "r.previewtoken2@in.snapceipt.app")
+    }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))
