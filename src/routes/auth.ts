@@ -1,0 +1,453 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import type { ZodSchema } from "zod";
+import type { ValidationTargets } from "hono";
+import type { AppEnv } from "../env";
+import { ApiError } from "../lib/errors";
+import { uuidv7 } from "../lib/ids";
+import { nowMs } from "../lib/time";
+import { hashToken, signAccess } from "../lib/jwt";
+import {
+  issueSession,
+  findSessionByRefreshHash,
+  rotateSession,
+  revokeSession,
+  revokeSessionFamily,
+} from "../lib/sessions";
+import { sendMagicLinkEmail } from "../lib/email";
+import { verifyAppleIdentityToken } from "../lib/apple";
+import { requireAuth } from "../middleware/auth";
+import {
+  appleBody,
+  magicLinkRequestBody,
+  magicLinkVerifyBody,
+  refreshBody,
+} from "../schemas/auth";
+
+/**
+ * zValidator wrapper whose failure path throws the shared ApiError so the
+ * onError handler emits the uniform 400 VALIDATION_FAILED envelope (the default
+ * @hono/zod-validator behavior returns a bare 400 with the raw ZodError, which
+ * would bypass our error contract).
+ */
+export function validate<T extends ZodSchema, Target extends keyof ValidationTargets>(
+  target: Target,
+  schema: T,
+) {
+  return zValidator(target, schema, (result) => {
+    if (!result.success) {
+      throw new ApiError(
+        "VALIDATION_FAILED",
+        "Request validation failed",
+        result.error.issues,
+      );
+    }
+  });
+}
+
+/**
+ * Auth routes mounted under `/auth` (public — in the auth-middleware allowlist).
+ * This task adds the email magic-link half: request + verify. Apple / refresh
+ * handlers land on this same `authRoutes` instance in their own tasks.
+ */
+export const authRoutes = new Hono<AppEnv>();
+
+const MAGIC_LINK_TTL_SECONDS = 600; // 10 minutes
+const MAGIC_LINK_BASE_URL = "https://snapceipt.app/auth/magic";
+// Superseded-refresh-hash retention for reuse detection == the 60-day refresh window.
+const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
+
+/** Canonical form for email comparison + storage: trimmed + lowercased. */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** SHA-256 hex of the input — used to derive the KV key from the raw token. */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** 256-bit opaque token, base64url (no padding) — matches the refresh-token shape. */
+function newMagicToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * POST /auth/magic-link/request
+ * Mint a 256-bit token, store only its sha256 in KV under `ml:<hash>` (600s TTL,
+ * `{email}` metadata), and email the link via the SendEmail binding. ALWAYS 202
+ * (for known AND unknown emails) so the response can't be used to enumerate
+ * accounts. Rate-limiting is applied centrally by the rate-limit middleware.
+ */
+authRoutes.post(
+  "/magic-link/request",
+  validate("json", magicLinkRequestBody),
+  async (c) => {
+    const { email } = c.req.valid("json");
+    const normalized = normalizeEmail(email);
+
+    const token = newMagicToken();
+    const hash = await sha256Hex(token);
+
+    // Store only the hash; metadata carries the email for verify-time lookup.
+    await c.env.KV.put(`ml:${hash}`, "1", {
+      expirationTtl: MAGIC_LINK_TTL_SECONDS,
+      metadata: { email: normalized, createdAt: nowMs() },
+    });
+
+    const link = `${MAGIC_LINK_BASE_URL}?token=${token}`;
+    const e2e = c.env.E2E_TEST_MODE === "1";
+
+    // Routed through the email seam (src/lib/email.ts) so tests can spy on it;
+    // the real SendEmail binding isn't exercisable in the test runtime.
+    // In E2E mode the local dev runtime has no real SendEmail binding, so a send
+    // failure must not 500 the request — the harness gets the token via devToken
+    // below, not via email. In production (e2e off) a send failure still surfaces.
+    if (e2e) {
+      try {
+        await sendMagicLinkEmail(c.env, { to: normalized, link });
+      } catch {
+        // E2E-only: ignore the missing/failing local SendEmail binding.
+      }
+    } else {
+      await sendMagicLinkEmail(c.env, { to: normalized, link });
+    }
+
+    // E2E-ONLY SEAM — never enabled in production. When E2E_TEST_MODE === "1"
+    // (only ever set by the e2e harness, never declared in wrangler.jsonc),
+    // ALSO echo the raw token so a black-box HTTP client can finish the
+    // magic-link flow without reading the email it can't access. Off by default:
+    // the normal 202 carries NO body, so no token leaks unless explicitly opted in.
+    if (e2e) {
+      return c.json({ devToken: token }, 202);
+    }
+
+    // ALWAYS 202 — no account enumeration. No response body.
+    return c.body(null, 202);
+  },
+);
+
+/**
+ * POST /auth/magic-link/verify
+ * Hash the presented token, look it up in KV, DELETE it (single-use), then
+ * upsert the user by email (+ email auth_identity), register the X-Device-Id
+ * device if present, and issue a session. Unknown / consumed / expired tokens
+ * collapse to 401 AUTH_INVALID_TOKEN.
+ */
+authRoutes.post(
+  "/magic-link/verify",
+  validate("json", magicLinkVerifyBody),
+  async (c) => {
+    const { token } = c.req.valid("json");
+    const hash = await sha256Hex(token);
+    const key = `ml:${hash}`;
+
+    const stored = await c.env.KV.getWithMetadata<{ email: string }>(key, "text");
+    if (stored.value === null || !stored.metadata?.email) {
+      // Unknown, already-consumed, or expired (KV TTL evicted it).
+      throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired magic link");
+    }
+
+    // Single-use: delete before issuing so a replay can't double-consume.
+    await c.env.KV.delete(key);
+
+    const email = normalizeEmail(stored.metadata.email);
+    const now = nowMs();
+
+    // Upsert user by email (unique among non-deleted users). Reuse if present.
+    let user = await c.env.DB.prepare(
+      "SELECT id, email, display_name FROM users WHERE email = ? AND deleted_at IS NULL",
+    )
+      .bind(email)
+      .first<{ id: string; email: string | null; display_name: string | null }>();
+
+    if (!user) {
+      const userId = uuidv7();
+      await c.env.DB.prepare(
+        `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
+         VALUES (?, ?, 1, NULL, 'free', ?, ?)`,
+      )
+        .bind(userId, email, now, now)
+        .run();
+      user = { id: userId, email, display_name: null };
+    } else {
+      // A returning magic-link user has now re-proven control of the email.
+      await c.env.DB.prepare("UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?")
+        .bind(now, user.id)
+        .run();
+    }
+
+    // Ensure an email auth_identity exists (idempotent on unique (provider,subject)).
+    await c.env.DB.prepare(
+      `INSERT INTO auth_identities (id, user_id, provider, subject, created_at)
+       VALUES (?, ?, 'email', ?, ?)
+       ON CONFLICT(provider, subject) DO NOTHING`,
+    )
+      .bind(uuidv7(), user.id, email, now)
+      .run();
+
+    // Register the device if the client sent one (X-Device-Id is the install UUID).
+    const deviceHeader = c.req.header("X-Device-Id");
+    const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
+    await c.env.DB.prepare(
+      `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
+       VALUES (?, ?, 'ios', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         user_id = excluded.user_id,
+         last_seen_at = excluded.last_seen_at,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(deviceId, user.id, now, now, now)
+      .run();
+
+    // Issue an access+refresh session bound to this user+device (Task 5 helper).
+    const session = await issueSession(c.env.DB, {
+      userId: user.id,
+      deviceId,
+      signingKey: c.env.JWT_SIGNING_KEY,
+    });
+
+    return c.json({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresIn: 900,
+      user: { id: user.id, email: user.email, displayName: user.display_name },
+    });
+  },
+);
+
+/**
+ * POST /auth/apple
+ * Verify the Sign-in-with-Apple identity token (RS256 against Apple's JWKS,
+ * with iss/aud/exp + sha256(rawNonce)==nonce enforced), upsert the user keyed by
+ * the stable Apple `sub` (auth_identities.provider='apple'). Apple only sends
+ * fullName/email on the FIRST authorization, so we persist them only when
+ * creating the user — later sign-ins never overwrite them. Register the
+ * X-Device-Id device and issue a session. Verification failures surface as
+ * 401 AUTH_INVALID_TOKEN.
+ */
+authRoutes.post("/apple", validate("json", appleBody), async (c) => {
+  const { identityToken, rawNonce, fullName, email } = c.req.valid("json");
+
+  // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
+  const claims = await verifyAppleIdentityToken(c.env, identityToken, rawNonce);
+  const appleSub = claims.sub;
+  // Prefer the client-supplied email (first-auth only); fall back to the token.
+  const appleEmail = email ?? claims.email ?? null;
+
+  const now = nowMs();
+
+  // 2. Look up the existing apple identity. Present → reuse the user (no
+  //    overwrite of first-auth name/email). Absent → create user + identity.
+  const identity = await c.env.DB.prepare(
+    "SELECT user_id FROM auth_identities WHERE provider = 'apple' AND subject = ?",
+  )
+    .bind(appleSub)
+    .first<{ user_id: string }>();
+
+  let userId: string;
+  if (identity) {
+    userId = identity.user_id;
+  } else {
+    userId = uuidv7();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'free', ?, ?)`,
+      ).bind(userId, appleEmail, appleEmail ? 1 : 0, fullName ?? null, now, now),
+      c.env.DB.prepare(
+        `INSERT INTO auth_identities (id, user_id, provider, subject, created_at)
+         VALUES (?, ?, 'apple', ?, ?)`,
+      ).bind(uuidv7(), userId, appleSub, now),
+    ]);
+  }
+
+  // 3. Register / refresh the device (X-Device-Id is the install UUID).
+  const deviceHeader = c.req.header("X-Device-Id");
+  const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
+  await c.env.DB.prepare(
+    `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       last_seen_at = excluded.last_seen_at,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(deviceId, userId, now, now, now)
+    .run();
+
+  // 4. Issue an access+refresh session bound to this user+device (Task 5 helper).
+  const session = await issueSession(c.env.DB, {
+    userId,
+    deviceId,
+    signingKey: c.env.JWT_SIGNING_KEY,
+  });
+
+  // 5. Load the canonical user for the response envelope.
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name FROM users WHERE id = ?",
+  )
+    .bind(userId)
+    .first<{ id: string; email: string | null; display_name: string | null }>();
+
+  if (!user) throw new ApiError("INTERNAL", "User not found after upsert");
+
+  return c.json({
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    expiresIn: 900,
+    user: { id: user.id, email: user.email, displayName: user.display_name },
+  });
+});
+
+/** KV namespace for superseded (already-rotated) refresh hashes — see /auth/refresh. */
+const RETIRED_REFRESH_PREFIX = "rfr:";
+
+/**
+ * POST /auth/refresh
+ * Public (no bearer): rotate an opaque refresh token. The presented token is
+ * hashed and looked up via findSessionByRefreshHash, which resolves ONLY when the
+ * row is non-revoked AND not expired. On a hit → rotate in place (new refresh,
+ * slide the 60-day expiry, keep the same session id + family), mint a fresh access
+ * token, and return the session envelope.
+ *
+ * Reuse detection: rotateSession OVERWRITES the refresh hash in place, so a
+ * replayed old token's hash no longer exists in the sessions table. To still
+ * catch reuse, every rotation records the just-superseded hash in KV
+ * (`rfr:<hash>` -> family, 60-day TTL matching the refresh window). On a DB miss
+ * we consult KV: a hit means an already-rotated token was replayed -> revoke the
+ * whole family and answer 401 AUTH_SESSION_REVOKED. A revoked/expired live-table
+ * miss with no KV record (e.g. a signed-out session) is also AUTH_SESSION_REVOKED
+ * when the hash is still present on a (revoked) row; a hash that never existed is
+ * 401 AUTH_INVALID_TOKEN.
+ */
+authRoutes.post("/refresh", validate("json", refreshBody), async (c) => {
+  const { refreshToken } = c.req.valid("json");
+  const presentedHash = await hashToken(refreshToken);
+
+  // 1. Live session for this hash? (findSessionByRefreshHash filters revoked + expired.)
+  const session = await findSessionByRefreshHash(c.env.DB, presentedHash);
+
+  if (session) {
+    // Record the soon-to-be-superseded hash BEFORE rotating, so that if KV.put
+    // throws the old refresh token remains valid in D1 and the client can retry.
+    await c.env.KV.put(`${RETIRED_REFRESH_PREFIX}${presentedHash}`, session.family, {
+      expirationTtl: REFRESH_REUSE_TTL_SECONDS,
+    });
+
+    // ROTATE: new opaque refresh, slide the 60-day expiry, keep the same family.
+    const rotated = await rotateSession(c.env.DB, session.id);
+
+    const accessToken = await signAccess(c.env.JWT_SIGNING_KEY, {
+      userId: session.user_id,
+      sessionId: session.id,
+      deviceId: session.device_id,
+    });
+
+    const user = await c.env.DB.prepare(
+      "SELECT id, email, display_name FROM users WHERE id = ? AND deleted_at IS NULL",
+    )
+      .bind(session.user_id)
+      .first<{ id: string; email: string | null; display_name: string | null }>();
+    if (!user) throw new ApiError("AUTH_INVALID_TOKEN", "User not found");
+
+    return c.json({
+      accessToken,
+      refreshToken: rotated.refreshToken,
+      expiresIn: 900,
+      user: { id: user.id, email: user.email, displayName: user.display_name },
+    });
+  }
+
+  // 2. No live match. Reuse of an already-rotated token? KV remembers superseded
+  //    hashes -> revoke the whole family and force re-auth.
+  const retiredFamily = await c.env.KV.get(`${RETIRED_REFRESH_PREFIX}${presentedHash}`);
+  if (retiredFamily) {
+    await revokeSessionFamily(c.env.DB, retiredFamily);
+    throw new ApiError("AUTH_SESSION_REVOKED", "Refresh token reuse detected");
+  }
+
+  // 3. Hash still present on a (revoked/expired) row — e.g. a signed-out session
+  //    whose current refresh token is presented. The session is dead.
+  const known = await c.env.DB.prepare("SELECT family FROM sessions WHERE refresh_hash = ?")
+    .bind(presentedHash)
+    .first<{ family: string }>();
+  if (known) {
+    throw new ApiError("AUTH_SESSION_REVOKED", "Session is no longer active");
+  }
+
+  // 4. Token never existed.
+  throw new ApiError("AUTH_INVALID_TOKEN", "Invalid refresh token");
+});
+
+/**
+ * POST /auth/signout
+ * Bearer required (requireAuth sets c.var.sessionId from the JWT `sid` claim).
+ * Revoke just the current session (single-device sign-out). Idempotent.
+ */
+authRoutes.post("/signout", requireAuth(), async (c) => {
+  await revokeSession(c.env.DB, c.var.sessionId);
+  return c.json({ ok: true });
+});
+
+/**
+ * GET /auth/me
+ * Bearer required: return the current user plus their active (non-deleted)
+ * devices, scoped to c.var.userId.
+ */
+authRoutes.get("/me", requireAuth(), async (c) => {
+  const userId = c.var.userId;
+
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name, plan FROM users WHERE id = ? AND deleted_at IS NULL",
+  )
+    .bind(userId)
+    .first<{
+      id: string;
+      email: string | null;
+      display_name: string | null;
+      plan: string;
+    }>();
+  if (!user) throw new ApiError("NOT_FOUND", "User not found");
+
+  const devices = await c.env.DB.prepare(
+    `SELECT id, platform, model, os_version, apns_token, push_enabled, last_seen_at, created_at
+       FROM devices
+      WHERE user_id = ? AND deleted_at IS NULL
+      ORDER BY created_at`,
+  )
+    .bind(userId)
+    .all<{
+      id: string;
+      platform: string;
+      model: string | null;
+      os_version: string | null;
+      apns_token: string | null;
+      push_enabled: number;
+      last_seen_at: number | null;
+      created_at: number;
+    }>();
+
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      plan: user.plan,
+    },
+    devices: devices.results.map((d) => ({
+      id: d.id,
+      platform: d.platform,
+      model: d.model,
+      osVersion: d.os_version,
+      hasApnsToken: d.apns_token !== null,
+      pushEnabled: d.push_enabled === 1,
+      lastSeenAt: d.last_seen_at,
+      createdAt: d.created_at,
+    })),
+  });
+});

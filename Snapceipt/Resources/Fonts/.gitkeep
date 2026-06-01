@@ -1,0 +1,24 @@
+Drop the bundled font binaries here (static TTF, NOT variable). Filenames MUST match
+Snapceipt/Info.plist UIAppFonts exactly:
+
+  Schibsted Grotesk (--display: numbers, headings, initials):
+    SchibstedGrotesk-Regular.ttf      (400)
+    SchibstedGrotesk-Medium.ttf       (500)
+    SchibstedGrotesk-SemiBold.ttf     (600)
+    SchibstedGrotesk-Bold.ttf         (700)
+    SchibstedGrotesk-ExtraBold.ttf    (800)
+
+  Hanken Grotesk (--ui: all body/UI text):
+    HankenGrotesk-Regular.ttf         (400)
+    HankenGrotesk-Medium.ttf          (500)
+    HankenGrotesk-SemiBold.ttf        (600)
+    HankenGrotesk-Bold.ttf            (700)
+
+Source: Google Fonts (https://fonts.google.com/specimen/Schibsted+Grotesk and
+/Hanken+Grotesk). Download each family, take the STATIC instances from the
+"static/" folder of the zip, rename to the exact names above (Google ships e.g.
+"SchibstedGrotesk-Regular.ttf" already; Hanken static files are named likewise).
+Both fonts are OFL-1.1 licensed — keep the OFL.txt alongside.
+
+DesignSystem/Fonts.swift (Task 2) maps Font.display(_:_:) -> Schibsted Grotesk
+and Font.ui(_:_:) -> Hanken Grotesk by these registered PostScript family names.

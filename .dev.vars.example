@@ -1,0 +1,12 @@
+# Copy this file to .dev.vars (git-ignored) and fill real values for local dev.
+# These map to env.JWT_SIGNING_KEY / env.DEEPSEEK_API_KEY / env.APPLE_BUNDLE_ID.
+
+# 256-bit (32+ byte) random string used to sign/verify app JWTs (HS256).
+# Generate: openssl rand -base64 48
+JWT_SIGNING_KEY="dev-only-insecure-signing-key-change-me-0123456789abcdef"
+
+# DeepSeek API key (unused in the foundation phase; declared for later /extract).
+DEEPSEEK_API_KEY="sk-deepseek-dev-placeholder"
+
+# Apple bundle id; identityToken.aud must equal this. Also set as a var in wrangler.jsonc.
+APPLE_BUNDLE_ID="com.snapceipt.app"
