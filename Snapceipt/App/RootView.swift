@@ -191,6 +191,32 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .loyalty {
+                LoyaltyWalletView(context: profiles.context, sync: sync, userId: profiles.userId,
+                                  profileId: profiles.activeProfileId,
+                                  onClose: { router.dismissOverlay() },
+                                  onAdd: { router.present(.loyaltyAdd) },
+                                  onOpenCard: { router.present(.loyaltyCard(id: $0)) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .loyaltyAdd {
+                AddLoyaltyView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               onClose: { router.dismissOverlay() },
+                               onSaved: { router.present(.loyalty) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .loyaltyCard(id) = router.overlay {
+                LoyaltyCardDetailView(context: profiles.context, cardId: id,
+                                      onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -269,6 +295,12 @@ struct ShellView: View {
                 }
                 .padding(.horizontal, 18).padding(.top, 14)
 
+                HStack(spacing: 12) {
+                    quickAction(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
+                                accent: accent) { router.present(.loyalty) }
+                }
+                .padding(.horizontal, 18).padding(.top, 12)
+
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
                     userId: profiles.userId, profileId: profiles.activeProfileId,
@@ -334,7 +366,8 @@ struct ShellView: View {
         Binding(
             get: {
                 switch router.overlay {
-                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
+                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+                     .loyalty, .loyaltyAdd, .loyaltyCard:
                     return nil
                 default: return router.overlay
                 }
@@ -345,9 +378,11 @@ struct ShellView: View {
                 // value, so it is matched separately rather than via a Set membership test.
                 let fullScreen: Set<String> = [Overlay.capture.id, Overlay.mileage.id, Overlay.wfh.id,
                                                Overlay.budgets.id, Overlay.alerts.id,
-                                               Overlay.notificationSettings.id]
+                                               Overlay.notificationSettings.id,
+                                               Overlay.loyalty.id, Overlay.loyaltyAdd.id]
                 if newValue == nil, let cur = router.overlay,
-                   !fullScreen.contains(cur.id), !cur.id.hasPrefix("budgetEditor") {
+                   !fullScreen.contains(cur.id),
+                   !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -386,7 +421,8 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
-        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings:
+        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+             .loyalty, .loyaltyAdd, .loyaltyCard:
             EmptyView()  // handled by the full-screen overlays
         }
     }

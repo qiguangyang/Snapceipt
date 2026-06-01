@@ -19,6 +19,9 @@ enum Overlay: Equatable, Identifiable {
     case budgetEditor(id: String?)   // nil id = add a new budget
     case alerts
     case notificationSettings
+    case loyalty
+    case loyaltyAdd
+    case loyaltyCard(id: String)
 
     var id: String {
         switch self {
@@ -32,6 +35,9 @@ enum Overlay: Equatable, Identifiable {
         case .budgetEditor(let id): return "budgetEditor-\(id ?? "new")"
         case .alerts: return "alerts"
         case .notificationSettings: return "notificationSettings"
+        case .loyalty: return "loyalty"
+        case .loyaltyAdd: return "loyaltyAdd"
+        case .loyaltyCard(let id): return "loyaltyCard-\(id)"
         }
     }
 }
