@@ -473,7 +473,8 @@ struct ShellView: View {
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
-             .emailIn, .emailInReview:
+             .emailIn, .emailInReview,
+             .tax, .categories, .ruleEditor, .profileDetail:
             EmptyView()  // handled by the full-screen overlays
         }
     }

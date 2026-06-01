@@ -166,4 +166,32 @@ enum AccessibilityID {
     static let emailInReviewMerchant = "emailin.review.merchant"
     static let emailInReviewAmount = "emailin.review.amount"
     static let emailInReviewSave = "emailin.review.save"
+
+    // Settings hub (F7)
+    static let profileHubScreen = "profile.hub.screen"
+    static let profileRowTax = "profile.row.tax"
+    static let profileRowCategories = "profile.row.categories"
+    static let profileRowPrivacy = "profile.row.privacy"
+    static let profileRowAccount = "profile.row.account"
+    static let profileSwitcherCardPrefix = "profile.switcher.card."  // + profile.id
+    static let profileAddButton = "profile.add"
+    static let signOutButton = "profile.signout"
+    // Tax & GST
+    static let taxScreen = "tax.screen"
+    static let taxGstToggle = "tax.gst.toggle"
+    static let taxAbnField = "tax.abn.field"
+    static let taxFyStart = "tax.fy.start"
+    static let taxMealsPct = "tax.meals.pct"
+    // Categories & rules
+    static let categoriesScreen = "categories.screen"
+    static let categoryRowPrefix = "category.row."     // + category.id
+    static let ruleRowPrefix = "rule.row."             // + rule.id
+    static let ruleAddButton = "rule.add"
+    static let ruleEditorScreen = "rule.editor.screen"
+    static let ruleEditorSave = "rule.editor.save"
+    // Profile detail
+    static let profileDetailScreen = "profile.detail.screen"
+    static let profileDetailSwitch = "profile.detail.switch"
+    static let profileDetailDelete = "profile.detail.delete"
+    static let profileDetailNameField = "profile.detail.name"
 }
