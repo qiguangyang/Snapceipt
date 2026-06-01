@@ -39,4 +39,23 @@ struct BarcodeRendererTests {
         c.format = nil
         #expect(c.barcodeFormat == nil)
     }
+
+    // MARK: - Task 2: CoreImage generators
+
+    @Test("each CoreImage format renders a non-nil image for a valid value")
+    func coreImageNonNil() {
+        for f: LoyaltyCard.BarcodeFormat in [.code128, .qr, .pdf417, .aztec] {
+            let img = BarcodeRenderer.image(value: "ABC123456", format: f, scale: 4)
+            #expect(img != nil, "expected an image for \(f.rawValue)")
+            if let img { #expect(img.size.width > 0 && img.size.height > 0) }
+        }
+    }
+
+    @Test("CoreImage formats return nil for an empty value")
+    func coreImageEmptyNil() {
+        for f: LoyaltyCard.BarcodeFormat in [.code128, .qr, .pdf417, .aztec] {
+            #expect(BarcodeRenderer.image(value: "", format: f, scale: 4) == nil,
+                    "expected nil for empty \(f.rawValue)")
+        }
+    }
 }
