@@ -21,7 +21,7 @@ struct EmailInView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LbHeader(title: "Email-in receipts", onClose: onClose, onAdd: {})
+            LbHeader(title: "Email-in receipts", onClose: onClose, onAdd: {}, showsAdd: false)
             ScrollView {
                 VStack(spacing: 14) {
                     addressCard

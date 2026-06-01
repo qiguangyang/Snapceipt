@@ -32,11 +32,38 @@ final class EmailInUITests: UITestCase {
         XCTAssertTrue(failedRow.waitForExistence(timeout: 5), "No email-in rows")
         failedRow.tap()
 
-        // Review editor opens; save (the seeded row pre-fills the form on appear).
+        // Review editor opens; the seeded row pre-fills the form on appear.
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.emailInReviewScreen].waitForExistence(timeout: 5),
                       "Review screen did not open")
+
+        // Save is GATED on valid input: the FAILED seed has merchant: "" and
+        // amount 0, so Save starts disabled and we must enter real data first.
         let save = app.buttons[AccessibilityID.emailInReviewSave]
         XCTAssertTrue(save.waitForExistence(timeout: 5), "Save button missing")
+        XCTAssertFalse(save.isEnabled, "Save should be disabled until valid input is entered")
+
+        // Confirm we opened the FAILED row (failed-first sort): its merchant is
+        // empty. An empty SwiftUI TextField reports its PLACEHOLDER ("Merchant")
+        // as `value`, so "empty" means value is "" or the placeholder string.
+        let merchant = app.textFields[AccessibilityID.emailInReviewMerchant]
+        XCTAssertTrue(merchant.waitForExistence(timeout: 5), "Merchant field missing")
+        let merchantValue = (merchant.value as? String) ?? ""
+        XCTAssertTrue(merchantValue.isEmpty || merchantValue == "Merchant",
+                      "Failed seed row should open with an empty merchant")
+        merchant.tap(); merchant.typeText("Bunnings")
+
+        // The amount field pre-fills "0.00" — clear it, then type a real amount
+        // (decimal keypad). Tapping focuses; select-all + delete clears the prefill.
+        let amount = app.textFields[AccessibilityID.emailInReviewAmount]
+        XCTAssertTrue(amount.waitForExistence(timeout: 5), "Amount field missing")
+        amount.tap()
+        if let current = amount.value as? String, !current.isEmpty {
+            amount.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        amount.typeText("42.50")
+
+        // Save is now enabled — tap it.
+        XCTAssertTrue(save.isEnabled, "Save should be enabled after entering a merchant and a positive amount")
         save.tap()
 
         // OVERLAY MODEL: `.emailIn` and `.emailInReview` are MUTUALLY-EXCLUSIVE router

@@ -161,5 +161,7 @@ enum AccessibilityID {
     static let emailInRotate = "emailin.rotate"
     static let emailInListRowPrefix = "emailin.row."     // + transaction.id
     static let emailInReviewScreen = "emailin.review.screen"
+    static let emailInReviewMerchant = "emailin.review.merchant"
+    static let emailInReviewAmount = "emailin.review.amount"
     static let emailInReviewSave = "emailin.review.save"
 }

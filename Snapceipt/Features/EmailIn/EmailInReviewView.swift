@@ -18,13 +18,22 @@ struct EmailInReviewView: View {
 
     private var txn: Transaction? { vm.inbox.first { $0.id == transactionId } }
 
+    /// Save is only allowed once the editor holds usable data: a positive amount
+    /// and a non-empty date — so a failed receipt can't be resolved with junk.
+    private var canSave: Bool {
+        guard let dollars = Double(amountText), dollars > 0 else { return false }
+        return !txnDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            LbHeader(title: "Review receipt", onClose: onClose, onAdd: {})
+            LbHeader(title: "Review receipt", onClose: onClose, onAdd: {}, showsAdd: false)
             Form {
                 Section("Details") {
                     TextField("Merchant", text: $merchant)
+                        .accessibilityIdentifier(AccessibilityID.emailInReviewMerchant)
                     TextField("Amount (AUD)", text: $amountText).keyboardType(.decimalPad)
+                        .accessibilityIdentifier(AccessibilityID.emailInReviewAmount)
                     TextField("Date (YYYY-MM-DD)", text: $txnDate)
                     Picker("Category", selection: $catKey) {
                         ForEach(catKeys, id: \.self) { Text($0.capitalized).tag($0) }
@@ -32,6 +41,7 @@ struct EmailInReviewView: View {
                 }
                 Section {
                     Button("Save") { save() }
+                        .disabled(!canSave)
                         .accessibilityIdentifier(AccessibilityID.emailInReviewSave)
                 }
             }
@@ -51,7 +61,7 @@ struct EmailInReviewView: View {
     }
 
     private func save() {
-        guard let t = txn else { return }
+        guard canSave, let t = txn else { return }
         let dollars = Double(amountText) ?? 0
         let cents = Int((dollars * 100).rounded())
         vm.save(t, merchant: merchant, amountCentsAbs: cents, txnDate: txnDate, catKey: catKey)
