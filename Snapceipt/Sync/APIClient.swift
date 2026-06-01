@@ -30,6 +30,14 @@ protocol APIClient {
     func profileInbox(profileId: String) async throws -> InboxAddressResponse
     /// POST /profiles/:id/inbox/rotate — replace the alias; the old token stops resolving. (§3.1)
     func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse
+    /// POST /users/me/email — issue a 6-digit code to `newEmail`. (§8.1)
+    func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested
+    /// POST /users/me/email/verify — confirm the code; returns the updated user. (§8.1)
+    func verifyEmailChange(code: String) async throws -> AccountUser
+    /// DELETE /devices/:id — soft-delete + revoke that device's sessions. (§8.2)
+    func revokeDevice(id: String) async throws
+    /// DELETE /account — immediate hard purge of the user's data. (§8.3)
+    func deleteAccount() async throws
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -150,6 +158,23 @@ final class LiveAPIClient: APIClient {
 
     func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
         try await send("POST", "/profiles/\(profileId)/inbox/rotate", body: NoBody(), authenticated: true)
+    }
+
+    func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
+        try await send("POST", "/users/me/email", body: EmailChangeBody(newEmail: newEmail), authenticated: true)
+    }
+
+    func verifyEmailChange(code: String) async throws -> AccountUser {
+        let wrap: AccountUserResponse = try await send("POST", "/users/me/email/verify", body: VerifyCodeBody(code: code), authenticated: true)
+        return wrap.user
+    }
+
+    func revokeDevice(id: String) async throws {
+        try await sendNoContent("DELETE", "/devices/\(id)", body: NoBody(), authenticated: true)
+    }
+
+    func deleteAccount() async throws {
+        try await sendNoContent("DELETE", "/account", body: NoBody(), authenticated: true)
     }
 
     // MARK: - Request plumbing

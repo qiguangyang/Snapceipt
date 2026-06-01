@@ -36,6 +36,15 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var profileInboxHandler: ((String) async throws -> InboxAddressResponse)?
     var rotateProfileInboxHandler: ((String) async throws -> InboxAddressResponse)?
 
+    // MARK: Account scripting
+
+    var requestEmailChangeHandler: (() async throws -> EmailChangeRequested)?
+    var verifyEmailChangeHandler: ((String) async throws -> AccountUser)?
+    private(set) var requestEmailChangeCalls: [String] = []
+    private(set) var verifyEmailChangeCalls: [String] = []
+    private(set) var revokeDeviceCalls: [String] = []
+    private(set) var deleteAccountCallCount = 0
+
     private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
     private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
@@ -142,6 +151,19 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         guard let h = rotateProfileInboxHandler else { throw MockAPIClientError.unscripted }
         return try await h(profileId)
     }
+
+    func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
+        requestEmailChangeCalls.append(newEmail)
+        guard let h = requestEmailChangeHandler else { throw MockAPIClientError.unscripted }
+        return try await h()
+    }
+    func verifyEmailChange(code: String) async throws -> AccountUser {
+        verifyEmailChangeCalls.append(code)
+        guard let h = verifyEmailChangeHandler else { throw MockAPIClientError.unscripted }
+        return try await h(code)
+    }
+    func revokeDevice(id: String) async throws { revokeDeviceCalls.append(id) }
+    func deleteAccount() async throws { deleteAccountCallCount += 1 }
 }
 
 /// Thrown when a scriptable mock method is called without a handler set.
