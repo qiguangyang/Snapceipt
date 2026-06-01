@@ -191,6 +191,32 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .loyalty {
+                LoyaltyWalletView(context: profiles.context, sync: sync, userId: profiles.userId,
+                                  profileId: profiles.activeProfileId,
+                                  onClose: { router.dismissOverlay() },
+                                  onAdd: { router.present(.loyaltyAdd) },
+                                  onOpenCard: { router.present(.loyaltyCard(id: $0)) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .loyaltyAdd {
+                AddLoyaltyView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               onClose: { router.dismissOverlay() },
+                               onSaved: { router.present(.loyalty) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .loyaltyCard(id) = router.overlay {
+                LoyaltyCardDetailView(context: profiles.context, cardId: id,
+                                      onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -268,6 +294,12 @@ struct ShellView: View {
                                 accent: accent) { router.present(.wfh) }
                 }
                 .padding(.horizontal, 18).padding(.top, 14)
+
+                HStack(spacing: 12) {
+                    quickAction(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
+                                accent: accent) { router.present(.loyalty) }
+                }
+                .padding(.horizontal, 18).padding(.top, 12)
 
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
