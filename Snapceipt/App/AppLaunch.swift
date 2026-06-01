@@ -92,6 +92,18 @@ struct AppLaunch {
                                    number: "QF1234567", barcodeFormat: "qr",
                                    pointsLabel: nil,
                                    color1: "#E40000", color2: "#A30000", sortOrder: 1))
+        // F5: seed a saved client + a draft quote (+ one line item) on p1 (active business).
+        let client = Client(userId: DevAccount.userId, profileId: p1.id,
+                            name: "Acme Pty Ltd", email: "accounts@acme.example")
+        context.insert(client)
+        let quote = Quote(userId: DevAccount.userId, profileId: p1.id,
+                          clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
+                          gstEnabled: true, subtotalCents: 200_00, gstCents: 20_00, totalCents: 220_00,
+                          status: "draft")
+        context.insert(quote)
+        context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: quote.id,
+                                     itemDescription: "Brand identity package", quantity: 1,
+                                     unitPriceCents: 200_00, sortOrder: 0))
         try? context.save()
     }
 
