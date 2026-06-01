@@ -123,6 +123,23 @@ struct UpdateDeviceResponse: Decodable {
     let id: String
 }
 
+// MARK: - Quotes (spec §4.5)
+
+/// POST /quotes/:id/send response. `number`/`pdfUrl`/`expiresAt` are null when the
+/// quote had no number yet but email is off, or generally when not applicable; the
+/// editor applies number/status/sentAt/totals to the local Quote on success.
+struct SendQuoteResponse: Decodable {
+    let number: String?
+    let sentAt: Int?
+    let status: String
+    let subtotalCents: Int
+    let gstCents: Int
+    let totalCents: Int
+    let pdfUrl: String?
+    let expiresAt: Int?
+    let emailed: Bool
+}
+
 // MARK: - Sync push
 
 /// One mutation in a /sync/push batch.
