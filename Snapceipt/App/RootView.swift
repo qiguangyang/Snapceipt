@@ -82,6 +82,12 @@ struct ShellView: View {
     /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
     @State private var exportPeriod: Period = .month
 
+    /// Biometric app-lock controller backing the Privacy screen (spec §6). Owned here
+    /// for now so the Privacy toggle persists across renders within a session; the
+    /// app-lock gate plan (Task 6) hoists ownership to `SnapceiptApp` + injects it via
+    /// the environment and wraps the shell in the lock gate.
+    @State private var appLock = AppLockController()
+
     var body: some View {
         let accent = profiles.accent
 
@@ -286,6 +292,26 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .account {
+                AccountView(api: captureAPI, auth: auth, authVM: authVM,
+                            onChangeEmail: { router.present(.changeEmail) },
+                            onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .changeEmail {
+                ChangeEmailView(api: captureAPI, auth: auth, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .privacy {
+                PrivacyView(appLock: appLock, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -474,7 +500,8 @@ struct ShellView: View {
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
                                                Overlay.quotes.id, Overlay.emailIn.id,
-                                               Overlay.tax.id, Overlay.categories.id]
+                                               Overlay.tax.id, Overlay.categories.id,
+                                               Overlay.account.id, Overlay.privacy.id, Overlay.changeEmail.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
