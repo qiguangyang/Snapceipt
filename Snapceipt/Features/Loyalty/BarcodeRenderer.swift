@@ -1,6 +1,7 @@
 import UIKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Vision
 
 /// Pure barcode renderer. No SwiftUI/SwiftData, no hidden time/Calendar — every
 /// input is injected, so it is fully unit-testable. Returns a crisp, POS-grade
@@ -149,6 +150,23 @@ enum BarcodeRenderer {
                 }
                 x += module
             }
+        }
+    }
+}
+
+extension LoyaltyCard.BarcodeFormat {
+    /// Map a Vision-recognized symbology to a supported BarcodeFormat. Vision reports
+    /// UPC-A as `.ean13` with a leading 0 (the EAN-13 renderer handles that). Any other
+    /// symbology (`.upce`, `.ean8`, …) returns nil — the number is still captured,
+    /// `barcodeFormat` is left nil, and the detail view shows number-only.
+    init?(symbology: VNBarcodeSymbology) {
+        switch symbology {
+        case .code128: self = .code128
+        case .ean13:   self = .ean13
+        case .qr:      self = .qr
+        case .aztec:   self = .aztec
+        case .pdf417:  self = .pdf417
+        default:       return nil
         }
     }
 }

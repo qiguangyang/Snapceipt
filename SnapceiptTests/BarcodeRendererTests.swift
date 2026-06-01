@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Vision
 @testable import Snapceipt
 
 @Suite("BarcodeRenderer")
@@ -93,5 +94,22 @@ struct BarcodeRendererTests {
         #expect(BarcodeRenderer.image(value: "123", format: .ean13, scale: 3) == nil)
         #expect(BarcodeRenderer.image(value: "59012341234A7", format: .ean13, scale: 3) == nil)
         #expect(BarcodeRenderer.image(value: "5901234123458", format: .ean13, scale: 3) == nil) // bad checksum
+    }
+
+    // MARK: - Task 4: VNBarcodeSymbology mapping
+
+    @Test("supported VNBarcodeSymbology values map to BarcodeFormat")
+    func symbologyMapping() {
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .code128) == .code128)
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .ean13) == .ean13)
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .qr) == .qr)
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .aztec) == .aztec)
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .pdf417) == .pdf417)
+    }
+
+    @Test("unsupported symbologies map to nil (value still captured)")
+    func symbologyUnsupported() {
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .ean8) == nil)
+        #expect(LoyaltyCard.BarcodeFormat(symbology: .upce) == nil)
     }
 }
