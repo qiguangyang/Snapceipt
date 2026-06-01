@@ -11,7 +11,7 @@ Roadmap capsule: `docs/superpowers/specs/2026-05-31-snapceipt-remaining-features
 - **Profile management** — edit (name, business ABN/GST, accent) + delete (confirm) + a `ProfileDetail` screen (hero, switch-to-active, per-profile stats, export-this-profile link, delete). Today only *add* exists.
 - **Tax & GST editor** — bound to `tax_settings` per profile: FY start month, GST registration + ABN + entity type + GST accounting basis (Business only; Personal hides tax identity), BAS period + derived next-due, deduction defaults (meals %, WFH c/hr, mileage c/km). Replaces the seed-only stub.
 - **Categories & smart-rules** — edit each built-in category's default deductible % + full smart-rules CRUD (matcher → category / deductible % / mode, enable + priority + delete). Category list with derived receipt counts. **No user-created categories** (avoids the Reports/Budgets `cat_key` roll-up wrinkle).
-- **Privacy & security** — a biometric **app-lock** toggle (Face ID / Touch ID, device-passcode fallback) gating cold-launch + return-from-background. Local-only (Keychain flag); no backend.
+- **Privacy & security** — a biometric **app-lock** toggle (Face ID / Touch ID, device-passcode fallback) gating cold-launch + return-from-background. Local-only (a `UserDefaults` flag — a non-secret boolean that should clear on reinstall); no backend.
 - **Account & security (new backend)** — change email (in-app 6-digit code to the new address), device list + revoke (`DELETE /devices/:id`), delete account (immediate hard purge of D1 + R2). Sign-out is already wired.
 - **FY-start cleanup** — thread `tax_settings.financialYearStartMonth` through the ~7 sites currently hardcoded to `startMonth: 7`.
 
@@ -62,7 +62,7 @@ Bound to the profile's `tax_settings` row (lazily ensured via the existing `TaxS
 
 ## 6. Privacy & security — Face ID app-lock
 
-- A `Privacy & security` screen with one toggle: **"Require Face ID / Touch ID to unlock"**. State stored in Keychain (`sc.lock.enabled`), read at launch.
+- A `Privacy & security` screen with one toggle: **"Require Face ID / Touch ID to unlock"**. State stored in `UserDefaults` (`sc.lock.enabled` — a non-secret boolean, cleared on reinstall), read at launch.
 - An `AppLockController` (`@Observable @MainActor`): on cold launch and `scenePhase` → `.active` (from background), if lock is enabled, present a blocking lock screen and call `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` (biometry with device-passcode fallback). On success, reveal the app; on failure, stay locked with a "Try again" button.
 - Enabling the toggle requires a successful biometric check first (so a user can't lock themselves out on a device without biometry/passcode). If `canEvaluatePolicy` is false, the toggle is disabled with an explanatory caption.
 - No backend. Hermetic-test seam: a launch argument (e.g. `-uiTestStub`) forces `AppLockController` to treat auth as unavailable/always-pass so UI tests are unaffected.
