@@ -143,7 +143,7 @@ struct ShellView: View {
                 MileageScreen(context: profiles.context, sync: sync,
                               userId: profiles.userId,
                               profileId: profiles.activeProfileId,
-                              startMonth: 7,
+                              startMonth: profiles.activeFinancialYearStartMonth(),
                               onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent)
                     .transition(.opacity)
@@ -154,7 +154,7 @@ struct ShellView: View {
                 WFHScreen(context: profiles.context, sync: sync,
                           userId: profiles.userId,
                           profileId: profiles.activeProfileId,
-                          startMonth: 7,
+                          startMonth: profiles.activeFinancialYearStartMonth(),
                           onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent)
                     .transition(.opacity)
@@ -314,7 +314,7 @@ struct ShellView: View {
                 userId: profiles.userId,
                 profileId: profiles.activeProfileId,
                 profileName: profiles.activeProfile?.name ?? "",
-                startMonth: 7,
+                startMonth: profiles.activeFinancialYearStartMonth(),
                 onOpenExport: { period in exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
                 onOpenWFH: { router.present(.wfh) }
@@ -570,7 +570,7 @@ struct ShellView: View {
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
         let now = Date()
-        let window = exportPeriod.window(now: now, startMonth: 7)
+        let window = exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId
         let td = FetchDescriptor<Transaction>(
