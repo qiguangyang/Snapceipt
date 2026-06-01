@@ -113,3 +113,37 @@ struct BarcodeRendererTests {
         #expect(LoyaltyCard.BarcodeFormat(symbology: .upce) == nil)
     }
 }
+
+@Suite("LoyaltyBrand")
+struct LoyaltyBrandTests {
+    @Test("catalog has the 9 seed brands and unique keys")
+    func uniqueKeys() {
+        let keys = LoyaltyBrand.catalog.map(\.key)
+        #expect(keys.count == 9)
+        #expect(Set(keys).count == keys.count)
+        #expect(keys.contains("everydayRewards"))
+        #expect(keys.contains("flybuys"))
+    }
+
+    @Test("every catalog brand has valid 6-hex colors")
+    func validHex() {
+        func isHex6(_ s: String) -> Bool {
+            guard s.hasPrefix("#") else { return false }
+            let body = s.dropFirst()
+            return body.count == 6 && UInt32(body, radix: 16) != nil
+        }
+        for b in LoyaltyBrand.catalog {
+            #expect(isHex6(b.color1), "bad color1 for \(b.key)")
+            #expect(isHex6(b.color2), "bad color2 for \(b.key)")
+            #expect(!b.name.isEmpty)
+            #expect(!b.monogram.isEmpty)
+        }
+    }
+
+    @Test("the custom brand is a distinct neutral path")
+    func customBrand() {
+        let c = LoyaltyBrand.custom
+        #expect(c.key == "custom")
+        #expect(LoyaltyBrand.catalog.contains(where: { $0.key == "custom" }) == false)
+    }
+}
