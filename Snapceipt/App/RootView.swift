@@ -217,6 +217,24 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .quotes {
+                QuoteListView(context: profiles.context, sync: sync, userId: profiles.userId,
+                              profileId: profiles.activeProfileId,
+                              onClose: { router.dismissOverlay() },
+                              onEdit: { router.openQuote($0) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .quoteEditor(id) = router.overlay {
+                QuoteEditorView(context: profiles.context, sync: sync, api: captureAPI,
+                                userId: profiles.userId, profileId: profiles.activeProfileId,
+                                quoteId: id,
+                                onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -301,6 +319,15 @@ struct ShellView: View {
                 }
                 .padding(.horizontal, 18).padding(.top, 12)
 
+                // BUSINESS-ONLY: the Quotes feature is gated on the active profile type.
+                if profiles.activeProfile?.type == ProfileType.business.rawValue {
+                    HStack(spacing: 12) {
+                        quickAction(title: "Create Quote", icon: "receipt", id: AccessibilityID.homeQuickQuote,
+                                    accent: accent) { router.present(.quotes) }
+                    }
+                    .padding(.horizontal, 18).padding(.top, 12)
+                }
+
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
                     userId: profiles.userId, profileId: profiles.activeProfileId,
@@ -367,7 +394,7 @@ struct ShellView: View {
             get: {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-                     .loyalty, .loyaltyAdd, .loyaltyCard:
+                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor:
                     return nil
                 default: return router.overlay
                 }
@@ -379,10 +406,12 @@ struct ShellView: View {
                 let fullScreen: Set<String> = [Overlay.capture.id, Overlay.mileage.id, Overlay.wfh.id,
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
-                                               Overlay.loyalty.id, Overlay.loyaltyAdd.id]
+                                               Overlay.loyalty.id, Overlay.loyaltyAdd.id,
+                                               Overlay.quotes.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
-                   !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard") {
+                   !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
+                   !cur.id.hasPrefix("quoteEditor") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -422,7 +451,7 @@ struct ShellView: View {
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-             .loyalty, .loyaltyAdd, .loyaltyCard:
+             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor:
             EmptyView()  // handled by the full-screen overlays
         }
     }

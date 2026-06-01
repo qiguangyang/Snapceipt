@@ -159,6 +159,7 @@ export const SYNCABLE_TYPES = [
   "smartRule",
   "budget",
   "loyaltyCard",
+  "client",
   "quote",
   "quoteLineItem",
   "mileageTrip",

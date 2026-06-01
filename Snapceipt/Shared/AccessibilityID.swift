@@ -135,4 +135,21 @@ enum AccessibilityID {
     static let loyaltyDetailScreen = "loyalty.detail.screen"
     static let loyaltyDetailBarcode = "loyalty.detail.barcode"
     static let loyaltyDetailDone = "loyalty.detail.done"
+
+    // Home quick action (F5)
+    static let homeQuickQuote = "home.quick.quote"
+
+    // Quotes (F5)
+    static let quotesScreen = "quotes.screen"
+    static let quoteRowPrefix = "quote.row."             // + quote.id
+    static let quotesAdd = "quotes.add"
+    static let quoteEditorScreen = "quote.editor.screen"
+    static let quoteEditorClient = "quote.editor.client"
+    static let quoteEditorAddLine = "quote.editor.addLine"
+    static let quoteLineRowPrefix = "quote.line.row."    // + line.id
+    static let quoteEditorGst = "quote.editor.gst"
+    static let quoteEditorSend = "quote.editor.send"
+    static let clientPickerScreen = "client.picker.screen"
+    static let clientPickerAdd = "client.picker.add"
+    static let clientRowPrefix = "client.row."           // + client.id
 }

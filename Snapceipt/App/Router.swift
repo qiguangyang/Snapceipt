@@ -22,6 +22,8 @@ enum Overlay: Equatable, Identifiable {
     case loyalty
     case loyaltyAdd
     case loyaltyCard(id: String)
+    case quotes
+    case quoteEditor(id: String?)   // nil id = create a new quote
 
     var id: String {
         switch self {
@@ -38,6 +40,8 @@ enum Overlay: Equatable, Identifiable {
         case .loyalty: return "loyalty"
         case .loyaltyAdd: return "loyaltyAdd"
         case .loyaltyCard(let id): return "loyaltyCard-\(id)"
+        case .quotes: return "quotes"
+        case .quoteEditor(let id): return "quoteEditor-\(id ?? "new")"
         }
     }
 }
@@ -84,6 +88,9 @@ enum Route: Equatable {
 
     /// Open the budget editor for `id` (nil = add). Used by row taps + tapped pushes.
     func openBudget(_ id: String?) { overlay = .budgetEditor(id: id) }
+
+    /// Open the quote editor for `id` (nil = create a new quote).
+    func openQuote(_ id: String?) { overlay = .quoteEditor(id: id) }
 
     /// Parse `snapceipt://budget/<id>` -> the budget id, or nil for any other URL.
     static func parseBudgetDeepLink(_ url: URL) -> String? {

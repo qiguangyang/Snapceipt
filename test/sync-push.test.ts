@@ -562,7 +562,7 @@ describe("POST /sync/push — logbook entities (vehicle, vehicleYear, extended m
 });
 
 describe("syncable table map", () => {
-  it("maps all 14 syncable entity types to a table (full coverage)", () => {
+  it("maps all 15 syncable entity types to a table (full coverage)", () => {
     const expected: Record<string, string> = {
       transaction: "transactions",
       lineItem: "line_items",
@@ -571,6 +571,7 @@ describe("syncable table map", () => {
       smartRule: "smart_rules",
       budget: "budgets",
       loyaltyCard: "loyalty_cards",
+      client: "clients",
       quote: "quotes",
       quoteLineItem: "quote_line_items",
       mileageTrip: "mileage_trips",
@@ -579,7 +580,7 @@ describe("syncable table map", () => {
       vehicle: "vehicles",
       vehicleYear: "vehicle_years",
     };
-    expect(SYNCABLE_TYPES).toHaveLength(14);
+    expect(SYNCABLE_TYPES).toHaveLength(15);
     for (const type of SYNCABLE_TYPES) {
       const meta = tableForEntityType(type);
       expect(meta, `missing table mapping for ${type}`).not.toBeNull();

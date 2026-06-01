@@ -23,6 +23,9 @@ protocol APIClient {
     /// PUT /devices/me — upsert this device's apns token / quiet-hours / timezone /
     /// push_enabled. Keyed by the X-Device-Id header (attached by makeRequest). (§4.2)
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse
+    /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), render the
+    /// PDF, email the client; returns the applied number/status/sentAt/totals. (§4.5)
+    func sendQuote(_ id: String) async throws -> SendQuoteResponse
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -131,6 +134,10 @@ final class LiveAPIClient: APIClient {
 
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         try await send("PUT", "/devices/me", body: body, authenticated: true)
+    }
+
+    func sendQuote(_ id: String) async throws -> SendQuoteResponse {
+        try await send("POST", "/quotes/\(id)/send", body: NoBody(), authenticated: true)
     }
 
     // MARK: - Request plumbing

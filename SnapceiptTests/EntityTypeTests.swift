@@ -3,9 +3,9 @@ import Testing
 
 @Suite("EntityType")
 struct EntityTypeTests {
-    @Test("has exactly the 14 syncable cases")
+    @Test("has exactly the 15 syncable cases")
     func count() {
-        #expect(EntityType.allCases.count == 14)
+        #expect(EntityType.allCases.count == 15)
     }
 
     @Test("raw values match the backend camelCase contract")
@@ -14,6 +14,7 @@ struct EntityTypeTests {
             "transaction", "lineItem", "profile", "category", "smartRule",
             "budget", "loyaltyCard", "quote", "quoteLineItem",
             "mileageTrip", "wfhLog", "taxSettings", "vehicle", "vehicleYear",
+            "client",
         ]
         #expect(EntityType.allCases.map(\.rawValue) == expected)
     }

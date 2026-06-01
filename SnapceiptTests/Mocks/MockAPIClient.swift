@@ -32,11 +32,13 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var uploadImageHandler: ((_ jpeg: Data, _ transactionId: String?, _ width: Int, _ height: Int) async throws -> UploadedImage)?
     var exportHandler: ((_ profileId: String, _ format: String, _ from: String, _ to: String, _ toEmail: String?) async throws -> ExportResult)?
     var updateDeviceHandler: ((UpdateDeviceBody) async throws -> UpdateDeviceResponse)?
+    var sendQuoteHandler: ((String) async throws -> SendQuoteResponse)?
 
     private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
     private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
     private(set) var updateDeviceCalls: [UpdateDeviceBody] = []
+    private(set) var sendQuoteCalls: [String] = []
 
     // MARK: Recorded calls
 
@@ -118,6 +120,12 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         updateDeviceCalls.append(body)
         guard let h = updateDeviceHandler else { throw MockAPIClientError.unscripted }
         return try await h(body)
+    }
+
+    func sendQuote(_ id: String) async throws -> SendQuoteResponse {
+        sendQuoteCalls.append(id)
+        guard let h = sendQuoteHandler else { throw MockAPIClientError.unscripted }
+        return try await h(id)
     }
 }
 

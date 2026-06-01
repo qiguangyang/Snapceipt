@@ -186,6 +186,11 @@ final class PreviewAPIClient: APIClient {
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "preview-device")
     }
+    func sendQuote(_ id: String) async throws -> SendQuoteResponse {
+        SendQuoteResponse(number: "SN-0001", sentAt: 1_790_000_000_000, status: "sent",
+                          subtotalCents: 0, gstCents: 0, totalCents: 0,
+                          pdfUrl: nil, expiresAt: nil, emailed: false)
+    }
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))

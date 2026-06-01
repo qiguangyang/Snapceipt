@@ -56,5 +56,10 @@ final class StubAPIClient: APIClient {
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "stub-device")
     }
+    func sendQuote(_ id: String) async throws -> SendQuoteResponse {
+        SendQuoteResponse(number: "SN-0001", sentAt: 1_790_000_000_000, status: "sent",
+                          subtotalCents: 40_000, gstCents: 4_000, totalCents: 44_000,
+                          pdfUrl: "/quotes/dl/stub-token", expiresAt: 1_790_000_000_000, emailed: false)
+    }
 }
 #endif
