@@ -28,7 +28,7 @@ struct AlertFeedTests {
         #expect(items.count == 1)
         #expect(items[0].id == "b1-2026-06")
         #expect(items[0].title == "Budget alert: Meals")
-        #expect(items[0].body == "$95.00 of $100.00 (90%)")
+        #expect(items[0].body == "$95.00 of $100.00 (95%)")  // actual spend %, mirrors the push body
         #expect(items[0].firedAt == ms("2026-06-10"))
     }
 

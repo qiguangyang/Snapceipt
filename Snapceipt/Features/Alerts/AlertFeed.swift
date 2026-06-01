@@ -40,11 +40,17 @@ enum AlertFeed {
             guard let sent = inp.alertSentAt, monthKey(of: sent) == nowKey else { return nil }
             let thresholdCents = inp.capCents * inp.alertThresholdPct / 100
             guard inp.spentCents >= thresholdCents else { return nil }
+            // Display the ACTUAL spend percentage — round(spent/cap*100), mirroring the
+            // backend push body (budgetAlert.ts) byte-for-byte — so the in-app feed shows
+            // the same number as the push the user just tapped (not the trigger threshold).
+            let spendPct = inp.capCents > 0
+                ? Int((Double(inp.spentCents) / Double(inp.capCents) * 100).rounded())
+                : 0
             return Item(
                 id: "\(inp.budgetId)-\(nowKey)",
                 budgetId: inp.budgetId,
                 title: "Budget alert: \(inp.label)",
-                body: "\(fmt(inp.spentCents)) of \(fmt(inp.capCents)) (\(inp.alertThresholdPct)%)",
+                body: "\(fmt(inp.spentCents)) of \(fmt(inp.capCents)) (\(spendPct)%)",
                 firedAt: sent)
         }
         .sorted { $0.firedAt > $1.firedAt }
