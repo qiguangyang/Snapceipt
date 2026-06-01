@@ -25,7 +25,7 @@ const PURGE_ORDER = [
   "mileage_trips", "vehicle_years",
   "vehicles",
   "categories",
-  "quotes",
+  "quotes", // references profiles
   "clients", "tax_settings", "loyalty_cards", "wfh_logs",
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
@@ -65,9 +65,12 @@ accountRoutes.post("/users/me/email", validate("json", emailBody), async (c) => 
 
   const code = sixDigitCode();
   const codeHash = await sha256Hex(code);
-  await c.env.KV.put(`ec:${userId}`, JSON.stringify({ codeHash, newEmail }), {
-    expirationTtl: EMAIL_CODE_TTL_SECONDS,
-  });
+  const expiresAtMs = nowMs() + EMAIL_CODE_TTL_SECONDS * 1000;
+  await c.env.KV.put(
+    `ec:${userId}`,
+    JSON.stringify({ codeHash, newEmail, attempts: 0, expiresAtMs }),
+    { expirationTtl: EMAIL_CODE_TTL_SECONDS },
+  );
 
   const e2e = c.env.E2E_TEST_MODE === "1";
   if (e2e) {
@@ -84,8 +87,29 @@ accountRoutes.post("/users/me/email/verify", validate("json", verifyBody), async
 
   const raw = await c.env.KV.get(`ec:${userId}`);
   if (!raw) throw new ApiError("GONE", "No pending email change");
-  const { codeHash, newEmail } = JSON.parse(raw) as { codeHash: string; newEmail: string };
-  if ((await sha256Hex(code)) !== codeHash) throw new ApiError("VALIDATION_FAILED", "Incorrect code");
+  const pending = JSON.parse(raw) as {
+    codeHash: string;
+    newEmail: string;
+    attempts: number;
+    expiresAtMs: number;
+  };
+  const { codeHash, newEmail } = pending;
+
+  if ((await sha256Hex(code)) !== codeHash) {
+    const attempts = (pending.attempts ?? 0) + 1;
+    if (attempts >= 5) {
+      await c.env.KV.delete(`ec:${userId}`);
+      throw new ApiError("GONE", "Too many attempts, request a new code");
+    }
+    const now = nowMs();
+    const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - now) / 1000));
+    await c.env.KV.put(
+      `ec:${userId}`,
+      JSON.stringify({ ...pending, attempts }),
+      { expirationTtl: ttl },
+    );
+    throw new ApiError("VALIDATION_FAILED", "Incorrect code");
+  }
 
   const taken = await c.env.DB.prepare(
     "SELECT 1 FROM users WHERE email = ? AND id <> ? AND deleted_at IS NULL",

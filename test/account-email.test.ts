@@ -100,4 +100,37 @@ describe("POST /users/me/email (+ /verify)", () => {
     // 400 wrong code OR 410 if the random code happened to be 000000 (then it was consumed) — accept either failure
     expect([400, 410]).toContain(ver.status);
   });
+
+  it("burns the code after 5 wrong attempts (brute-force cap -> 410 GONE)", async () => {
+    const spy = installEmailSpy();
+    const { bearer } = await seedUser();
+    await SELF.fetch("https://x/users/me/email", {
+      method: "POST", headers: { authorization: bearer, "content-type": "application/json" },
+      body: JSON.stringify({ newEmail: "new@example.com" }),
+    });
+    const realCode = spy.lastCode();
+    // Choose a guaranteed-wrong 6-digit code (never equal to the issued one).
+    const wrong = realCode === "000000" ? "111111" : "000000";
+
+    const verify = (code: string) =>
+      SELF.fetch("https://x/users/me/email/verify", {
+        method: "POST", headers: { authorization: bearer, "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+    // Attempts 1-4: each wrong guess is a 400 VALIDATION_FAILED, code still live.
+    for (let i = 1; i <= 4; i++) {
+      const r = await verify(wrong);
+      expect(r.status).toBe(400);
+    }
+    // Attempt 5: hits the cap (attempts >= 5) -> code burned, 410 GONE.
+    const fifth = await verify(wrong);
+    expect(fifth.status).toBe(410);
+    expect(((await fifth.json()) as any).error.code).toBe("GONE");
+
+    // Subsequent verify (even with the CORRECT code) is rejected: KV key is gone.
+    const after = await verify(realCode);
+    expect(after.status).toBe(410);
+    expect(((await after.json()) as any).error.code).toBe("GONE");
+  });
 });
