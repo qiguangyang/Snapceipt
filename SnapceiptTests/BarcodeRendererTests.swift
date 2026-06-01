@@ -58,4 +58,40 @@ struct BarcodeRendererTests {
                     "expected nil for empty \(f.rawValue)")
         }
     }
+
+    // MARK: - Task 3: EAN-13 / UPC-A
+
+    @Test("mod-10 check digit for a known EAN-13 (5901234123457 -> 7)")
+    func ean13CheckDigit() {
+        #expect(BarcodeRenderer.ean13CheckDigit("590123412345") == 7)
+    }
+
+    @Test("EAN-13 module string is 95 wide with guards and centre guard")
+    func ean13ModuleString() {
+        let mods = BarcodeRenderer.ean13Modules("5901234123457")
+        #expect(mods != nil)
+        guard let mods else { return }
+        #expect(mods.count == 95)
+        #expect(mods.hasPrefix("101"))   // left guard
+        #expect(mods.hasSuffix("101"))   // right guard
+        let centre = String(Array(mods)[45..<50])
+        #expect(centre == "01010")
+    }
+
+    @Test("EAN-13 renders a non-nil image for a valid 13-digit value")
+    func ean13ValidImage() {
+        #expect(BarcodeRenderer.image(value: "5901234123457", format: .ean13, scale: 3) != nil)
+    }
+
+    @Test("UPC-A (12 digits) renders as EAN-13 with a leading zero")
+    func upcAImage() {
+        #expect(BarcodeRenderer.image(value: "036000291452", format: .ean13, scale: 3) != nil)
+    }
+
+    @Test("EAN-13 rejects wrong length, non-digit, and bad checksum -> nil")
+    func ean13Invalid() {
+        #expect(BarcodeRenderer.image(value: "123", format: .ean13, scale: 3) == nil)
+        #expect(BarcodeRenderer.image(value: "59012341234A7", format: .ean13, scale: 3) == nil)
+        #expect(BarcodeRenderer.image(value: "5901234123458", format: .ean13, scale: 3) == nil) // bad checksum
+    }
 }

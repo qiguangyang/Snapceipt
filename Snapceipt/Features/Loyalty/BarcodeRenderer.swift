@@ -56,7 +56,99 @@ enum BarcodeRenderer {
         return f.outputImage ?? image
     }
 
-    // MARK: - EAN-13 (filled in Task 3)
+    // MARK: - EAN-13 / UPC-A (hand-rolled)
 
-    static func ean13(value: String, scale: CGFloat) -> UIImage? { nil }
+    /// L-code (left, parity even) for digits 0-9 — 7 modules each.
+    private static let lCode = [
+        "0001101","0011001","0010011","0111101","0100011",
+        "0110001","0101111","0111011","0110111","0001011",
+    ]
+    /// G-code (left, parity odd).
+    private static let gCode = [
+        "0100111","0110011","0011011","0100001","0011101",
+        "0111001","0000101","0010001","0001001","0010111",
+    ]
+    /// R-code (right) — the complement of L-code.
+    private static let rCode = [
+        "1110010","1100110","1101100","1000010","1011100",
+        "1001110","1010000","1000100","1001000","1110100",
+    ]
+    /// Parity pattern for the left 6 digits, selected by the first digit.
+    private static let parity = [
+        "LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG",
+        "LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL",
+    ]
+
+    /// mod-10 check digit for the first 12 digits of an EAN-13 (odd positions ×1,
+    /// even positions ×3, from the left, 0-indexed). Returns nil if not 12 digits.
+    static func ean13CheckDigit(_ first12: String) -> Int? {
+        let d = first12.compactMap { $0.wholeNumberValue }
+        guard d.count == 12 else { return nil }
+        var sum = 0
+        for (i, n) in d.enumerated() { sum += (i % 2 == 0) ? n : n * 3 }
+        return (10 - (sum % 10)) % 10
+    }
+
+    /// Normalize a raw value to a valid 13-digit EAN-13 string (UPC-A 12 digits get a
+    /// leading 0; a 12-digit value is treated as first-12 + computed check). Returns
+    /// nil for any non-digit / wrong-length / bad-checksum input.
+    static func normalizedEAN13(_ raw: String) -> String? {
+        let digits = raw.filter { $0.isNumber }
+        guard digits.count == raw.count else { return nil }   // reject non-digit chars
+        let value: String
+        switch digits.count {
+        case 13:
+            value = digits
+        case 12:
+            value = "0" + digits
+        default:
+            return nil
+        }
+        let first12 = String(value.prefix(12))
+        let given = value.last!.wholeNumberValue!
+        guard let check = ean13CheckDigit(first12), check == given else { return nil }
+        return value
+    }
+
+    /// The 95-module bit string (1 = bar) for a valid 13-digit EAN-13 value, or nil.
+    static func ean13Modules(_ value: String) -> String? {
+        guard let v = normalizedEAN13(value) else { return nil }
+        let d = v.compactMap { $0.wholeNumberValue }
+        let pat = parity[d[0]]   // first digit picks the L/G pattern for the left 6
+        var s = "101"            // left guard
+        for i in 1...6 {
+            s += (Array(pat)[i - 1] == "L") ? lCode[d[i]] : gCode[d[i]]
+        }
+        s += "01010"            // centre guard
+        for i in 7...12 { s += rCode[d[i]] }
+        s += "101"              // right guard
+        return s
+    }
+
+    /// Draw the EAN-13 modules into a CGContext: fixed module width, #111 on #fff,
+    /// with a >=7-module quiet zone each side. No interpolation (we draw exact rects).
+    static func ean13(value: String, scale: CGFloat) -> UIImage? {
+        guard let mods = ean13Modules(value) else { return nil }
+        let module = Swift.max(1, scale)
+        let quiet: CGFloat = 7 * module
+        let width = quiet * 2 + CGFloat(mods.count) * module
+        let height = CGFloat(80) * (module / 2)   // proportional, ~POS aspect
+        let size = CGSize(width: width, height: Swift.max(40, height))
+
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            let cg = ctx.cgContext
+            cg.interpolationQuality = .none
+            cg.setFillColor(UIColor.white.cgColor)
+            cg.fill(CGRect(origin: .zero, size: size))
+            cg.setFillColor(UIColor(red: 0x11/255.0, green: 0x11/255.0, blue: 0x11/255.0, alpha: 1).cgColor)
+            var x = quiet
+            for ch in mods {
+                if ch == "1" {
+                    cg.fill(CGRect(x: x, y: 0, width: module, height: size.height))
+                }
+                x += module
+            }
+        }
+    }
 }
