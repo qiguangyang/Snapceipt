@@ -140,6 +140,16 @@ struct SendQuoteResponse: Decodable {
     let emailed: Bool
 }
 
+// MARK: - Email-in (spec §3.1 / §3.4)
+
+/// GET /profiles/:id/inbox + POST .../rotate — the per-profile inbox alias. The
+/// client treats `address` as opaque (the server owns formatting).
+struct InboxAddressResponse: Decodable, Equatable {
+    let profileId: String
+    let token: String
+    let address: String
+}
+
 // MARK: - Sync push
 
 /// One mutation in a /sync/push batch.

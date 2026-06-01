@@ -26,6 +26,10 @@ protocol APIClient {
     /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), render the
     /// PDF, email the client; returns the applied number/status/sentAt/totals. (§4.5)
     func sendQuote(_ id: String) async throws -> SendQuoteResponse
+    /// GET /profiles/:id/inbox — the per-profile email-in alias (minted on first read). (§3.1)
+    func profileInbox(profileId: String) async throws -> InboxAddressResponse
+    /// POST /profiles/:id/inbox/rotate — replace the alias; the old token stops resolving. (§3.1)
+    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -138,6 +142,14 @@ final class LiveAPIClient: APIClient {
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         try await send("POST", "/quotes/\(id)/send", body: NoBody(), authenticated: true)
+    }
+
+    func profileInbox(profileId: String) async throws -> InboxAddressResponse {
+        try await send("GET", "/profiles/\(profileId)/inbox", body: NoBody(), authenticated: true)
+    }
+
+    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
+        try await send("POST", "/profiles/\(profileId)/inbox/rotate", body: NoBody(), authenticated: true)
     }
 
     // MARK: - Request plumbing

@@ -33,12 +33,16 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var exportHandler: ((_ profileId: String, _ format: String, _ from: String, _ to: String, _ toEmail: String?) async throws -> ExportResult)?
     var updateDeviceHandler: ((UpdateDeviceBody) async throws -> UpdateDeviceResponse)?
     var sendQuoteHandler: ((String) async throws -> SendQuoteResponse)?
+    var profileInboxHandler: ((String) async throws -> InboxAddressResponse)?
+    var rotateProfileInboxHandler: ((String) async throws -> InboxAddressResponse)?
 
     private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
     private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
     private(set) var updateDeviceCalls: [UpdateDeviceBody] = []
     private(set) var sendQuoteCalls: [String] = []
+    private(set) var profileInboxCalls: [String] = []
+    private(set) var rotateProfileInboxCalls: [String] = []
 
     // MARK: Recorded calls
 
@@ -126,6 +130,17 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         sendQuoteCalls.append(id)
         guard let h = sendQuoteHandler else { throw MockAPIClientError.unscripted }
         return try await h(id)
+    }
+
+    func profileInbox(profileId: String) async throws -> InboxAddressResponse {
+        profileInboxCalls.append(profileId)
+        guard let h = profileInboxHandler else { throw MockAPIClientError.unscripted }
+        return try await h(profileId)
+    }
+    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
+        rotateProfileInboxCalls.append(profileId)
+        guard let h = rotateProfileInboxHandler else { throw MockAPIClientError.unscripted }
+        return try await h(profileId)
     }
 }
 
