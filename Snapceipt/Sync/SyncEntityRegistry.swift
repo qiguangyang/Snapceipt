@@ -47,6 +47,7 @@ final class SyncEntityRegistry {
         register(.taxSettings, TaxSettingsSyncMapper())
         register(.vehicle, VehicleSyncMapper())
         register(.vehicleYear, VehicleYearSyncMapper())
+        register(.client, ClientSyncMapper())
     }
 
     private func register<M: SyncRowMapper>(_ type: EntityType, _ mapper: M) {
@@ -777,6 +778,36 @@ private struct VehicleYearSyncMapper: SyncRowMapper {
 }
 
 extension VehicleYear: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - Client
+
+private struct ClientSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = Client(userId: env.userId, profileId: env.profileId,
+                           name: env.string("name") ?? "")
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        row.profileId = env.profileId
+        if let v = env.string("name") { row.name = v }
+        if let v = env.string("email") { row.email = v }
+    }
+
+    func payload(_ r: Client) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["name"] = .string(r.name)
+        f["email"] = str(r.email)
+        return f
+    }
+}
+
+extension Client: SyncableMutableEnvelope, MutableSyncRow {
     func setRev(_ rev: Int) { self.rev = rev }
     func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
 }
