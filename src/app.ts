@@ -13,6 +13,7 @@ import { imageRoutes } from "./routes/images";
 import { extractRoutes } from "./routes/extract";
 import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
+import { inboxRoutes } from "./routes/inbox";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -74,6 +75,8 @@ app.use("/export/*", rateLimit("export"));
 // falls back to IP-keyed limiting on the public endpoint.
 app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
+// Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
+app.use("/profiles/*", rateLimit("inbox"));
 
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
@@ -92,4 +95,6 @@ app.route("/extract", extractRoutes);
 app.route("/export", exportRoutes);
 // Protected: POST /quotes/:id/send (+ public GET /quotes/dl/:token via PUBLIC_PATHS).
 app.route("/quotes", quotesRoutes);
+// Protected: per-profile inbox alias (GET mint + POST rotate).
+app.route("/profiles", inboxRoutes);
 app.route("/", miscRoutes);
