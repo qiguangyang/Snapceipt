@@ -136,7 +136,7 @@ Maps a finalized `ExtractedReceipt` (amounts in **dollars**) into D1 rows (amoun
 | `merchant` | `receipt.merchant` (`''` on the failed path) |
 | `cat_key` | `coerceCatKey(receipt.category)` — lowercase; if ∈ `{meals,groceries,fuel,software,office,home,health,travel,income,custom}` use it, else `'office'` |
 | `category_id` | `NULL` |
-| `amount_cents` | `Math.round(receipt.total * 100)` (`0` on failed) |
+| `amount_cents` | **signed** to match the device convention (expense `< 0`, income `> 0`): `sign = cat_key === 'income' ? +1 : -1`; `amount_cents = sign * Math.round(receipt.total * 100)` (`0` on failed). Storing a bare positive value would make every emailed expense appear as income in Reports/Budgets/exports. |
 | `currency` | `'AUD'` |
 | `txn_date` | `receipt.date` (today `YYYY-MM-DD` on failed) |
 | `mode` | profile `type === 'business' ? 'business' : 'personal'` |
@@ -154,7 +154,7 @@ Maps a finalized `ExtractedReceipt` (amounts in **dollars**) into D1 rows (amoun
 
 `receipt_images` row (always — preserves the image even on failure): `r2_key`, `content_type`, `byte_size`, `page_index=0`, `ocr_text` (the OCR output, or `NULL` if OCR itself failed), `ocr_source='workers_ai'`, `extraction_json=JSON.stringify(receipt)` (success) or `NULL` (failed), `extraction_model` (the model id or `NULL`), `transaction_id` (linked), `profile_id`, `source='email_in'`, `rev=0`, `last_edited_device_id='email_in'`.
 
-All three tables ARE in `SYNCABLE_TABLES` already, so the rows pull to the device on the next `/sync/pull` with no registry change.
+`transactions` and `line_items` ARE in `SYNCABLE_TABLES`, so those rows pull to the device on the next `/sync/pull` and drive the iOS failed-first list with no registry change. `receipt_images` is **not** syncable (there is no on-device `ReceiptImage` `@Model`) — the inbound path writes it for server-side audit/preservation only, so the emailed image itself is not viewable on-device (out of scope for the minimal iOS surface in §5).
 
 ### 3.4 iOS API surface
 
