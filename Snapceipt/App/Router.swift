@@ -26,6 +26,13 @@ enum Overlay: Equatable, Identifiable {
     case quoteEditor(id: String?)   // nil id = create a new quote
     case emailIn
     case emailInReview(id: String)
+    case tax
+    case categories
+    case ruleEditor(id: String?)   // nil = new rule
+    case profileDetail(id: String)
+    case account
+    case privacy
+    case changeEmail
 
     var id: String {
         switch self {
@@ -46,6 +53,13 @@ enum Overlay: Equatable, Identifiable {
         case .quoteEditor(let id): return "quoteEditor-\(id ?? "new")"
         case .emailIn: return "emailIn"
         case .emailInReview(let id): return "emailInReview-\(id)"
+        case .tax: return "tax"
+        case .categories: return "categories"
+        case .ruleEditor(let id): return "ruleEditor-\(id ?? "new")"
+        case .profileDetail(let id): return "profileDetail-\(id)"
+        case .account: return "account"
+        case .privacy: return "privacy"
+        case .changeEmail: return "changeEmail"
         }
     }
 }

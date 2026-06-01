@@ -102,10 +102,32 @@ struct MeResponse: Decodable {
     let devices: [DeviceDTO]
 }
 
-/// A registered device row (only `id` is contractually guaranteed this phase).
-struct DeviceDTO: Decodable {
+/// A registered device row. `GET /auth/me` returns the full shape (§8.2); only `id`
+/// is contractually guaranteed, so the rest default to nil for source-compatibility.
+struct DeviceDTO: Decodable, Equatable {
     let id: String
+    var platform: String? = nil
+    var model: String? = nil
+    var osVersion: String? = nil
+    var hasApnsToken: Bool? = nil
+    var pushEnabled: Bool? = nil
+    var lastSeenAt: Int? = nil
+    var createdAt: Int? = nil
 }
+
+// MARK: - Account & security (spec §8)
+
+/// POST /users/me/email body.
+struct EmailChangeBody: Encodable { let newEmail: String }
+/// POST /users/me/email/verify body.
+struct VerifyCodeBody: Encodable { let code: String }
+/// POST /users/me/email response: `{ sent, devCode? }` (devCode only in E2E_TEST_MODE).
+struct EmailChangeRequested: Decodable, Equatable { let sent: Bool; let devCode: String? }
+/// The account user returned by the verify-email response (distinct from `SessionUser`,
+/// which lacks `plan`).
+struct AccountUser: Decodable, Equatable { let id: String; let email: String?; let displayName: String?; let plan: String }
+/// POST /users/me/email/verify response: `{ user }`.
+struct AccountUserResponse: Decodable, Equatable { let user: AccountUser }
 
 /// PUT /devices/me body (§4.2). All fields optional; the encoder OMITS nil keys
 /// (Swift's default for `Optional` Encodable), so a quiet-hours-only update never

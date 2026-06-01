@@ -22,6 +22,13 @@ struct SnapceiptApp: App {
     @State private var sync: SyncEngine
     @State private var profiles: ProfilesStore
 
+    /// Biometric app-lock controller (spec §6). Owned here so the lock state is a
+    /// single shared instance across the Privacy toggle (writes `isEnabled`) and the
+    /// `RootView` lock gate (reads `isLocked`). Under `-uiTestStub` it is stub-bypassed
+    /// (`makeAppLock` injects `canEvaluate: { false }`) so seeded UI-test launches
+    /// never block; in Release it uses the real `LAContext`-backed evaluator.
+    @State private var appLock: AppLockController
+
     /// UIKit app delegate bridging APNs token registration + notification taps. The
     /// Router/APIClient refs it routes through are injected from `init()` below.
     @UIApplicationDelegateAdaptor(NotificationDelegate.self) private var notificationDelegate
@@ -37,9 +44,13 @@ struct SnapceiptApp: App {
         let api: APIClient = launch.makeAPIClient(auth: auth)
         let container = launch.makeContainer()
         launch.applySeedIfNeeded(authStore: auth, context: container.mainContext)
+        // Stub-bypassed under -uiTestStub (canEvaluate:{false}) so the lock gate
+        // never blocks a seeded UI-test launch.
+        let appLock = launch.makeAppLock()
 #else
         let api: APIClient = LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.app")!, auth: auth)
         let container = makeSnapceiptContainer()
+        let appLock = AppLockController()
 #endif
         self.container = container
         // Share the container's main context across the sync/profiles stores and the
@@ -62,6 +73,7 @@ struct SnapceiptApp: App {
         _reachability = State(initialValue: Reachability())
         _sync = State(initialValue: sync)
         _profiles = State(initialValue: profiles)
+        _appLock = State(initialValue: appLock)
 
         // Inject the SAME Router + APIClient instances into the APNs delegate (UIKit
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
@@ -79,6 +91,7 @@ struct SnapceiptApp: App {
                 .environment(reachability)
                 .environment(sync)
                 .environment(profiles)
+                .environment(appLock)
                 .modelContainer(container)
                 .onOpenURL { url in
                     // Budget deep-link (snapceipt://budget/<id>) routes to the editor first.

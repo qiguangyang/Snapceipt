@@ -14,6 +14,7 @@ import { extractRoutes } from "./routes/extract";
 import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
 import { inboxRoutes } from "./routes/inbox";
+import { accountRoutes } from "./routes/account";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -77,6 +78,9 @@ app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
 // Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
 app.use("/profiles/*", rateLimit("inbox"));
+// Account ops (change email / delete account) — tight per-user tier. Auth-gated.
+app.use("/users/*", rateLimit("account"));
+app.use("/account", rateLimit("account"));
 
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
@@ -97,4 +101,6 @@ app.route("/export", exportRoutes);
 app.route("/quotes", quotesRoutes);
 // Protected: per-profile inbox alias (GET mint + POST rotate).
 app.route("/profiles", inboxRoutes);
+// Protected: account ops (change email via code, delete account).
+app.route("/", accountRoutes);
 app.route("/", miscRoutes);

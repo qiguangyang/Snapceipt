@@ -10,6 +10,7 @@ export const ERROR = {
   FORBIDDEN: 403,
   RATE_LIMITED: 429,
   CONFLICT: 409,
+  GONE: 410,
   NOT_IMPLEMENTED: 501,
   INTERNAL: 500,
 } as const;

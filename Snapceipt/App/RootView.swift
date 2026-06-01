@@ -11,12 +11,16 @@ import SwiftData
 /// - signed in but no profile → `OnboardingView`
 /// - signed in with a profile → `ShellView` (TabBar + tabs + overlays + cross-cutting)
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthViewModel.self) private var authVM
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
     @Environment(ToastCenter.self) private var toasts
     @Environment(Reachability.self) private var reachability
+    /// Shared biometric app-lock controller, injected from `SnapceiptApp` (spec §6).
+    /// The `.signedIn` shell is wrapped behind a `LockScreen` gated on `isLocked`.
+    @Environment(AppLockController.self) private var appLock
 
     /// Live count of non-deleted profiles drives the "needs onboarding" gate.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
@@ -31,13 +35,30 @@ struct RootView: View {
                         // which re-renders this view straight into the shell.
                     })
                 } else {
-                    ShellView(
-                        router: router,
-                        profiles: profiles,
-                        sync: sync,
-                        toasts: toasts,
-                        reachability: reachability
-                    )
+                    // Gate the authed shell behind the biometric lock (spec §6): lock on
+                    // cold launch and on background→active; the LockScreen covers the shell
+                    // until `appLock.unlock()` clears `isLocked`. Under -uiTestStub the
+                    // controller's canEvaluate is false + isEnabled defaults false, so the
+                    // gate never blocks seeded UI-test launches.
+                    ZStack {
+                        ShellView(
+                            router: router,
+                            profiles: profiles,
+                            sync: sync,
+                            toasts: toasts,
+                            reachability: reachability
+                        )
+                        if appLock.isLocked {
+                            LockScreen(onUnlock: { Task { await appLock.unlock() } })
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: appLock.isLocked)
+                    .task { appLock.lockIfEnabled() }                 // cold launch
+                    .onChange(of: scenePhase) { _, phase in
+                        // Require an unlock when returning from background.
+                        if phase == .background { appLock.lockIfEnabled() }
+                    }
                 }
             case .requestingLink:
                 // A link request is in flight — keep the wait screen up so the UI does
@@ -70,6 +91,10 @@ struct RootView: View {
 struct ShellView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthStore.self) private var auth
+    @Environment(AuthViewModel.self) private var authVM
+    /// The shared app-lock controller, injected from `SnapceiptApp`. The Privacy
+    /// toggle writes `isEnabled` here; `RootView` reads `isLocked` to gate the shell.
+    @Environment(AppLockController.self) private var appLock
 
     @Bindable var router: Router
     @Bindable var profiles: ProfilesStore
@@ -142,7 +167,7 @@ struct ShellView: View {
                 MileageScreen(context: profiles.context, sync: sync,
                               userId: profiles.userId,
                               profileId: profiles.activeProfileId,
-                              startMonth: 7,
+                              startMonth: profiles.activeFinancialYearStartMonth(),
                               onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent)
                     .transition(.opacity)
@@ -153,7 +178,7 @@ struct ShellView: View {
                 WFHScreen(context: profiles.context, sync: sync,
                           userId: profiles.userId,
                           profileId: profiles.activeProfileId,
-                          startMonth: 7,
+                          startMonth: profiles.activeFinancialYearStartMonth(),
                           onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent)
                     .transition(.opacity)
@@ -254,6 +279,57 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .tax {
+                TaxSettingsView(profiles: profiles, sync: sync, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .categories {
+                CategoriesView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               onEditRule: { router.present(.ruleEditor(id: $0)) },
+                               onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .ruleEditor(id) = router.overlay {
+                RuleEditorView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               ruleId: id, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .profileDetail(id) = router.overlay {
+                ProfileDetailView(profiles: profiles, sync: sync, profileId: id,
+                                  onClose: { router.dismissOverlay() },
+                                  onExport: { router.present(.export) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .account {
+                AccountView(api: captureAPI, auth: auth, authVM: authVM,
+                            onChangeEmail: { router.present(.changeEmail) },
+                            onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .changeEmail {
+                ChangeEmailView(api: captureAPI, auth: auth, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .privacy {
+                PrivacyView(appLock: appLock, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -282,7 +358,7 @@ struct ShellView: View {
                 userId: profiles.userId,
                 profileId: profiles.activeProfileId,
                 profileName: profiles.activeProfile?.name ?? "",
-                startMonth: 7,
+                startMonth: profiles.activeFinancialYearStartMonth(),
                 onOpenExport: { period in exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
                 onOpenWFH: { router.present(.wfh) }
@@ -290,9 +366,20 @@ struct ShellView: View {
             .environment(\.accent, accent)
         case .profile:
             ProfileTabView(
+                profiles: profiles,
+                userName: auth.session?.displayName ?? "You",
+                userEmail: auth.session?.email,
                 onOpenNotifications: { router.present(.notificationSettings) },
                 onOpenBudgets: { router.present(.budgets) },
-                onOpenEmailIn: { router.present(.emailIn) }
+                onOpenEmailIn: { router.present(.emailIn) },
+                onOpenTax: { router.present(.tax) },
+                onOpenCategories: { router.present(.categories) },
+                onOpenExport: { router.present(.export) },
+                onOpenPrivacy: { router.present(.privacy) },
+                onOpenAccount: { router.present(.account) },
+                onOpenProfileDetail: { router.present(.profileDetail(id: $0)) },
+                onAddProfile: { router.present(.addProfile) },
+                onSignOut: { Task { await authVM.signOut() } }
             )
             .environment(\.accent, accent)
         case .snap:
@@ -415,7 +502,9 @@ struct ShellView: View {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
-                     .emailIn, .emailInReview:
+                     .emailIn, .emailInReview,
+                     .tax, .categories, .ruleEditor, .profileDetail,
+                     .account, .privacy, .changeEmail:
                     return nil
                 default: return router.overlay
                 }
@@ -428,11 +517,14 @@ struct ShellView: View {
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
-                                               Overlay.quotes.id, Overlay.emailIn.id]
+                                               Overlay.quotes.id, Overlay.emailIn.id,
+                                               Overlay.tax.id, Overlay.categories.id,
+                                               Overlay.account.id, Overlay.privacy.id, Overlay.changeEmail.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
-                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview") {
+                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview"),
+                   !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -473,8 +565,10 @@ struct ShellView: View {
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
-             .emailIn, .emailInReview:
-            EmptyView()  // handled by the full-screen overlays
+             .emailIn, .emailInReview,
+             .tax, .categories, .ruleEditor, .profileDetail,
+             .account, .privacy, .changeEmail:
+            EmptyView()  // handled by the full-screen overlays (overlay blocks added in Task 5)
         }
     }
 
@@ -523,7 +617,7 @@ struct ShellView: View {
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
         let now = Date()
-        let window = exportPeriod.window(now: now, startMonth: 7)
+        let window = exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId
         let td = FetchDescriptor<Transaction>(
@@ -576,6 +670,49 @@ struct ShellView: View {
     }
 }
 
+/// Full-screen biometric lock cover (spec §6). Shown over the authed shell whenever
+/// `AppLockController.isLocked` is true (cold launch + return-from-background while the
+/// lock is enabled). Opaque `Palette.cream` so the underlying shell is hidden, with the
+/// app mark + an Unlock button that re-runs `LAContext` via `onUnlock`.
+struct LockScreen: View {
+    let onUnlock: () -> Void
+
+    var body: some View {
+        ZStack {
+            Palette.cream.ignoresSafeArea()
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle().fill(Palette.paper2).frame(width: 88, height: 88)
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 36, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                }
+                Text("Snapceipt is locked")
+                    .font(.display(22, .bold)).foregroundStyle(Palette.ink)
+                Text("Unlock with Face ID / Touch ID to continue.")
+                    .font(.ui(14)).foregroundStyle(Palette.ink2)
+                    .multilineTextAlignment(.center)
+                Button(action: onUnlock) {
+                    Label("Unlock", systemImage: "faceid")
+                        .font(.ui(16, .semibold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 22).padding(.vertical, 13)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Palette.line2, lineWidth: 1))
+                        .cardShadow()
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.appLockUnlock)
+                .padding(.top, 6)
+            }
+            .padding(.horizontal, 32)
+        }
+        .accessibilityElement(children: .contain)
+        .onAppear { onUnlock() }   // auto-prompt biometrics the moment the cover appears
+    }
+}
+
 /// Shared "yyyy-MM-dd" UTC formatter for export range parsing/formatting.
 enum ExportDateFormatter {
     static let shared: DateFormatter = {
@@ -603,6 +740,7 @@ enum ExportDateFormatter {
         .environment(engine)
         .environment(toast)
         .environment(Reachability())
+        .environment(AppLockController(canEvaluate: { false }, evaluate: { true }))
         .modelContainer(container)
 }
 #endif

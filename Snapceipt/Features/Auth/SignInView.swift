@@ -199,6 +199,14 @@ final class PreviewAPIClient: APIClient {
         InboxAddressResponse(profileId: profileId, token: "previewtoken2",
                              address: "r.previewtoken2@in.snapceipt.app")
     }
+    func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
+        EmailChangeRequested(sent: true, devCode: "000000")
+    }
+    func verifyEmailChange(code: String) async throws -> AccountUser {
+        AccountUser(id: "u", email: "new@example.com", displayName: "You", plan: "free")
+    }
+    func revokeDevice(id: String) async throws {}
+    func deleteAccount() async throws {}
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))

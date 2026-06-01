@@ -1,6 +1,8 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as emailModule from "../src/lib/email";
+import { RATE_LIMIT_TIERS } from "../src/middleware/rateLimit";
+import { ERROR } from "../src/lib/errors";
 
 beforeAll(async () => {
   // Idempotent; the shared setup file applies these too, but keep the suite
@@ -90,5 +92,14 @@ describe("rateLimit middleware", () => {
       // No bearer -> 401 from auth (NOT 429 from the limiter).
       expect(res.status).toBe(401);
     }
+  });
+});
+
+describe("F7 tiers + error codes", () => {
+  it("defines an 'account' tier (per-user, hourly)", () => {
+    expect(RATE_LIMIT_TIERS.account).toEqual({ name: "account", limit: 60, windowMs: 60 * 60 * 1000, dimension: "user" });
+  });
+  it("maps GONE to 410", () => {
+    expect(ERROR.GONE).toBe(410);
   });
 });

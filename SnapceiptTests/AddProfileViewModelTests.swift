@@ -7,7 +7,7 @@ import SwiftData
 @MainActor
 final class MockSyncEngine: SyncEnqueuing {
     struct Call { let op: String; let entityType: EntityType; let entityId: String }
-    private(set) var calls: [Call] = []
+    var calls: [Call] = []
     func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
         calls.append(Call(op: op, entityType: entityType, entityId: entity.id))
     }

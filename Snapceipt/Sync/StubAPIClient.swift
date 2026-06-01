@@ -69,5 +69,13 @@ final class StubAPIClient: APIClient {
         InboxAddressResponse(profileId: profileId, token: "stubtokenrotated",
                              address: "r.stubtokenrotated@in.snapceipt.app")
     }
+    func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
+        EmailChangeRequested(sent: true, devCode: "000000")
+    }
+    func verifyEmailChange(code: String) async throws -> AccountUser {
+        AccountUser(id: DevAccount.userId, email: "new@example.com", displayName: "Dev", plan: "free")
+    }
+    func revokeDevice(id: String) async throws {}
+    func deleteAccount() async throws {}
 }
 #endif

@@ -185,4 +185,35 @@ final class ProfilesStore {
         TaxSettingsSeeder.ensure(profileId: p.id, userId: userId, context: context, sync: sync)
         setActive(p.id)
     }
+
+    /// Mutate a profile in a closure, stamp updatedAt, persist, reload, enqueue upsert.
+    func update(_ profile: Profile, _ mutate: (Profile) -> Void) {
+        mutate(profile)
+        profile.updatedAt = Epoch.nowMs()
+        try? context.save()
+        reload()
+        sync.enqueue(op: "upsert", entityType: .profile, entity: profile)
+    }
+
+    /// Soft-delete a profile. Refuses the last remaining profile or the active one
+    /// (the caller must switch away first). Returns true when it deleted.
+    @discardableResult
+    func delete(_ profile: Profile) -> Bool {
+        guard profiles.count > 1 else { return false }
+        guard profile.id != activeProfileId else { return false }
+        profile.deletedAt = Epoch.nowMs()
+        profile.updatedAt = Epoch.nowMs()
+        try? context.save()
+        reload()
+        sync.enqueue(op: "delete", entityType: .profile, entity: profile)
+        return true
+    }
+
+    /// The active profile's FY start month (1-12) from its tax_settings; 7 (July) if none.
+    func activeFinancialYearStartMonth() -> Int {
+        let pid = activeProfileId
+        var d = FetchDescriptor<TaxSettings>(predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil })
+        d.fetchLimit = 1
+        return (try? context.fetch(d))?.first?.financialYearStartMonth ?? 7
+    }
 }

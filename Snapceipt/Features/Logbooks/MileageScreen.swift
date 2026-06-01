@@ -224,7 +224,7 @@ struct MileageScreen: View {
             case .vehicle: VehicleSheet(vm: vm) { sheet = nil }
             case .logbook: LogbookPeriodSheet(vm: vm) { sheet = nil }
             case .trip: AddTripSheet(vm: vm) { sheet = nil }
-            case .costs: RunningCostsSheet(vm: vm, fyStartYear: fyStartYear) { sheet = nil }
+            case .costs: RunningCostsSheet(vm: vm, fyStartYear: fyStartYear, startMonth: startMonth) { sheet = nil }
             }
         }
     }
@@ -358,6 +358,7 @@ private struct AddTripSheet: View {
 private struct RunningCostsSheet: View {
     @Bindable var vm: MileageViewModel
     let fyStartYear: Int
+    let startMonth: Int
     let onDone: () -> Void
     @State private var fuel = ""
     @State private var rego = ""
@@ -379,7 +380,7 @@ private struct RunningCostsSheet: View {
     /// Days from purchase to the end of the chosen FY (capped to a 365-day year),
     /// used for first-year part-year proration.
     private var daysHeld: Int {
-        let fyEnd = FinancialYear.of(purchaseDate, startMonth: 7).end  // exclusive 1 Jul next year
+        let fyEnd = FinancialYear.of(purchaseDate, startMonth: startMonth).end  // exclusive 1st of FY-start month next year
         let secs = fyEnd.timeIntervalSince(purchaseDate)
         let days = Int(secs / 86_400)
         return Swift.max(0, Swift.min(days, 365))
