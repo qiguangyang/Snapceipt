@@ -17,6 +17,22 @@ export const accountRoutes = new Hono<AppEnv>();
 
 const EMAIL_CODE_TTL_SECONDS = 600;
 
+/** Every user-scoped table, child→parent so the FK-enforced batch never violates a constraint. */
+const PURGE_ORDER = [
+  "line_items", "quote_line_items", "receipt_images",
+  "transactions",
+  "smart_rules", "budgets",
+  "mileage_trips", "vehicle_years",
+  "vehicles",
+  "categories",
+  "quotes",
+  "clients", "tax_settings", "loyalty_cards", "wfh_logs",
+  "inbound_email_log", "profile_inbox_tokens", "quote_counters",
+  "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
+  "profiles",
+  "users",
+] as const;
+
 function normalizeEmail(e: string): string {
   return e.trim().toLowerCase();
 }
@@ -84,4 +100,25 @@ accountRoutes.post("/users/me/email/verify", validate("json", verifyBody), async
   const u = await c.env.DB.prepare("SELECT id, email, display_name, plan FROM users WHERE id = ?")
     .bind(userId).first<{ id: string; email: string | null; display_name: string | null; plan: string }>();
   return c.json({ user: { id: u!.id, email: u!.email, displayName: u!.display_name, plan: u!.plan } });
+});
+
+accountRoutes.delete("/account", async (c) => {
+  const userId = c.var.userId;
+
+  // 1. Hard-delete every user-scoped row atomically (one transaction, FK-safe order).
+  await c.env.DB.batch(
+    PURGE_ORDER.map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
+  );
+
+  // 2. Purge the user's R2 objects (paginated list -> delete).
+  let cursor: string | undefined;
+  for (;;) {
+    const listed = await c.env.RECEIPTS.list({ prefix: `u/${userId}/`, cursor, limit: 1000 });
+    const keys = listed.objects.map((o) => o.key);
+    if (keys.length > 0) await c.env.RECEIPTS.delete(keys);
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+
+  return c.json({ ok: true });
 });
