@@ -80,6 +80,15 @@ final class AuthStore {
         session = nil
     }
 
+    /// Update the in-memory + persisted email after a confirmed change. The session
+    /// is a value type, so rebuild it and re-persist the cached user blob.
+    func updateEmail(_ email: String?) {
+        guard var s = session else { return }
+        s.email = email
+        session = s
+        persistUser(PersistedUser(id: s.userId, email: email, displayName: s.displayName))
+    }
+
     /// Rebuild `session` from the Keychain + cached user blob at launch, if present.
     private func restore() {
         guard let access = keychain.string(.accessToken),
