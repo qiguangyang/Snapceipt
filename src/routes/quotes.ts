@@ -61,14 +61,18 @@ quotesRoutes.post("/:id/send", async (c) => {
     throw new ApiError("VALIDATION_FAILED", "Cannot send a quote with no line items");
   }
 
-  // 2b. Email PRECONDITION — validate BEFORE any mutation. When the EMAIL binding
-  // is present the route will attempt a send, so a missing client email is a hard
-  // 400 that must NOT burn a number / flip status / write R2 / log an outbox row.
-  // (When EMAIL is absent we never send, so a null client email is allowed — the
-  // PDF + signed link are still returned, emailed:false.) This ordering honours
-  // spec §8: on a validation failure no number is consumed and the quote stays draft.
-  const emailEnabled = Boolean(c.env.EMAIL);
-  if (emailEnabled && !quote.client_email) {
+  // 2b. Email PRECONDITION — validate BEFORE any mutation. A quote send always
+  // attempts to email the client (the F2 accountant export proves the production
+  // pattern: call the email seam unconditionally + try/catch), so a missing client
+  // email is a hard 400 that must NOT burn a number / flip status / write R2 / log
+  // an outbox row. This ordering honours spec §8: on a validation failure no number
+  // is consumed and the quote stays draft.
+  // (NOTE: the `send_email` binding declares `allowed_sender_addresses`, which the
+  // vitest-pool-workers / miniflare runtime does NOT materialize, so `c.env.EMAIL`
+  // is undefined under test — gating the send on `Boolean(c.env.EMAIL)` would make
+  // the whole send path dead there. The send seam (`sendQuoteEmail`) already isolates
+  // the actual `env.EMAIL.send` and is spied in tests, exactly like `sendExportEmail`.)
+  if (!quote.client_email) {
     throw new ApiError("VALIDATION_FAILED", "Quote has no client email to send to");
   }
 
@@ -139,31 +143,32 @@ quotesRoutes.post("/:id/send", async (c) => {
      VALUES (?, ?, ?, 'quote_send', ?, 'queued', 'pdf', ?, ?, ?)`,
   ).bind(outboxId, userId, quote.client_email ?? "", `Quote ${number}`, key, quoteId, now).run();
 
+  // Attempt the send exactly like the F2 accountant export: call the `sendQuoteEmail`
+  // seam (which wraps `env.EMAIL.send`) unconditionally inside a try/catch, then flip
+  // the outbox row sent/failed. A failure (incl. a missing/un-materialized EMAIL
+  // binding surfacing as a thrown error) leaves the outbox `failed`, `emailed:false`,
+  // and the route still 200s — the number is already minted and the status is `sent`.
+  // The missing-client-email case is already rejected as a 400 in step 2b BEFORE any
+  // mutation, so here quote.client_email is guaranteed non-null.
   let emailed = false;
-  // GATED on env.EMAIL exactly like the F2 accountant export: absent -> no send,
-  // emailed:false, outbox left queued, no crash. The missing-client-email case is
-  // already rejected as a 400 in step 2b BEFORE any mutation, so inside this branch
-  // quote.client_email is guaranteed non-null when emailEnabled is true.
-  if (emailEnabled && quote.client_email) {
-    const trader = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
-      .bind(userId).first<{ email: string | null }>();
-    try {
-      await emailModule.sendQuoteEmail(c.env, {
-        to: quote.client_email,
-        replyTo: trader?.email ?? "noreply@snapceipt.app",
-        quoteNumber: number,
-        clientName: quote.client_name,
-        totalCents: totals.totalCents,
-        pdf,
-      });
-      await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)
-        .bind(nowMs(), outboxId).run();
-      emailed = true;
-    } catch (err) {
-      await c.env.DB.prepare(`UPDATE email_outbox SET status='failed', error=? WHERE id=?`)
-        .bind(String(err instanceof Error ? err.message : err), outboxId).run();
-      emailed = false;
-    }
+  const trader = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
+    .bind(userId).first<{ email: string | null }>();
+  try {
+    await emailModule.sendQuoteEmail(c.env, {
+      to: quote.client_email,
+      replyTo: trader?.email ?? "noreply@snapceipt.app",
+      quoteNumber: number,
+      clientName: quote.client_name,
+      totalCents: totals.totalCents,
+      pdf,
+    });
+    await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)
+      .bind(nowMs(), outboxId).run();
+    emailed = true;
+  } catch (err) {
+    await c.env.DB.prepare(`UPDATE email_outbox SET status='failed', error=? WHERE id=?`)
+      .bind(String(err instanceof Error ? err.message : err), outboxId).run();
+    emailed = false;
   }
 
   // 10. Response.
