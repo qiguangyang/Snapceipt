@@ -81,6 +81,17 @@ struct AppLaunch {
         // give "Coffee" enough spend to be at/over threshold (>= 90 of 100): add a -95 txn this month.
         context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Cafe",
                                    catKey: "meals", amountCents: -95_00, txnDate: dayISO(2)))
+        // F4: seed loyalty cards on p1 (active under -uiTestSeed): one EAN-13 + one QR.
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Everyday Rewards", subBrand: "Woolworths",
+                                   number: "5901234123457", barcodeFormat: "ean13",
+                                   pointsLabel: "1,240 pts",
+                                   color1: "#1A8A3C", color2: "#0C5C26", sortOrder: 0))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Qantas FF", subBrand: nil,
+                                   number: "QF1234567", barcodeFormat: "qr",
+                                   pointsLabel: nil,
+                                   color1: "#E40000", color2: "#A30000", sortOrder: 1))
         try? context.save()
     }
 
