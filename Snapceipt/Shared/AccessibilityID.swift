@@ -194,4 +194,21 @@ enum AccessibilityID {
     static let profileDetailSwitch = "profile.detail.switch"
     static let profileDetailDelete = "profile.detail.delete"
     static let profileDetailNameField = "profile.detail.name"
+
+    // Account & privacy (F7)
+    static let accountScreen = "account.screen"
+    static let accountEmailRow = "account.email.row"
+    static let accountChangeEmail = "account.change.email"
+    static let accountDeviceRowPrefix = "account.device.row."   // + device.id
+    static let accountRevokePrefix = "account.revoke."          // + device.id
+    static let accountDeleteButton = "account.delete"
+    static let accountDeleteConfirmField = "account.delete.confirm.field"
+    static let accountDeleteConfirmButton = "account.delete.confirm.button"
+    static let changeEmailScreen = "changeemail.screen"
+    static let changeEmailField = "changeemail.field"
+    static let changeEmailSend = "changeemail.send"
+    static let changeEmailCodeField = "changeemail.code.field"
+    static let changeEmailVerify = "changeemail.verify"
+    static let privacyScreen = "privacy.screen"
+    static let privacyAppLockToggle = "privacy.applock.toggle"
 }

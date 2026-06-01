@@ -331,8 +331,8 @@ struct ShellView: View {
                 onOpenTax: { router.present(.tax) },
                 onOpenCategories: { router.present(.categories) },
                 onOpenExport: { router.present(.export) },
-                onOpenPrivacy: { /* TODO(account-plan): route to .privacy */ },
-                onOpenAccount: { /* TODO(account-plan): route to .account */ },
+                onOpenPrivacy: { router.present(.privacy) },
+                onOpenAccount: { router.present(.account) },
                 onOpenProfileDetail: { router.present(.profileDetail(id: $0)) },
                 onAddProfile: { router.present(.addProfile) },
                 onSignOut: { Task { await authVM.signOut() } }
@@ -459,7 +459,8 @@ struct ShellView: View {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
                      .emailIn, .emailInReview,
-                     .tax, .categories, .ruleEditor, .profileDetail:
+                     .tax, .categories, .ruleEditor, .profileDetail,
+                     .account, .privacy, .changeEmail:
                     return nil
                 default: return router.overlay
                 }
@@ -520,8 +521,9 @@ struct ShellView: View {
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
              .emailIn, .emailInReview,
-             .tax, .categories, .ruleEditor, .profileDetail:
-            EmptyView()  // handled by the full-screen overlays
+             .tax, .categories, .ruleEditor, .profileDetail,
+             .account, .privacy, .changeEmail:
+            EmptyView()  // handled by the full-screen overlays (overlay blocks added in Task 5)
         }
     }
 
