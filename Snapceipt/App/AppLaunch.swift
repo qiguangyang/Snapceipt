@@ -121,6 +121,16 @@ struct AppLaunch {
         return LiveAPIClient(baseURL: base, auth: auth)
     }
 
+    /// The biometric app-lock controller for the run. Under `-uiTestStub` the
+    /// evaluator is hard-stubbed (`canEvaluate: { false }`) so the lock never
+    /// gates a seeded UI-test launch; otherwise the real `LAContext`-backed
+    /// controller is returned. `@MainActor` because `AppLockController` is.
+    @MainActor
+    func makeAppLock() -> AppLockController {
+        if useStub { return AppLockController(canEvaluate: { false }, evaluate: { true }) }
+        return AppLockController()
+    }
+
     func makeContainer() -> ModelContainer {
         makeSnapceiptContainer(inMemory: useStub)
     }

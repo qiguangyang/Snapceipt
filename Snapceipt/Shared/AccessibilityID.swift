@@ -211,4 +211,5 @@ enum AccessibilityID {
     static let changeEmailVerify = "changeemail.verify"
     static let privacyScreen = "privacy.screen"
     static let privacyAppLockToggle = "privacy.applock.toggle"
+    static let appLockUnlock = "applock.unlock"
 }

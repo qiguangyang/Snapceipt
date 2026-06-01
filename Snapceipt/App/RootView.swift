@@ -11,12 +11,16 @@ import SwiftData
 /// - signed in but no profile → `OnboardingView`
 /// - signed in with a profile → `ShellView` (TabBar + tabs + overlays + cross-cutting)
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthViewModel.self) private var authVM
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
     @Environment(ToastCenter.self) private var toasts
     @Environment(Reachability.self) private var reachability
+    /// Shared biometric app-lock controller, injected from `SnapceiptApp` (spec §6).
+    /// The `.signedIn` shell is wrapped behind a `LockScreen` gated on `isLocked`.
+    @Environment(AppLockController.self) private var appLock
 
     /// Live count of non-deleted profiles drives the "needs onboarding" gate.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
@@ -31,13 +35,30 @@ struct RootView: View {
                         // which re-renders this view straight into the shell.
                     })
                 } else {
-                    ShellView(
-                        router: router,
-                        profiles: profiles,
-                        sync: sync,
-                        toasts: toasts,
-                        reachability: reachability
-                    )
+                    // Gate the authed shell behind the biometric lock (spec §6): lock on
+                    // cold launch and on background→active; the LockScreen covers the shell
+                    // until `appLock.unlock()` clears `isLocked`. Under -uiTestStub the
+                    // controller's canEvaluate is false + isEnabled defaults false, so the
+                    // gate never blocks seeded UI-test launches.
+                    ZStack {
+                        ShellView(
+                            router: router,
+                            profiles: profiles,
+                            sync: sync,
+                            toasts: toasts,
+                            reachability: reachability
+                        )
+                        if appLock.isLocked {
+                            LockScreen(onUnlock: { Task { await appLock.unlock() } })
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: appLock.isLocked)
+                    .task { appLock.lockIfEnabled() }                 // cold launch
+                    .onChange(of: scenePhase) { _, phase in
+                        // Require an unlock when returning from background.
+                        if phase == .background { appLock.lockIfEnabled() }
+                    }
                 }
             case .requestingLink:
                 // A link request is in flight — keep the wait screen up so the UI does
@@ -71,6 +92,9 @@ struct ShellView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthStore.self) private var auth
     @Environment(AuthViewModel.self) private var authVM
+    /// The shared app-lock controller, injected from `SnapceiptApp`. The Privacy
+    /// toggle writes `isEnabled` here; `RootView` reads `isLocked` to gate the shell.
+    @Environment(AppLockController.self) private var appLock
 
     @Bindable var router: Router
     @Bindable var profiles: ProfilesStore
@@ -81,12 +105,6 @@ struct ShellView: View {
     /// Tracks whichever Reports period was active when the user tapped Export, so
     /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
     @State private var exportPeriod: Period = .month
-
-    /// Biometric app-lock controller backing the Privacy screen (spec §6). Owned here
-    /// for now so the Privacy toggle persists across renders within a session; the
-    /// app-lock gate plan (Task 6) hoists ownership to `SnapceiptApp` + injects it via
-    /// the environment and wraps the shell in the lock gate.
-    @State private var appLock = AppLockController()
 
     var body: some View {
         let accent = profiles.accent
@@ -652,6 +670,49 @@ struct ShellView: View {
     }
 }
 
+/// Full-screen biometric lock cover (spec §6). Shown over the authed shell whenever
+/// `AppLockController.isLocked` is true (cold launch + return-from-background while the
+/// lock is enabled). Opaque `Palette.cream` so the underlying shell is hidden, with the
+/// app mark + an Unlock button that re-runs `LAContext` via `onUnlock`.
+struct LockScreen: View {
+    let onUnlock: () -> Void
+
+    var body: some View {
+        ZStack {
+            Palette.cream.ignoresSafeArea()
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle().fill(Palette.paper2).frame(width: 88, height: 88)
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 36, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                }
+                Text("Snapceipt is locked")
+                    .font(.display(22, .bold)).foregroundStyle(Palette.ink)
+                Text("Unlock with Face ID / Touch ID to continue.")
+                    .font(.ui(14)).foregroundStyle(Palette.ink2)
+                    .multilineTextAlignment(.center)
+                Button(action: onUnlock) {
+                    Label("Unlock", systemImage: "faceid")
+                        .font(.ui(16, .semibold))
+                        .foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 22).padding(.vertical, 13)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Palette.line2, lineWidth: 1))
+                        .cardShadow()
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.appLockUnlock)
+                .padding(.top, 6)
+            }
+            .padding(.horizontal, 32)
+        }
+        .accessibilityElement(children: .contain)
+        .onAppear { onUnlock() }   // auto-prompt biometrics the moment the cover appears
+    }
+}
+
 /// Shared "yyyy-MM-dd" UTC formatter for export range parsing/formatting.
 enum ExportDateFormatter {
     static let shared: DateFormatter = {
@@ -679,6 +740,7 @@ enum ExportDateFormatter {
         .environment(engine)
         .environment(toast)
         .environment(Reachability())
+        .environment(AppLockController(canEvaluate: { false }, evaluate: { true }))
         .modelContainer(container)
 }
 #endif
