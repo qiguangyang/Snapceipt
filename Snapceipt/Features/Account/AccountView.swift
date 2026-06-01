@@ -76,6 +76,7 @@ struct AccountView: View {
                         Spacer()
                         Icon(name: "chevR", size: 16, color: Palette.ink3)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.accountChangeEmail)
@@ -158,6 +159,7 @@ struct AccountView: View {
                             Spacer()
                             Icon(name: "chevR", size: 16, color: Palette.alert)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier(AccessibilityID.accountDeleteButton)
