@@ -123,6 +123,14 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       sortOrder: "sort_order",
     },
   },
+  client: {
+    table: "clients",
+    hasProfileId: true,
+    columns: {
+      name: "name",
+      email: "email",
+    },
+  },
   quote: {
     table: "quotes",
     hasProfileId: true,

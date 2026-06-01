@@ -1,5 +1,8 @@
 import { env, applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { SELF } from "cloudflare:test";
+import { signAccess } from "../src/lib/jwt";
+import { uuidv7 } from "../src/lib/ids";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -76,5 +79,71 @@ describe("0002 clients + quote_counters", () => {
        RETURNING next_seq`,
     ).first<{ next_seq: number }>();
     expect(second?.next_seq).toBe(2);
+  });
+});
+
+describe("client round-trips via /sync", () => {
+  const USER = "01890000-0000-7000-8000-0000000000c1";
+  const DEVICE = "01890000-0000-7000-8000-0000000000d2";
+  const SESSION = "01890000-0000-7000-8000-0000000000e2";
+  const PROFILE = "01890000-0000-7000-8000-0000000000a2";
+
+  async function authHeader() {
+    const token = await signAccess(env.JWT_SIGNING_KEY, { userId: USER, sessionId: SESSION, deviceId: DEVICE });
+    return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  }
+
+  it("push upserts a client; pull returns it for the same user", async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO users (id, email, email_verified, plan, created_at, updated_at)
+       VALUES (?, ?, 1, 'free', ?, ?)`,
+    ).bind(USER, `${USER}@example.com`, now, now).run();
+
+    const clientId = uuidv7();
+    const headers = await authHeader();
+    const pushRes = await SELF.fetch("https://api.test/sync/push", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        deviceId: DEVICE,
+        mutations: [
+          {
+            mutationId: uuidv7(),
+            entityType: "client",
+            entityId: clientId,
+            op: "upsert",
+            updatedAt: now,
+            payload: {
+              id: clientId, userId: USER, profileId: PROFILE, type: "client",
+              name: "Acme Builders", email: "ap@acme.example",
+              createdAt: now, updatedAt: now, deletedAt: null, rev: 0, lastEditedDeviceId: DEVICE,
+            },
+          },
+        ],
+      }),
+    });
+    expect(pushRes.status).toBe(200);
+    const pushJson = (await pushRes.json()) as any;
+    expect(pushJson.results[0].status).toBe("applied");
+    expect(pushJson.results[0].entity.rev).toBe(1);
+
+    const row = await env.DB.prepare(`SELECT name, email, profile_id FROM clients WHERE id = ?`)
+      .bind(clientId).first<{ name: string; email: string; profile_id: string }>();
+    expect(row?.name).toBe("Acme Builders");
+    expect(row?.email).toBe("ap@acme.example");
+    expect(row?.profile_id).toBe(PROFILE);
+
+    const pullRes = await SELF.fetch("https://api.test/sync/pull", {
+      method: "GET",
+      headers,
+    });
+    expect(pullRes.status).toBe(200);
+    const pullJson = (await pullRes.json()) as any;
+    const found = (pullJson.changes as any[]).find((ch) => ch.id === clientId);
+    expect(found).toBeTruthy();
+    expect(found.type).toBe("client");
+    expect(found.name).toBe("Acme Builders");
+    expect(found.email).toBe("ap@acme.example");
   });
 });
