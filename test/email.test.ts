@@ -8,7 +8,7 @@
  * to assert both attachments are present.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendExportEmail } from "../src/lib/email";
+import { sendExportEmail, sendEmailChangeCode } from "../src/lib/email";
 
 // ---------------------------------------------------------------------------
 // Module mock for cloudflare:email — hoisted before any imports are resolved.
@@ -115,5 +115,16 @@ describe("sendExportEmail", () => {
         pdf: bigPdf,
       }),
     ).rejects.toThrow("exceed");
+  });
+});
+
+describe("sendEmailChangeCode", () => {
+  it("calls env.EMAIL.send with the code in the body", async () => {
+    const sent: any[] = [];
+    const env = { EMAIL: { send: async (m: any) => { sent.push(m); } } } as any;
+    await sendEmailChangeCode(env, { to: "new@example.com", code: "123456" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe("new@example.com");
+    expect(sent[0].text).toContain("123456");
   });
 });

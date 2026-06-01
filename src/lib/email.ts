@@ -33,6 +33,27 @@ export async function sendMagicLinkEmail(env: Env, msg: MagicLinkEmail): Promise
   });
 }
 
+export interface EmailChangeCode {
+  to: string;
+  code: string;
+}
+
+/**
+ * Send the 6-digit email-change confirmation code via the SendEmail builder
+ * overload (same path as sendMagicLinkEmail). Failures surface as a thrown error.
+ */
+export async function sendEmailChangeCode(env: Env, msg: EmailChangeCode): Promise<void> {
+  await env.EMAIL.send({
+    from: { name: "Snapceipt", email: MAGIC_LINK_SENDER },
+    to: msg.to,
+    subject: "Confirm your new Snapceipt email",
+    text:
+      `Your Snapceipt email-change code is: ${msg.code}\n\n` +
+      `Enter it in the app to confirm. It expires in 10 minutes and can be used once. ` +
+      `If you didn't request this, ignore this email.`,
+  });
+}
+
 /** The accountant export email (CSV + PDF attachments). */
 export interface ExportEmail {
   to: string;
