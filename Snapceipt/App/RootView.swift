@@ -70,6 +70,7 @@ struct RootView: View {
 struct ShellView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthStore.self) private var auth
+    @Environment(AuthViewModel.self) private var authVM
 
     @Bindable var router: Router
     @Bindable var profiles: ProfilesStore
@@ -254,6 +255,37 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .tax {
+                TaxSettingsView(profiles: profiles, sync: sync, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .categories {
+                CategoriesView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               onEditRule: { router.present(.ruleEditor(id: $0)) },
+                               onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .ruleEditor(id) = router.overlay {
+                RuleEditorView(context: profiles.context, sync: sync, userId: profiles.userId,
+                               profileId: profiles.activeProfileId,
+                               ruleId: id, onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .profileDetail(id) = router.overlay {
+                ProfileDetailView(profiles: profiles, sync: sync, profileId: id,
+                                  onClose: { router.dismissOverlay() },
+                                  onExport: { router.present(.export) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -290,9 +322,20 @@ struct ShellView: View {
             .environment(\.accent, accent)
         case .profile:
             ProfileTabView(
+                profiles: profiles,
+                userName: auth.session?.displayName ?? "You",
+                userEmail: auth.session?.email,
                 onOpenNotifications: { router.present(.notificationSettings) },
                 onOpenBudgets: { router.present(.budgets) },
-                onOpenEmailIn: { router.present(.emailIn) }
+                onOpenEmailIn: { router.present(.emailIn) },
+                onOpenTax: { router.present(.tax) },
+                onOpenCategories: { router.present(.categories) },
+                onOpenExport: { router.present(.export) },
+                onOpenPrivacy: { /* TODO(account-plan): route to .privacy */ },
+                onOpenAccount: { /* TODO(account-plan): route to .account */ },
+                onOpenProfileDetail: { router.present(.profileDetail(id: $0)) },
+                onAddProfile: { router.present(.addProfile) },
+                onSignOut: { Task { await authVM.signOut() } }
             )
             .environment(\.accent, accent)
         case .snap:
@@ -415,7 +458,8 @@ struct ShellView: View {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
-                     .emailIn, .emailInReview:
+                     .emailIn, .emailInReview,
+                     .tax, .categories, .ruleEditor, .profileDetail:
                     return nil
                 default: return router.overlay
                 }
@@ -428,11 +472,13 @@ struct ShellView: View {
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
-                                               Overlay.quotes.id, Overlay.emailIn.id]
+                                               Overlay.quotes.id, Overlay.emailIn.id,
+                                               Overlay.tax.id, Overlay.categories.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
-                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview") {
+                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview"),
+                   !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
