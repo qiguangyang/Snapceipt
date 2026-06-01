@@ -176,6 +176,9 @@ enum AccessibilityID {
     static let profileSwitcherCardPrefix = "profile.switcher.card."  // + profile.id
     static let profileAddButton = "profile.add"
     static let signOutButton = "profile.signout"
+    static let profileAiAutoCategorise = "profile.row.aiAutoCategorise"  // inert visual toggle
+    static let profileRowConnectedBanks = "profile.row.connectedBanks"   // Coming-soon placeholder
+    static let profileRowHelp = "profile.row.help"                       // opens external URL
     // Tax & GST
     static let taxScreen = "tax.screen"
     static let taxGstToggle = "tax.gst.toggle"

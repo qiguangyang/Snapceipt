@@ -27,8 +27,16 @@ struct BasScheduleTests {
         // 5 Jan 2026 → the 28 Dec-quarter deadline is 28 Feb 2026; still future → returns it.
         #expect(BasSchedule.nextDue(.quarterly, on: date("2026-01-05")) == date("2026-02-28"))
     }
-    @Test("monthly next-due is the 21st of the next month")
+    @Test("monthly next-due is the earliest 21st on/after the date")
     func monthly() {
-        #expect(BasSchedule.nextDue(.monthly, on: date("2026-08-15")) == date("2026-09-21"))
+        // Early-month (the bug): 5 Aug is before the 21st, so the imminent 21 Aug is due —
+        // NOT the following month's 21 Sep (which the old code wrongly returned).
+        #expect(BasSchedule.nextDue(.monthly, on: date("2026-08-05")) == date("2026-08-21"))
+        // 15 Aug is also before the 21st → 21 Aug (same month).
+        #expect(BasSchedule.nextDue(.monthly, on: date("2026-08-15")) == date("2026-08-21"))
+        // On the 21st itself the deadline is still "on/after" → returns it.
+        #expect(BasSchedule.nextDue(.monthly, on: date("2026-08-21")) == date("2026-08-21"))
+        // Late-month: 25 Aug is after the 21st, so it rolls to the next month's 21 Sep.
+        #expect(BasSchedule.nextDue(.monthly, on: date("2026-08-25")) == date("2026-09-21"))
     }
 }

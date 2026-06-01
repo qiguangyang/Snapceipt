@@ -20,6 +20,10 @@ struct ProfileTabView: View {
     let onSignOut: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(\.openURL) private var openURL
+
+    /// Inert visual toggle (matches the prototype): defaults ON, drives no behaviour.
+    @State private var aiAutoCategorise = true
 
     var body: some View {
         ScrollView {
@@ -43,6 +47,7 @@ struct ProfileTabView: View {
                 profileSwitcher
 
                 groupLabel("Capture & tax")
+                aiAutoCategoriseRow
                 row(icon: "receipt", title: "Categories & rules", id: AccessibilityID.profileRowCategories, action: onOpenCategories)
                 row(icon: "gear", title: "Tax & GST settings", id: AccessibilityID.profileRowTax, action: onOpenTax)
 
@@ -51,7 +56,9 @@ struct ProfileTabView: View {
                 row(icon: "wallet", title: "Budgets", id: AccessibilityID.profileRowBudgets, action: onOpenBudgets)
                 row(icon: "receipt", title: "Email-in receipts", id: AccessibilityID.profileRowEmailIn, action: onOpenEmailIn)
                 row(icon: "arrowRight", title: "Export & backup", id: "profile.row.export", action: onOpenExport)
+                connectedBanksRow
                 row(icon: "info", title: "Privacy & security", id: AccessibilityID.profileRowPrivacy, action: onOpenPrivacy)
+                helpRow
 
                 groupLabel("Account")
                 row(icon: "user", title: "Account", id: AccessibilityID.profileRowAccount, action: onOpenAccount)
@@ -123,5 +130,52 @@ struct ProfileTabView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+    }
+
+    /// Inert AI auto-categorise toggle (defaults ON; purely visual, drives no behaviour).
+    private var aiAutoCategoriseRow: some View {
+        Card(padding: 14) {
+            HStack(spacing: 12) {
+                IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                Text("AI auto-categorise").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                Spacer()
+                Toggle("", isOn: $aiAutoCategorise).labelsHidden().tint(accent.base)
+            }
+        }
+        .accessibilityIdentifier(AccessibilityID.profileAiAutoCategorise)
+    }
+
+    /// Connected banks — Coming-soon placeholder. Disabled, no action, no network
+    /// (mirrors the MileageScreen GPS-card treatment: dimmed with a "Coming soon" label).
+    private var connectedBanksRow: some View {
+        Card(padding: 14) {
+            HStack(spacing: 12) {
+                IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Connected banks").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                }
+                Spacer()
+            }
+        }
+        .opacity(0.7)
+        .accessibilityIdentifier(AccessibilityID.profileRowConnectedBanks)
+    }
+
+    /// Help & support — opens the external help site via the SwiftUI openURL action.
+    private var helpRow: some View {
+        Button {
+            if let url = URL(string: "https://snapceipt.app/help") { openURL(url) }
+        } label: {
+            Card(padding: 14) {
+                HStack(spacing: 12) {
+                    IconCircle(name: "info", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                    Text("Help & support").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.profileRowHelp)
     }
 }

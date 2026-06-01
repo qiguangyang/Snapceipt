@@ -32,9 +32,14 @@ enum BasSchedule {
         let c = cal
         switch period {
         case .monthly:
-            // 21st of the month after `on`'s month.
+            // The earliest 21st on/after `on`: if `on` is on or before the 21st of its
+            // own month, the due date is the 21st of THIS month; otherwise it rolls to
+            // the 21st of next month. (Returning next month's 21st unconditionally would
+            // skip an imminent deadline for early-month dates, e.g. 5 Aug → 21 Aug.)
             let comps = c.dateComponents([.year, .month], from: on)
             let firstOfThis = c.date(from: comps)!
+            let thisMonth21 = c.date(byAdding: .day, value: 20, to: firstOfThis)! // 1st + 20 = 21st
+            if c.startOfDay(for: on) <= thisMonth21 { return thisMonth21 }
             let nextMonth = c.date(byAdding: .month, value: 1, to: firstOfThis)!
             return c.date(byAdding: .day, value: 20, to: nextMonth)! // 1st + 20 = 21st
         case .quarterly:
