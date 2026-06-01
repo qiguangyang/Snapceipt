@@ -217,6 +217,24 @@ struct ShellView: View {
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
+        .overlay {
+            if router.overlay == .quotes {
+                QuoteListView(context: profiles.context, sync: sync, userId: profiles.userId,
+                              profileId: profiles.activeProfileId,
+                              onClose: { router.dismissOverlay() },
+                              onEdit: { router.openQuote($0) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .quoteEditor(id) = router.overlay {
+                QuoteEditorView(context: profiles.context, sync: sync, api: captureAPI,
+                                userId: profiles.userId, profileId: profiles.activeProfileId,
+                                quoteId: id,
+                                onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
         // --- Global toasts on top of everything ---
         .toastHost(toasts)
         .task {
@@ -300,6 +318,15 @@ struct ShellView: View {
                                 accent: accent) { router.present(.loyalty) }
                 }
                 .padding(.horizontal, 18).padding(.top, 12)
+
+                // BUSINESS-ONLY: the Quotes feature is gated on the active profile type.
+                if profiles.activeProfile?.type == ProfileType.business.rawValue {
+                    HStack(spacing: 12) {
+                        quickAction(title: "Create Quote", icon: "receipt", id: AccessibilityID.homeQuickQuote,
+                                    accent: accent) { router.present(.quotes) }
+                    }
+                    .padding(.horizontal, 18).padding(.top, 12)
+                }
 
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
