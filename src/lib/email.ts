@@ -104,6 +104,62 @@ export async function sendExportEmail(env: Env, msg: ExportEmail): Promise<void>
   await env.EMAIL.send(message);
 }
 
+/** The quote-send email (PDF attachment). */
+export interface QuoteEmail {
+  to: string;
+  /** The trader's own email — set as Reply-To so the client replies to them. */
+  replyTo: string;
+  quoteNumber: string;
+  clientName: string | null;
+  totalCents: number;
+  pdf: Uint8Array;
+}
+
+/** PDF attachment ceiling — Cloudflare Email Send caps the message. */
+const MAX_QUOTE_PDF_BYTES = 25 * 1024 * 1024; // 25 MiB
+
+/**
+ * Send the quote email with the PDF attached (spec §5). Mirrors sendExportEmail:
+ * mimetext/browser MIME (self-contained, workerd-safe), base64 PDF attachment,
+ * cloudflare:email EmailMessage(from,to,raw) + env.EMAIL.send. `from` is the
+ * magic-link sender (the only allowed_sender_addresses entry); Reply-To is the
+ * trader so the client replies to them. Stubbed in route tests via
+ * vi.spyOn(emailModule, "sendQuoteEmail"). The route GATES this on env.EMAIL.
+ */
+export async function sendQuoteEmail(env: Env, msg: QuoteEmail): Promise<void> {
+  if (msg.pdf.byteLength > MAX_QUOTE_PDF_BYTES) {
+    throw new Error(`quote PDF exceeds ${MAX_QUOTE_PDF_BYTES} bytes`);
+  }
+
+  const { createMimeMessage, Mailbox } = await import("mimetext/browser");
+  const { EmailMessage } = await import("cloudflare:email");
+
+  const total = `$${(msg.totalCents / 100).toFixed(2)}`;
+  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+
+  const mime = createMimeMessage();
+  mime.setSender({ name: "Snapceipt", addr: MAGIC_LINK_SENDER });
+  mime.setRecipient(msg.to);
+  mime.setHeader("Reply-To", new Mailbox(msg.replyTo, { type: "Reply-To" } as any));
+  mime.setSubject(`Quote ${msg.quoteNumber} — ${total}`);
+  mime.addMessage({
+    contentType: "text/plain",
+    data:
+      `${greeting}\n\n` +
+      `Please find attached quote ${msg.quoteNumber} for ${total}.\n\n` +
+      `Reply to this email if you have any questions.\n`,
+  });
+  mime.addAttachment({
+    filename: `quote-${msg.quoteNumber}.pdf`,
+    contentType: "application/pdf",
+    encoding: "base64",
+    data: base64Bytes(msg.pdf),
+  });
+
+  const message = new EmailMessage(MAGIC_LINK_SENDER, msg.to, mime.asRaw());
+  await env.EMAIL.send(message);
+}
+
 /** Base64-encode bytes in chunks (avoids the call-stack limit of spreading a
  *  large Uint8Array into String.fromCharCode). */
 function base64Bytes(bytes: Uint8Array): string {
