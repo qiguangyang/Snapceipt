@@ -196,3 +196,29 @@ describe("POST /auth/magic-link/verify", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("GET /auth/magic (bridge)", () => {
+  it("serves an HTML page that forwards a valid token to the snapceipt:// scheme", async () => {
+    const res = await SELF.fetch("https://x/auth/magic?token=abc123_TOK-en");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    const html = await res.text();
+    expect(html).toContain("snapceipt://auth/verify?token=abc123_TOK-en");
+  });
+
+  it("returns 400 and does NOT emit a scheme link when the token is missing", async () => {
+    const res = await SELF.fetch("https://x/auth/magic");
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).not.toContain("snapceipt://auth/verify");
+  });
+
+  it("returns 400 when the token contains non-base64url characters", async () => {
+    const res = await SELF.fetch("https://x/auth/magic?token=bad%20token%3Cscript%3E");
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).not.toContain("snapceipt://auth/verify");
+  });
+});

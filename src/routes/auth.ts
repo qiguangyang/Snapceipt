@@ -221,6 +221,50 @@ authRoutes.post(
 );
 
 /**
+ * GET /auth/magic — bridge page for the magic-link email.
+ *
+ * The email links to https://api.snapceipt.cc/auth/magic?token=… . This page
+ * forwards the token to the registered custom scheme snapceipt://auth/verify?token=…
+ * which the iOS app (AuthViewModel/MagicLinkParser) handles → POST /auth/magic-link/verify.
+ * No verification happens here; the single-use, TTL-bound check is in /magic-link/verify.
+ * Universal Links/AASA are out of scope for the go-live milestone, so this bridge is the
+ * path from a tapped/opened https link to the app.
+ *
+ * Magic tokens are base64url ([A-Za-z0-9_-], see newMagicToken). We reject anything else
+ * so the value is safe to interpolate and we never forward a malformed link.
+ */
+authRoutes.get("/magic", (c) => {
+  const headers = {
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+  };
+  const token = c.req.query("token") ?? "";
+  if (token.length === 0 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    return c.html(
+      `<!doctype html><meta charset="utf-8"><title>Snapceipt</title>` +
+        `<p>This sign-in link is invalid or has expired. Request a new one from the Snapceipt app.</p>`,
+      400,
+      headers,
+    );
+  }
+  const deep = `snapceipt://auth/verify?token=${token}`;
+  return c.html(
+    `<!doctype html><html><head><meta charset="utf-8">` +
+      `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+      `<title>Signing in to Snapceipt…</title>` +
+      `<meta http-equiv="refresh" content="0;url=${deep}">` +
+      `<script>location.replace(${JSON.stringify(deep)});</script></head>` +
+      `<body style="font-family:-apple-system,system-ui,sans-serif;text-align:center;padding:3rem 1.5rem">` +
+      `<p>Opening Snapceipt…</p>` +
+      `<p><a href="${deep}">Open in Snapceipt</a></p>` +
+      `<p style="color:#666">Return to the Snapceipt app to finish signing in.</p>` +
+      `</body></html>`,
+    200,
+    headers,
+  );
+});
+
+/**
  * POST /auth/apple
  * Verify the Sign-in-with-Apple identity token (RS256 against Apple's JWKS,
  * with iss/aud/exp + sha256(rawNonce)==nonce enforced), upsert the user keyed by
