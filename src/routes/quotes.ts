@@ -156,7 +156,7 @@ quotesRoutes.post("/:id/send", async (c) => {
   try {
     await emailModule.sendQuoteEmail(c.env, {
       to: quote.client_email,
-      replyTo: trader?.email ?? "noreply@snapceipt.app",
+      replyTo: trader?.email ?? "noreply@snapceipt.cc",
       quoteNumber: number,
       clientName: quote.client_name,
       totalCents: totals.totalCents,

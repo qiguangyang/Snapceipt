@@ -11,7 +11,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = (_event, env, ctx) => {
 };
 
 /**
- * Inbound Email Routing handler (catch-all on in.snapceipt.app). Thin wrapper:
+ * Inbound Email Routing handler (catch-all on in.snapceipt.cc). Thin wrapper:
  * builds the InboundMessage and delegates to the pure core. Rejected results call
  * setReject (the sender gets a bounce); created/duplicate are accepted silently.
  * Any thrown error is logged and swallowed — never rethrow, or Email Routing would

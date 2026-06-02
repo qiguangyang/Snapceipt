@@ -20,13 +20,13 @@
   "r2_buckets": [
     { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" }
   ],
-  // Inbound Email Routing (F6): provision a catch-all on the in.snapceipt.app zone
+  // Inbound Email Routing (F6): provision a catch-all on the in.snapceipt.cc zone
   // in the Cloudflare dashboard, routing to this Worker's email() handler. No binding
   // is declared here (inbound email is a handler, not a binding). The "ai" binding
   // below powers email-in OCR (gated by E2E_EMAIL_MODE in tests).
   "ai": { "binding": "AI" },
   "send_email": [
-    { "name": "EMAIL", "allowed_sender_addresses": ["noreply@snapceipt.app"] }
+    { "name": "EMAIL", "allowed_sender_addresses": ["noreply@snapceipt.cc"] }
   ],
   "vars": {
     "APPLE_BUNDLE_ID": "com.snapceipt.app"

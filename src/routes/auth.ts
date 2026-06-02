@@ -53,7 +53,7 @@ export function validate<T extends ZodSchema, Target extends keyof ValidationTar
 export const authRoutes = new Hono<AppEnv>();
 
 const MAGIC_LINK_TTL_SECONDS = 600; // 10 minutes
-const MAGIC_LINK_BASE_URL = "https://snapceipt.app/auth/magic";
+const MAGIC_LINK_BASE_URL = "https://api.snapceipt.cc/auth/magic";
 // Superseded-refresh-hash retention for reuse detection == the 60-day refresh window.
 const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 

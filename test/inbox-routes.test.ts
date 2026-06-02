@@ -39,7 +39,7 @@ describe("GET /profiles/:id/inbox", () => {
     const body = (await res.json()) as { profileId: string; token: string; address: string };
     expect(body.profileId).toBe(profileId);
     expect(body.token).toMatch(/^[0-9a-f]{32}$/);
-    expect(body.address).toBe(`r.${body.token}@in.snapceipt.app`);
+    expect(body.address).toBe(`r.${body.token}@in.snapceipt.cc`);
 
     // Idempotent: a second GET returns the same token.
     const again = await SELF.fetch(`https://x/profiles/${profileId}/inbox`, { headers: { authorization: bearer } });
@@ -65,6 +65,6 @@ describe("POST /profiles/:id/inbox/rotate", () => {
     const first = (await (await SELF.fetch(`https://x/profiles/${profileId}/inbox`, { headers: { authorization: bearer } })).json()) as { token: string };
     const rotated = (await (await SELF.fetch(`https://x/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: { authorization: bearer } })).json()) as { token: string; address: string };
     expect(rotated.token).not.toBe(first.token);
-    expect(rotated.address).toBe(`r.${rotated.token}@in.snapceipt.app`);
+    expect(rotated.address).toBe(`r.${rotated.token}@in.snapceipt.cc`);
   });
 });

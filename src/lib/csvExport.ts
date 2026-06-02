@@ -27,7 +27,7 @@ export interface BuildCsvInput {
   rows: CsvTxnRow[];
   /** transactionId -> receipt image R2 key (first/primary image). */
   receiptKeyByTxnId: Map<string, string>;
-  /** e.g. "https://api.snapceipt.app" — the public origin for the dl link. */
+  /** e.g. "https://api.snapceipt.cc" — the public origin for the dl link. */
   baseUrl: string;
   /** Signs a 7-day download token for an R2 key (route passes the JWT signer). */
   signDownload: (r2Key: string) => Promise<string>;

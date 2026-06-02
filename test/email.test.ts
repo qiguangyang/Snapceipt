@@ -68,7 +68,7 @@ describe("sendExportEmail", () => {
     expect(sent.length).toBe(1);
 
     // The EmailMessage was constructed with the expected envelope addresses.
-    expect(captured.from).toBe("noreply@snapceipt.app");
+    expect(captured.from).toBe("noreply@snapceipt.cc");
     expect(captured.to).toBe("cpa@firm.au");
   });
 
