@@ -80,7 +80,7 @@ beforeEach(async () => {
 describe("inboundEmailLogic", () => {
   it("rejects an unknown inbox alias and writes no rows", async () => {
     const res = await inboundEmailLogic(emailEnv(), {
-      to: "r.deadbeefdeadbeefdeadbeefdeadbeef@in.snapceipt.app",
+      to: "r.deadbeefdeadbeefdeadbeefdeadbeef@in.snapceipt.cc",
       from: "x@e.com", messageId: "<m1>", raw: mimeWithImage("m1"),
     }, nowMs());
     expect(res).toEqual({ status: "rejected", reason: "unknown_inbox" });
@@ -90,7 +90,7 @@ describe("inboundEmailLogic", () => {
 
   it("rejects a non-r. recipient (unknown_inbox)", async () => {
     const res = await inboundEmailLogic(emailEnv(), {
-      to: "noreply@snapceipt.app", from: "x@e.com", messageId: "<m1b>", raw: mimeWithImage("m1b"),
+      to: "noreply@snapceipt.cc", from: "x@e.com", messageId: "<m1b>", raw: mimeWithImage("m1b"),
     }, nowMs());
     expect(res).toEqual({ status: "rejected", reason: "unknown_inbox" });
   });

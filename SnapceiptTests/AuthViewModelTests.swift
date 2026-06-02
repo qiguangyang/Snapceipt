@@ -105,7 +105,7 @@ struct AuthViewModelTests {
         let rec = Recorder()
         let api = makeMock(rec: rec)
         let vm = AuthViewModel(api: api, auth: makeStore())
-        let url = try #require(URL(string: "https://snapceipt.app/auth/verify?token=deep-tok"))
+        let url = try #require(URL(string: "https://snapceipt.cc/auth/verify?token=deep-tok"))
 
         await vm.handleDeepLink(url)
 
@@ -131,7 +131,7 @@ struct AuthViewModelTests {
         let rec = Recorder()
         let api = makeMock(rec: rec)
         let vm = AuthViewModel(api: api, auth: makeStore())
-        let url = try #require(URL(string: "https://snapceipt.app/help"))
+        let url = try #require(URL(string: "https://snapceipt.cc/help"))
 
         await vm.handleDeepLink(url)
 
@@ -185,7 +185,7 @@ struct AuthViewModelTests {
         mock.magicLinkVerifyHandler = { token in
             #expect(token == "dev-tok")
             return SessionResponse(accessToken: "a", refreshToken: "r", expiresIn: 900,
-                                   user: SessionUser(id: "u-dev", email: "dev@snapceipt.app", displayName: "Dev"))
+                                   user: SessionUser(id: "u-dev", email: "dev@snapceipt.cc", displayName: "Dev"))
         }
         let auth = AuthStore(keychain: Keychain(service: "t.\(UUID())"))
         let vm = AuthViewModel(api: mock, auth: auth)

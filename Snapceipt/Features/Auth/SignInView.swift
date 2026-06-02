@@ -193,11 +193,11 @@ final class PreviewAPIClient: APIClient {
     }
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {
         InboxAddressResponse(profileId: profileId, token: "previewtoken",
-                             address: "r.previewtoken@in.snapceipt.app")
+                             address: "r.previewtoken@in.snapceipt.cc")
     }
     func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
         InboxAddressResponse(profileId: profileId, token: "previewtoken2",
-                             address: "r.previewtoken2@in.snapceipt.app")
+                             address: "r.previewtoken2@in.snapceipt.cc")
     }
     func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
         EmailChangeRequested(sent: true, devCode: "000000")

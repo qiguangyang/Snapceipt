@@ -236,7 +236,7 @@ struct QuoteEditorView: View {
 
     private func openPDF(_ vm: QuoteEditorViewModel) {
         guard let url = vm.pdfUrl else { return }
-        let full = url.hasPrefix("http") ? url : "https://api.snapceipt.app\(url)"
+        let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
         shareURL = URL(string: full)
     }
 

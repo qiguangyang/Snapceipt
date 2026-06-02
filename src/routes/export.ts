@@ -153,7 +153,7 @@ exportRoutes.post("/", validate("json", exportRequestSchema), async (c) => {
   try {
     await sendExportEmail(c.env, {
       to: toEmail,
-      replyTo: user?.email ?? "noreply@snapceipt.app",
+      replyTo: user?.email ?? "noreply@snapceipt.cc",
       profileName: profile.name,
       periodLabel,
       csv,

@@ -72,7 +72,7 @@ function txnMutation(overrides: Record<string, unknown> = {}) {
 }
 
 async function push(body: unknown) {
-  return SELF.fetch("https://api.snapceipt.app/sync/push", {
+  return SELF.fetch("https://api.snapceipt.cc/sync/push", {
     method: "POST",
     headers: await authHeader(),
     body: JSON.stringify(body),

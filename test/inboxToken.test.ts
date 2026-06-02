@@ -39,15 +39,15 @@ describe("inboxToken — pure helpers", () => {
     expect(a).not.toBe(b);
   });
 
-  it("addressForToken formats r.<token>@in.snapceipt.app", () => {
-    expect(addressForToken("abc")).toBe("r.abc@in.snapceipt.app");
+  it("addressForToken formats r.<token>@in.snapceipt.cc", () => {
+    expect(addressForToken("abc")).toBe("r.abc@in.snapceipt.cc");
   });
 
   it("tokenFromRecipient extracts the token and rejects non-r. localparts", () => {
-    expect(tokenFromRecipient("r.deadbeef@in.snapceipt.app")).toBe("deadbeef");
-    expect(tokenFromRecipient("R.DEADBEEF@IN.SNAPCEIPT.APP")).toBe("deadbeef");
-    expect(tokenFromRecipient("noreply@snapceipt.app")).toBeNull();
-    expect(tokenFromRecipient("r.@in.snapceipt.app")).toBeNull();
+    expect(tokenFromRecipient("r.deadbeef@in.snapceipt.cc")).toBe("deadbeef");
+    expect(tokenFromRecipient("R.DEADBEEF@IN.SNAPCEIPT.CC")).toBe("deadbeef");
+    expect(tokenFromRecipient("noreply@snapceipt.cc")).toBeNull();
+    expect(tokenFromRecipient("r.@in.snapceipt.cc")).toBeNull();
   });
 });
 

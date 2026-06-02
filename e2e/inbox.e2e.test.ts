@@ -101,7 +101,7 @@ describe("e2e (real HTTP): inbox alias endpoints", () => {
     expect(got.status).toBe(200);
     expect(got.json.profileId).toBe(profileId);
     expect(got.json.token).toMatch(/^[0-9a-f]{32}$/);
-    expect(got.json.address).toBe(`r.${got.json.token}@in.snapceipt.app`);
+    expect(got.json.address).toBe(`r.${got.json.token}@in.snapceipt.cc`);
 
     const rotated = await api(`/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: authHeaders });
     expect(rotated.status).toBe(200);

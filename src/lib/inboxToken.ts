@@ -2,7 +2,7 @@
 // Per-profile inbox alias token: an opaque random secret stored in
 // profile_inbox_tokens (NOT a signed JWT). The address selects the profile.
 
-const INBOX_DOMAIN = "in.snapceipt.app";
+const INBOX_DOMAIN = "in.snapceipt.cc";
 const PREFIX = "r.";
 
 export interface InboxOwner {

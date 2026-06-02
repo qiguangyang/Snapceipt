@@ -8,7 +8,7 @@ import type { Env } from "../env";
  * binding), so route tests assert against this seam instead of a live send.
  */
 
-const MAGIC_LINK_SENDER = "noreply@snapceipt.app";
+const MAGIC_LINK_SENDER = "noreply@snapceipt.cc";
 
 export interface MagicLinkEmail {
   to: string;

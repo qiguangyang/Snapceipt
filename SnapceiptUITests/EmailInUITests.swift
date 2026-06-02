@@ -22,7 +22,7 @@ final class EmailInUITests: UITestCase {
         // Address card renders (stub alias).
         let address = app.staticTexts[AccessibilityID.emailInAddress]
         XCTAssertTrue(address.waitForExistence(timeout: 5), "Inbox address not shown")
-        XCTAssertTrue(address.label.contains("@in.snapceipt.app"), "Address not formatted")
+        XCTAssertTrue(address.label.contains("@in.snapceipt.cc"), "Address not formatted")
 
         // The failed row should be present and tappable (failed-first ordering).
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.emailInScreen].waitForExistence(timeout: 5),

@@ -48,7 +48,7 @@ describe("sendQuoteEmail", () => {
       pdf: new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3]),
     });
     expect(sent.length).toBe(1);
-    expect(captured.from).toBe("noreply@snapceipt.app");
+    expect(captured.from).toBe("noreply@snapceipt.cc");
     expect(captured.to).toBe("jane@client.au");
   });
 

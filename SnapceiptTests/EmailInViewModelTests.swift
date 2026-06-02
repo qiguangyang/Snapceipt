@@ -59,14 +59,14 @@ struct EmailInViewModelTests {
     @Test("loadAddress + rotate go through the API client")
     func addressFlow() async throws {
         let (ctx, sync, api) = try fixture()
-        api.profileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t1", address: "r.t1@in.snapceipt.app") }
-        api.rotateProfileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t2", address: "r.t2@in.snapceipt.app") }
+        api.profileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t1", address: "r.t1@in.snapceipt.cc") }
+        api.rotateProfileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t2", address: "r.t2@in.snapceipt.cc") }
         let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
 
         await vm.loadAddress()
-        #expect(vm.address?.address == "r.t1@in.snapceipt.app")
+        #expect(vm.address?.address == "r.t1@in.snapceipt.cc")
         await vm.rotate()
-        #expect(vm.address?.address == "r.t2@in.snapceipt.app")
+        #expect(vm.address?.address == "r.t2@in.snapceipt.cc")
         #expect(api.profileInboxCalls == ["p1"])
         #expect(api.rotateProfileInboxCalls == ["p1"])
     }

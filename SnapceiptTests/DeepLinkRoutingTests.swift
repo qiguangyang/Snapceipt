@@ -13,7 +13,7 @@ struct DeepLinkRoutingTests {
     @Test("non-budget / malformed urls return nil")
     func rejects() {
         #expect(Router.parseBudgetDeepLink(URL(string: "snapceipt://export")!) == nil)
-        #expect(Router.parseBudgetDeepLink(URL(string: "https://snapceipt.app/budget/x")!) == nil)
+        #expect(Router.parseBudgetDeepLink(URL(string: "https://snapceipt.cc/budget/x")!) == nil)
         #expect(Router.parseBudgetDeepLink(URL(string: "snapceipt://budget/")!) == nil)
     }
 

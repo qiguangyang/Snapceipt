@@ -181,7 +181,7 @@ struct APIClientTests {
         MockURLProtocol.setHandler { _ in
             (202, ["Content-Type": "application/json"], self.json(#"{"devToken":"dev-tok-123"}"#))
         }
-        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.app")
+        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.cc")
         #expect(token == "dev-tok-123")
         #expect(MockURLProtocol.lastRequest?.url?.path == "/auth/magic-link/request")
         #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
@@ -191,7 +191,7 @@ struct APIClientTests {
     func magicLinkRequestDevReturnsNilWhenNoToken() async throws {
         let (client, _) = makeClient(seedBearer: nil)
         MockURLProtocol.setHandler { _ in (202, [:], Data()) }
-        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.app")
+        let token = try await client.magicLinkRequestDev(email: "dev@snapceipt.cc")
         #expect(token == nil)
     }
 
