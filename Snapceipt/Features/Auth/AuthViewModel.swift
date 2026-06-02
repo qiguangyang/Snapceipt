@@ -10,8 +10,8 @@ import UIKit
 
 /// Extracts the magic-link `token` from a sign-in URL.
 /// Accepts the custom scheme `snapceipt://auth/verify?token=…`, the canonical
-/// Universal Link `https://snapceipt.app/auth/verify?token=…` (spec §9), and the
-/// backend-emitted `https://snapceipt.app/auth/magic?token=…` link.
+/// Universal Link `https://snapceipt.cc/auth/verify?token=…` (spec §9), and the
+/// backend-emitted `https://snapceipt.cc/auth/magic?token=…` link.
 enum MagicLinkParser {
     static func token(from url: URL) -> String? {
         guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }

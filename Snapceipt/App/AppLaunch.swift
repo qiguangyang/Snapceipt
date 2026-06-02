@@ -117,7 +117,7 @@ struct AppLaunch {
 
     func makeAPIClient(auth: AuthStore) -> APIClient {
         if useStub { return StubAPIClient() }
-        let base = apiBaseURLOverride ?? URL(string: "https://api.snapceipt.app")!
+        let base = apiBaseURLOverride ?? URL(string: "https://api.snapceipt.cc")!
         return LiveAPIClient(baseURL: base, auth: auth)
     }
 

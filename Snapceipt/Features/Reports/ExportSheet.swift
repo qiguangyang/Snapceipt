@@ -151,7 +151,7 @@ struct ExportSheet: View {
             switch result {
             case let .download(url, _):
                 // Resolve a shareable URL (absolute or app-host-relative).
-                let full = url.hasPrefix("http") ? url : "https://api.snapceipt.app\(url)"
+                let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
                 shareURL = URL(string: full)
                 phase = .idle
             case .sent:

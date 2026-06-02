@@ -12,13 +12,13 @@ struct MagicLinkParserTests {
 
     @Test("extracts token from the universal link path /auth/verify")
     func universalLink() throws {
-        let url = try #require(URL(string: "https://snapceipt.app/auth/verify?token=xyz-789_QQ"))
+        let url = try #require(URL(string: "https://snapceipt.cc/auth/verify?token=xyz-789_QQ"))
         #expect(MagicLinkParser.token(from: url) == "xyz-789_QQ")
     }
 
     @Test("also accepts the backend /auth/magic universal-link path")
     func magicPath() throws {
-        let url = try #require(URL(string: "https://snapceipt.app/auth/magic?token=tok42"))
+        let url = try #require(URL(string: "https://snapceipt.cc/auth/magic?token=tok42"))
         #expect(MagicLinkParser.token(from: url) == "tok42")
     }
 
@@ -30,7 +30,7 @@ struct MagicLinkParserTests {
 
     @Test("returns nil for an unrelated path")
     func unrelatedPath() throws {
-        let url = try #require(URL(string: "https://snapceipt.app/blog?token=nope"))
+        let url = try #require(URL(string: "https://snapceipt.cc/blog?token=nope"))
         #expect(MagicLinkParser.token(from: url) == nil)
     }
 
