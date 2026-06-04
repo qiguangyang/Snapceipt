@@ -275,13 +275,18 @@ authRoutes.get("/magic", (c) => {
  * 401 AUTH_INVALID_TOKEN.
  */
 authRoutes.post("/apple", validate("json", appleBody), async (c) => {
-  const { identityToken, rawNonce, fullName, email } = c.req.valid("json");
+  const { identityToken, rawNonce, fullName } = c.req.valid("json");
 
   // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
   const claims = await verifyAppleIdentityToken(c.env, identityToken, rawNonce);
   const appleSub = claims.sub;
-  // Prefer the client-supplied email (first-auth only); fall back to the token.
-  const appleEmail = email ?? claims.email ?? null;
+  // SECURITY: use ONLY the email from the cryptographically-verified identity
+  // token — never the client-supplied `email` JSON field. Trusting the client
+  // value would let any Apple ID register (and mark `email_verified`) under a
+  // victim's address, enabling account pre-hijacking when the victim later signs
+  // in by magic link to the same email. The body's `email`/`fullName` are
+  // unverified client input; we keep `fullName` only as a display name.
+  const appleEmail = claims.email ?? null;
 
   const now = nowMs();
 

@@ -85,6 +85,36 @@ describe("POST /auth/apple", () => {
     expect(row?.user_id).toBe(body.user.id);
   });
 
+  it("ignores a spoofed client email, trusting only the verified token email", async () => {
+    const rawNonce = "raw-nonce-spoof-001";
+    const { jwks, token } = await makeAppleIdToken({
+      aud: BUNDLE_ID,
+      rawNonce,
+      sub: "000779.apple.spoof",
+      email: "real@privaterelay.appleid.com", // the cryptographically-signed email
+    });
+    mockJwks(jwks);
+
+    // Attacker sends a DIFFERENT email in the JSON body than the one in the token.
+    const res = await post({
+      identityToken: token,
+      authorizationCode: "auth-code",
+      rawNonce,
+      fullName: "Mallory",
+      email: "victim@gmail.com", // spoofed — must be ignored
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { id: string; email: string | null } };
+    // The stored account email is the token's, never the client-supplied one.
+    expect(body.user.email).toBe("real@privaterelay.appleid.com");
+
+    const row = await env.DB.prepare("SELECT email FROM users WHERE id = ?1")
+      .bind(body.user.id)
+      .first<{ email: string | null }>();
+    expect(row?.email).toBe("real@privaterelay.appleid.com");
+  });
+
   it("reuses the existing user on a second sign-in (Apple omits name/email)", async () => {
     const first = await makeAppleIdToken({
       aud: BUNDLE_ID,

