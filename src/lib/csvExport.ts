@@ -36,13 +36,28 @@ export interface BuildCsvInput {
 const COLUMNS =
   "date,merchant,category,amount_incl_gst,gst,deductible_pct,payment_method,note,receipt_url";
 
-/** RFC 4180 field escaping: wrap in quotes + double internal quotes when the
- *  field contains a comma, quote, CR or LF. */
+/**
+ * Neutralize CSV / formula injection (CWE-1236). A cell whose first character is
+ * `=`, `+`, `-`, `@`, TAB or CR is interpreted as a formula by Excel / Google
+ * Sheets / LibreOffice, so a malicious merchant/note (e.g. an attacker-controlled
+ * receipt OCR'd into `merchant`, then emailed to an accountant via the
+ * `accountant` export) could run `=HYPERLINK(...)`/DDE on the recipient's machine.
+ * Prefix such a value with a single quote so the cell renders as literal text.
+ * Only text columns pass through here; numeric/date/url columns do not, so
+ * legitimate negative dollar amounts like "-33.00" are unaffected.
+ */
+function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+/** RFC 4180 field escaping: neutralize formula triggers, then wrap in quotes +
+ *  double internal quotes when the field contains a comma, quote, CR or LF. */
 function csvField(value: string): string {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const safe = neutralizeFormula(value);
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return value;
+  return safe;
 }
 
 /** Cents -> fixed 2-dp dollar string, sign preserved (-3300 -> "-33.00"). */
