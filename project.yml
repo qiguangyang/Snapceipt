@@ -22,6 +22,7 @@ targets:
         excludes:
           - "Info.plist"
           - "Snapceipt.entitlements"
+          - "Snapceipt.Release.entitlements"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
@@ -33,6 +34,9 @@ targets:
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.Release.entitlements
   SnapceiptTests:
     type: bundle.unit-test
     platform: iOS

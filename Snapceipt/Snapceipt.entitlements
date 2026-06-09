@@ -6,8 +6,10 @@
 	<array>
 		<string>Default</string>
 	</array>
-	<!-- "development" is correct here: the App Store export re-signs to
-	     "production" from the provisioning profile. Do not change. -->
+	<!-- Debug/dev builds use automatic signing, whose dev profiles carry
+	     aps-environment=development. Release uses Snapceipt.Release.entitlements
+	     (production) because manual signing with the match App Store profile
+	     validates this file's value against the profile. -->
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>
