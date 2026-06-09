@@ -11,8 +11,11 @@
 #   DEEPSEEK_API_KEY   - your DeepSeek API key (required)
 # Optional env:
 #   JWT_SIGNING_KEY    - HS256 signing key (auto-generated via `openssl rand` if unset)
-#   ATTACH_CUSTOM_DOMAIN=1 - also attach api.snapceipt.cc (requires the snapceipt.cc zone
-#                            to already exist on this Cloudflare account)
+#
+# NOTE: wrangler.jsonc carries a custom-domain route for api.snapceipt.cc, so the
+# snapceipt.cc zone MUST exist on this account before a live run — `wrangler deploy`
+# attaches the domain unconditionally and (under set -e) aborts this script if the
+# zone is missing. Add the zone first; DRY_RUN=1 is unaffected (no deploy).
 #
 set -euo pipefail
 
@@ -120,12 +123,10 @@ $WRANGLER d1 migrations apply "$DB_NAME" --remote
 log "deploy worker"
 $WRANGLER deploy
 
-# --- 8. (optional) attach the api.snapceipt.cc custom domain -----------------
-if [ "${ATTACH_CUSTOM_DOMAIN:-0}" = "1" ]; then
-  warn "Custom-domain attach is manual: add to wrangler.jsonc"
-  warn "  \"routes\": [{ \"pattern\": \"${CUSTOM_DOMAIN}\", \"custom_domain\": true }]"
-  warn "  then re-run 'npx wrangler deploy'  (requires the ${EMAIL_DOMAIN} zone on this account)."
-fi
+# --- 8. custom domain ---------------------------------------------------------
+# api.snapceipt.cc is attached automatically by the step-7 deploy via the routes
+# entry in wrangler.jsonc; the ${EMAIL_DOMAIN} zone existing on this account is a
+# hard prerequisite (see header note).
 
 # --- 9. smoke test -----------------------------------------------------------
 log "smoke test"
