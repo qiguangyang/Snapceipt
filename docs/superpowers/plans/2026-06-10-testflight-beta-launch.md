@@ -636,6 +636,13 @@ Grounded in the actual code audit: UserDefaults is used (AppLaunch, ProfilesStor
 </plist>
 ```
 
+> **Executed note:** quality review expanded the collected-data list with five more
+> types matching the code + privacy policy — `Name` (SIWA fullName), `PhotosorVideos`
+> (receipt images), `DeviceID` (push token), `OtherFinancialInfo` (income/budgets/tax),
+> `OtherUserContent` (notes/clients/loyalty/vehicles) — same flags (linked,
+> app-functionality, no tracking). `Snapceipt/PrivacyInfo.xcprivacy` (8 types) is
+> canonical; mirror it when filling the ASC App Privacy questionnaire pre-App-Store.
+
 - [ ] **Step 2: Verify it lands in the app bundle**
 
 ```bash
