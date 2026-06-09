@@ -845,6 +845,13 @@ fastlane/test_output/
 *.dSYM.zip
 ```
 
+> **Executed note:** quality review hardened the scaffold beyond the blocks above:
+> Ruby pinned via `.ruby-version` (4.0.5) + Gemfile `ruby file:` directive; the
+> changelog prompt hoisted to the top of the `beta` lane (before the 10-minute
+> build); gym's `xcargs` also passes `DEVELOPMENT_TEAM=#{ENV.fetch("FASTLANE_TEAM_ID")}`
+> so archives resolve the match profile even before project.yml carries the team.
+> The committed `fastlane/Fastfile` is canonical.
+
 - [ ] **Step 8: Install and verify the lanes parse**
 
 (Every `bundle`/`fastlane` invocation in this plan re-exports the Homebrew Ruby PATH — plan steps run in fresh shells, and falling back to system Ruby 2.6 fails.)

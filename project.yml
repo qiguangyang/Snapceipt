@@ -8,6 +8,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
+    # Release archives need (1) DEVELOPMENT_TEAM filled from beta-launch.env
+    # (see beta-launch.env.example) and (2) `bundle exec fastlane certs` to
+    # install the match profile. Don't fix signing in Xcode's UI — the
+    # .xcodeproj is generated from this file.
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
