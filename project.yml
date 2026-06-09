@@ -21,10 +21,12 @@ targets:
       - path: Snapceipt
         excludes:
           - "Info.plist"
+          - "Snapceipt.entitlements"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
         INFOPLIST_FILE: Snapceipt/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.entitlements
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: NO
         TARGETED_DEVICE_FAMILY: "1"

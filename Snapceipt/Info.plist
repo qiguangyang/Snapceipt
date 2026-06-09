@@ -11,6 +11,10 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Snapceipt uses your camera to capture receipts and read the total, GST and category for you.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Snapceipt uses Face ID to unlock the app when App Lock is on.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
