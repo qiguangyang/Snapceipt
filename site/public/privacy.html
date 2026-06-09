@@ -30,6 +30,10 @@
     transaction details extracted from them (merchant, amounts, GST, category, notes).</li>
     <li><strong>Device push token:</strong> if you enable notifications, so we can send
     budget alerts you asked for.</li>
+    <li><strong>Other app data:</strong> things you enter in the app — clients and
+    quotes, vehicles and mileage trips, work-from-home logs, loyalty cards, budgets
+    and tax settings — plus basic device info (model, OS version, timezone) when you
+    register a device for notifications.</li>
   </ul>
 
   <h2>How your data is processed</h2>
@@ -40,6 +44,10 @@
     <strong>DeepSeek</strong> (a third-party AI provider) to extract the merchant,
     total, GST and category. Only receipt text is shared — never your name, email or
     account details.</li>
+    <li>Receipts you capture in the app are read on-device. If you email a receipt to
+    your private Snapceipt inbox address (when that feature is enabled for your
+    account), its image is OCR'd by <strong>Cloudflare Workers AI</strong> before the
+    same text-only extraction, and we keep a delivery log for that inbox.</li>
     <li><strong>Apple</strong> processes your sign-in when you use Sign in with Apple.</li>
   </ul>
 
@@ -51,8 +59,9 @@
 
   <h2>Deleting your data</h2>
   <p>Delete your account any time in the app under <strong>Account → Delete
-  Account</strong>. This permanently removes your account, receipts, images and
-  transactions from our systems.</p>
+  Account</strong>. Your account, receipts, images and transactions are removed
+  immediately; residual copies in encrypted infrastructure backups are purged within
+  30 days.</p>
 
   <h2>Contact</h2>
   <p>Questions? Email <a href="mailto:support@snapceipt.cc">support@snapceipt.cc</a>.</p>
