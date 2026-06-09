@@ -1,0 +1,46 @@
+default_platform(:ios)
+
+platform :ios do
+  # All lanes auth via the ASC API key — never interactive Apple ID + 2FA.
+  private_lane :asc_api_key do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH")
+    )
+  end
+
+  desc "Sync App Store signing certs/profiles (first run creates them; new machines pull them)"
+  lane :certs do
+    match(type: "appstore", readonly: false, api_key: asc_api_key)
+  end
+
+  desc "Build and upload a TestFlight beta to the external 'Beta' group"
+  lane :beta do
+    ensure_git_status_clean
+    # project.yml is the source of truth; the .xcodeproj is gitignored.
+    sh("cd .. && xcodegen generate")
+    api_key = asc_api_key
+    match(type: "appstore", readonly: true, api_key: api_key)
+    # Build numbers come from TestFlight, not local state — nothing to drift.
+    build_num = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
+    gym(
+      scheme: "Snapceipt",
+      export_method: "app-store",
+      xcargs: "CURRENT_PROJECT_VERSION=#{build_num}",
+      export_options: {
+        provisioningProfiles: {
+          "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt"
+        }
+      }
+    )
+    pilot(
+      api_key: api_key,
+      # Spec §7: changelog prompted at run time; env var override for
+      # non-interactive runs.
+      changelog: ENV["BETA_CHANGELOG"] || prompt(text: "Changelog for this build: "),
+      groups: ["Beta"],
+      distribute_external: true
+    )
+  end
+end

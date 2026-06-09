@@ -31,3 +31,11 @@ coverage/
 
 # gstack local artifacts (security reports stay local)
 .gstack/
+
+# fastlane
+fastlane/.env
+fastlane/report.xml
+fastlane/README.md
+fastlane/test_output/
+*.ipa
+*.dSYM.zip
