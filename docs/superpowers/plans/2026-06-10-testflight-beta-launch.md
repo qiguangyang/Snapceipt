@@ -666,6 +666,11 @@ git commit -m "feat(beta): privacy manifest (no tracking, UserDefaults CA92.1)"
 
 **[USER INPUT required: `TEAM_ID`]** — ask the user for their 10-character Apple Team ID (developer.apple.com → Membership) before this task.
 
+> **Executed note:** run with `DEVELOPMENT_TEAM` deferred — the value arrives via
+> `beta-launch.env` (`APPLE_TEAM_ID`) and **must be written into `project.yml` +
+> `xcodegen generate` before Task 13's device build**. Task 15 is covered either
+> way: gym injects `DEVELOPMENT_TEAM` via xcargs from `FASTLANE_TEAM_ID`.
+
 **Files:**
 - Modify: `project.yml`
 
@@ -1044,7 +1049,9 @@ Depends on: Tasks 3–6, 9, 11 (App ID + capabilities registered; team set; prod
 
 - [ ] **Step 1 [USER]: Run a Debug build on a real iPhone**
 
-Plug in the iPhone, trust the computer. Then either run from Xcode (open `Snapceipt.xcodeproj`, select the device, Run), or:
+First (executor): write `APPLE_TEAM_ID` from `beta-launch.env` into `project.yml`
+`DEVELOPMENT_TEAM` and run `xcodegen generate` — the device build fails on an
+empty team. Then: plug in the iPhone, trust the computer. Then either run from Xcode (open `Snapceipt.xcodeproj`, select the device, Run), or:
 
 ```bash
 xcodegen generate
