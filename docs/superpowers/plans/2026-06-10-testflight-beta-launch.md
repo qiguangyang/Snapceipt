@@ -284,11 +284,16 @@ git commit -m "feat(beta): snapceipt.cc public site (landing + privacy + support
 ### Task 3: iOS entitlements + Face ID usage string
 
 **Files:**
-- Create: `Snapceipt/Snapceipt.entitlements`
+- Create: `Snapceipt/Snapceipt.entitlements` (Debug)
+- Create: `Snapceipt/Snapceipt.Release.entitlements` (Release)
 - Modify: `Snapceipt/Info.plist`
 - Modify: `project.yml`
 
-- [ ] **Step 1: Create `Snapceipt/Snapceipt.entitlements`**
+- [ ] **Step 1: Create the per-config entitlements pair**
+
+Two files, because Release uses **manual signing** with the match App Store profile (Task 6): the archive itself is signed with that profile, and manual-signing validation requires the file's `aps-environment` to match the profile's (`production`). The export-re-sign mechanism only applies to automatic signing.
+
+`Snapceipt/Snapceipt.entitlements` (Debug):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -299,10 +304,32 @@ git commit -m "feat(beta): snapceipt.cc public site (landing + privacy + support
 	<array>
 		<string>Default</string>
 	</array>
-	<!-- "development" is correct here: the App Store export re-signs to
-	     "production" from the provisioning profile. Do not change. -->
+	<!-- Debug/dev builds use automatic signing, whose dev profiles carry
+	     aps-environment=development. Release uses Snapceipt.Release.entitlements
+	     (production) because manual signing with the match App Store profile
+	     validates this file's value against the profile. -->
 	<key>aps-environment</key>
 	<string>development</string>
+</dict>
+</plist>
+```
+
+`Snapceipt/Snapceipt.Release.entitlements`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- Release archives are signed directly with the match App Store profile
+	     (manual signing), which pins aps-environment to production — the file
+	     value must match or the archive fails validation. -->
+	<key>aps-environment</key>
+	<string>production</string>
 </dict>
 </plist>
 ```
@@ -313,10 +340,12 @@ Insert directly after the existing `NSCameraUsageDescription` key/string pair:
 
 ```xml
 	<key>NSFaceIDUsageDescription</key>
-	<string>Snapceipt uses Face ID to unlock the app when App Lock is on.</string>
+	<string>Snapceipt uses Face ID to unlock the app when 'Require Face ID' is turned on.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 ```
+
+(The string names the actual UI label from `PrivacyView` — users never see the words "App Lock".)
 
 `ITSAppUsesNonExemptEncryption: false` answers the export-compliance question at upload time for every build (the app uses only standard HTTPS — exempt). Without it, each uploaded build sits in ASC as "Missing Compliance" and `pilot` cannot distribute to the external group.
 
@@ -332,6 +361,7 @@ In the `Snapceipt` target: add `CODE_SIGN_ENTITLEMENTS` to its base settings, an
         excludes:
           - "Info.plist"
           - "Snapceipt.entitlements"
+          - "Snapceipt.Release.entitlements"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
@@ -343,6 +373,9 @@ In the `Snapceipt` target: add `CODE_SIGN_ENTITLEMENTS` to its base settings, an
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.Release.entitlements
 ```
 
 - [ ] **Step 4: Regenerate and build for simulator**
@@ -357,7 +390,7 @@ Expected: `** BUILD SUCCEEDED **` (simulator builds don't validate entitlements 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Snapceipt/Snapceipt.entitlements Snapceipt/Info.plist project.yml
+git add Snapceipt/Snapceipt.entitlements Snapceipt/Snapceipt.Release.entitlements Snapceipt/Info.plist project.yml
 git commit -m "feat(beta): SIWA + push entitlements and Face ID usage string"
 ```
 
@@ -637,7 +670,7 @@ Top-level `settings.base`: replace `DEVELOPMENT_TEAM: ""` with the real ID:
     DEVELOPMENT_TEAM: "<TEAM_ID>"   # user-supplied, e.g. ABCDE12345
 ```
 
-`Snapceipt` target `settings`: add a `configs` block after `base` (Debug stays Automatic from the top-level default, so simulator dev workflows are untouched; Release goes manual because fastlane match owns the distribution profile):
+`Snapceipt` target `settings`: extend the existing `configs.Release` block (created in Task 3 for the Release entitlements) with the manual-signing keys. Debug stays Automatic from the top-level default, so simulator dev workflows are untouched; Release goes manual because fastlane match owns the distribution profile:
 
 ```yaml
     settings:
@@ -645,6 +678,7 @@ Top-level `settings.base`: replace `DEVELOPMENT_TEAM: ""` with the real ID:
         # ... existing keys unchanged ...
       configs:
         Release:
+          CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.Release.entitlements   # from Task 3
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "match AppStore app.snapceipt.Snapceipt"
