@@ -1,6 +1,6 @@
 import { env, SELF, fetchMock } from "cloudflare:test";
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
-import { makeAppleIdToken, TEST_KID } from "./helpers/apple";
+import { makeAppleIdToken, sha256Base64Url, TEST_KID } from "./helpers/apple";
 
 // Migrations are applied by the shared setup file (test/apply-migrations.ts).
 
@@ -159,6 +159,27 @@ describe("POST /auth/apple", () => {
       .bind("000778.apple.reuse")
       .first<{ n: number }>();
     expect(count!.n).toBe(1);
+  });
+
+  it("accepts a base64url-encoded nonce digest (tolerated alternative client convention)", async () => {
+    const rawNonce = "raw-nonce-b64url-001";
+    const { jwks, token } = await makeAppleIdToken({
+      aud: BUNDLE_ID,
+      rawNonce,
+      sub: "000791.apple.b64url",
+      nonce: await sha256Base64Url(rawNonce), // not the hex default
+    });
+    mockJwks(jwks);
+
+    const res = await post({
+      identityToken: token,
+      authorizationCode: "auth-code",
+      rawNonce,
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { id: string } };
+    expect(body.user.id).toMatch(/[0-9a-f-]{36}/i);
   });
 
   it("rejects a token whose nonce does not match (401 AUTH_INVALID_TOKEN)", async () => {

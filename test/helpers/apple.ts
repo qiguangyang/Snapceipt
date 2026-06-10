@@ -15,7 +15,16 @@ export const APPLE_ISS = "https://appleid.apple.com";
 // specifically exercise the cache-hit path pass an explicit `kid`.
 let kidCounter = 0;
 
-async function sha256Base64Url(input: string): Promise<string> {
+/** lowercase hex digest — matches the REAL iOS client (AppleNonce.sha256), which
+ *  sets hex on ASAuthorizationAppleIDRequest.nonce; Apple embeds it verbatim. */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** base64url digest — the tolerated alternative encoding (kept for the regression
+ *  test covering non-hex client conventions). */
+export async function sha256Base64Url(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   const bytes = new Uint8Array(digest);
   let bin = "";
@@ -31,6 +40,9 @@ export interface MakeTokenOpts {
   iss?: string;
   kid?: string;
   expiresInSec?: number;
+  /** Override the token's nonce claim verbatim (defaults to hex(sha256(rawNonce)),
+   *  the real iOS client convention). */
+  nonce?: string;
 }
 
 export interface AppleTestKit {
@@ -51,7 +63,7 @@ export async function makeAppleIdToken(opts: MakeTokenOpts): Promise<AppleTestKi
 
   const now = Math.floor(Date.now() / 1000);
   const token = await new SignJWT({
-    nonce: await sha256Base64Url(opts.rawNonce),
+    nonce: opts.nonce ?? (await sha256Hex(opts.rawNonce)),
     email: opts.email,
     email_verified: opts.email ? "true" : undefined,
   })
