@@ -21,8 +21,9 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
 
     // MARK: Sync scripting
 
-    /// Builds the push response for a given batch of mutations.
-    var pushHandler: (([PushMutation]) -> PushResponse)?
+    /// Builds the push response for a given batch of mutations (or throws, e.g. an
+    /// `APIError`, to script a transport/HTTP failure).
+    var pushHandler: (([PushMutation]) throws -> PushResponse)?
     /// Pages returned by successive `syncPull` calls; the first is dequeued each call.
     var pullPages: [PullResponse] = []
 
@@ -99,7 +100,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
         pushCalls.append(mutations)
         guard let h = pushHandler else { return PushResponse(results: [], serverTime: 0) }
-        return h(mutations)
+        return try h(mutations)
     }
 
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
