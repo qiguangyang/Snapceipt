@@ -284,6 +284,67 @@ describe("POST /sync/push", () => {
     expect(row.gst_registered).toBe(1); // boolean -> 0/1
   });
 
+  it("accepts the real iOS encoder payload shape (no type key, null lastEditedDeviceId) — contract regression", async () => {
+    // Byte-faithful reproduction of what the iOS client actually pushes
+    // (SyncEntityRegistry.swift sharedFields() + ProfileSyncMapper.payload()):
+    // there is NO `type` key (the encoder never emits the envelope discriminant)
+    // and lastEditedDeviceId is null for locally-created rows. baseEnvelope used
+    // to require both, 400-ing every real-device push — the route never reads
+    // either (entityType comes from the mutation; last_edited_device_id is
+    // server-stamped from the authed deviceId), so this exact shape must apply.
+    const entityId = uuidv7();
+    const m = {
+      mutationId: uuidv7(),
+      entityType: "profile",
+      entityId,
+      op: "upsert" as const,
+      updatedAt: 1_000,
+      payload: {
+        // -- sharedFields() --
+        id: entityId,
+        userId: USER_ID,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        rev: 0,
+        deletedAt: null,
+        lastEditedDeviceId: null, // locally-created: no device id stamped yet
+        // (no profileId: a Profile row's own profileId is nil, so the key is omitted)
+        // -- ProfileSyncMapper.payload() --
+        name: "Maya's Biz",
+        profileType: "business",
+        initials: null,
+        accent1: "#0E7C72",
+        accent2: "#DCF0ED",
+        accent3: "#0A5950",
+        abn: null,
+        gstRegistered: false,
+        sortOrder: 1,
+        isDefault: false,
+      } as Record<string, unknown>,
+    };
+
+    const res = await push({ deviceId: DEVICE_ID, mutations: [m] });
+    expect(res.status).toBe(200); // NOT a 400 VALIDATION_FAILED envelope reject
+    const json = (await res.json()) as any;
+    expect(json.error).toBeUndefined();
+    expect(json.results[0].status).toBe("applied");
+    expect(json.results[0].entity.rev).toBe(1);
+    // The server stamps the device id from the authed request, not the payload.
+    expect(json.results[0].entity.lastEditedDeviceId).toBe(DEVICE_ID);
+
+    const row = await env.DB.prepare(
+      `SELECT type, name, accent_1, last_edited_device_id, rev FROM profiles WHERE id = ?`,
+    )
+      .bind(entityId)
+      .first<any>();
+    expect(row).not.toBeNull();
+    expect(row.type).toBe("business"); // persona from profileType, no envelope type needed
+    expect(row.name).toBe("Maya's Biz");
+    expect(row.accent_1).toBe("#0E7C72");
+    expect(row.last_edited_device_id).toBe(DEVICE_ID);
+    expect(row.rev).toBe(1);
+  });
+
   it("rejects an upsert that omits profileId for a NOT NULL profile_id table (no row, no 500)", async () => {
     const m = txnMutation();
     delete m.payload.profileId;
