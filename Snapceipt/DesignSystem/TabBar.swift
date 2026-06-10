@@ -99,12 +99,13 @@ struct TabBar: View {
                     .fill(Palette.paper.opacity(0.55))
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .fill(.regularMaterial)
+                // The border lives in the background stack, NOT .overlay:
+                // overlays draw above children, slicing a seam across the
+                // raised Snap FAB.
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Palette.line, lineWidth: 1)
             }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Palette.line, lineWidth: 1)
-        )
         .cardShadow()
         .padding(.horizontal, 16)
     }
