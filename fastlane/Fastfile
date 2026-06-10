@@ -41,6 +41,10 @@ platform :ios do
     gym(
       scheme: "Snapceipt",
       export_method: "app-store",
+      # Optional disambiguation when the keychain holds multiple
+      # "Apple Distribution" identities (e.g. an Xcode-created duplicate):
+      # set CODESIGN_IDENTITY in fastlane/.env to the match cert's SHA-1.
+      codesigning_identity: ENV["CODESIGN_IDENTITY"],
       xcargs: "CURRENT_PROJECT_VERSION=#{build_num} DEVELOPMENT_TEAM=#{ENV.fetch("FASTLANE_TEAM_ID")}",
       export_options: {
         provisioningProfiles: {
