@@ -55,11 +55,16 @@ platform :ios do
         signingCertificate: ENV["CODESIGN_IDENTITY"]
       }.compact
     )
-    pilot(
-      api_key: api_key,
-      changelog: changelog,
-      groups: ["Beta"],
-      distribute_external: true
-    )
+    # BETA_INTERNAL_ONLY=1 uploads without an external submission — internal
+    # groups get the build instantly and the one-per-train external review
+    # slot stays with the build already under review.
+    pilot_opts = { api_key: api_key, changelog: changelog }
+    if ENV["BETA_INTERNAL_ONLY"] == "1"
+      pilot_opts[:distribute_external] = false
+    else
+      pilot_opts[:groups] = ["Beta"]
+      pilot_opts[:distribute_external] = true
+    end
+    pilot(**pilot_opts)
   end
 end
