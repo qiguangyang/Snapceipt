@@ -128,7 +128,7 @@ final class SyncEngine {
                 // of masquerading as offline and silently retrying forever.
                 if let apiError = error as? APIError,
                    (400..<500).contains(apiError.status),
-                   apiError.status != 401, apiError.status != 429 {
+                   apiError.status != 401, apiError.status != 408, apiError.status != 429 {
                     for m in batch where m.status == "inflight" { m.status = "failed" }
                     try? context.save()
                     log.error("sync push rejected (\(apiError.status)) \(apiError.code): \(apiError.message)")
@@ -239,6 +239,9 @@ final class SyncEngine {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.push()
+            // A push contract rejection sets .error — let it stay visible instead
+            // of letting pull() immediately clobber it back to .idle.
+            if case .error = self.status { return }
             await self.pull()
         }
         syncTask = task
