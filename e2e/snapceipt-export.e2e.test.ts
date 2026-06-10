@@ -126,8 +126,10 @@ describe("e2e (real HTTP): /export csv -> /export/dl round-trip", () => {
     expect(typeof exportRes.json.url).toBe("string");
     expect(typeof exportRes.json.expiresAt).toBe("number");
 
-    // Download it back (public, no auth) — slice off the absolute origin.
-    const dlPath = exportRes.json.url.slice(baseUrl.length);
+    // Download it back (public, no auth). Parse the pathname instead of slicing
+    // the origin: with custom-domain routes in wrangler.jsonc, wrangler dev
+    // rewrites the worker-visible origin, so baseUrl-length slicing breaks.
+    const dlPath = new URL(exportRes.json.url).pathname;
     const dl = await api(dlPath);
     expect(dl.status).toBe(200);
     expect(dl.text).toContain("date,merchant,category,amount_incl_gst");

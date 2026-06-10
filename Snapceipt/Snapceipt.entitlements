@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- Debug/dev builds use automatic signing, whose dev profiles carry
+	     aps-environment=development. Release uses Snapceipt.Release.entitlements
+	     (production) because manual signing with the match App Store profile
+	     validates this file's value against the profile. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

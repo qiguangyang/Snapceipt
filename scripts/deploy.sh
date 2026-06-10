@@ -11,8 +11,11 @@
 #   DEEPSEEK_API_KEY   - your DeepSeek API key (required)
 # Optional env:
 #   JWT_SIGNING_KEY    - HS256 signing key (auto-generated via `openssl rand` if unset)
-#   ATTACH_CUSTOM_DOMAIN=1 - also attach api.snapceipt.cc (requires the snapceipt.cc zone
-#                            to already exist on this Cloudflare account)
+#
+# NOTE: wrangler.jsonc carries a custom-domain route for api.snapceipt.cc, so the
+# snapceipt.cc zone MUST exist on this account before a live run — `wrangler deploy`
+# attaches the domain unconditionally and (under set -e) aborts this script if the
+# zone is missing. Add the zone first; DRY_RUN=1 is unaffected (no deploy).
 #
 set -euo pipefail
 
@@ -68,7 +71,7 @@ JWT_SIGNING_KEY="${JWT_SIGNING_KEY:-$(openssl rand -base64 48)}"
 # --- 1. provision D1 (get-or-create) + capture id ----------------------------
 log "D1: ensure database '${DB_NAME}'"
 $WRANGLER d1 create "$DB_NAME" 2>/dev/null || warn "D1 '${DB_NAME}' likely already exists — continuing"
-D1_ID="$(DB_NAME="$DB_NAME" $WRANGLER d1 list --json 2>/dev/null | python3 -c '
+D1_ID="$($WRANGLER d1 list --json 2>/dev/null | DB_NAME="$DB_NAME" python3 -c '
 import sys, json, os
 name = os.environ["DB_NAME"]
 d = json.load(sys.stdin); rows = d if isinstance(d, list) else d.get("result", [])
@@ -83,8 +86,10 @@ $WRANGLER kv namespace create KV 2>/dev/null || warn "KV namespace likely alread
 KV_ID="$($WRANGLER kv namespace list 2>/dev/null | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
-# wrangler titles the namespace "<worker>-KV"; match the KV binding by title suffix.
-print(next((n["id"] for n in d if str(n.get("title","")).endswith("KV")), ""))
+# wrangler v4.99 titles the namespace exactly "KV"; older v4 used
+# "<worker>-KV". Other projects share this account (SESSION_KV, TENANT_KV,
+# ...), so match exact titles only — never a bare "KV" suffix.
+print(next((n["id"] for n in d if n.get("title") in ("KV", "snapceipt-api-KV")), ""))
 ' || echo "")"
 [ -n "$KV_ID" ] || die "could not resolve KV namespace id (binding KV)"
 log "KV id: ${KV_ID}"
@@ -120,12 +125,10 @@ $WRANGLER d1 migrations apply "$DB_NAME" --remote
 log "deploy worker"
 $WRANGLER deploy
 
-# --- 8. (optional) attach the api.snapceipt.cc custom domain -----------------
-if [ "${ATTACH_CUSTOM_DOMAIN:-0}" = "1" ]; then
-  warn "Custom-domain attach is manual: add to wrangler.jsonc"
-  warn "  \"routes\": [{ \"pattern\": \"${CUSTOM_DOMAIN}\", \"custom_domain\": true }]"
-  warn "  then re-run 'npx wrangler deploy'  (requires the ${EMAIL_DOMAIN} zone on this account)."
-fi
+# --- 8. custom domain ---------------------------------------------------------
+# api.snapceipt.cc is attached automatically by the step-7 deploy via the routes
+# entry in wrangler.jsonc; the ${EMAIL_DOMAIN} zone existing on this account is a
+# hard prerequisite (see header note).
 
 # --- 9. smoke test -----------------------------------------------------------
 log "smoke test"

@@ -22,7 +22,7 @@ struct SheetHeader: View {
             // Spacer matching the back button's width so the title stays centered.
             Color.clear.frame(width: 40, height: 40)
         }
-        .padding(.top, 54).padding(.horizontal, 18).padding(.bottom, 12)
+        .padding(.top, 12).padding(.horizontal, 18).padding(.bottom, 12)
     }
 }
 

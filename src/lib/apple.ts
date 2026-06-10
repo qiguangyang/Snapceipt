@@ -40,13 +40,21 @@ export async function fetchAppleJwks(env: Env, force = false): Promise<JSONWebKe
   return jwks;
 }
 
-/** base64url(sha256(rawNonce)) — Apple hashes the nonce before embedding it in the token. */
+/** base64url(sha256(rawNonce)) — tolerated alternative client nonce encoding. */
 async function sha256Base64Url(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   const bytes = new Uint8Array(digest);
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** lowercase hex(sha256(rawNonce)) — what the iOS client sets on
+ *  ASAuthorizationAppleIDRequest.nonce (AppleNonce.sha256), and therefore what
+ *  Apple embeds VERBATIM in the identity token's nonce claim. */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -85,8 +93,12 @@ export async function verifyAppleIdentityToken(
     throw new ApiError("AUTH_INVALID_TOKEN", "Invalid Apple identity token");
   }
 
-  const expectedNonce = await sha256Base64Url(rawNonce);
-  if (!payload.nonce || payload.nonce !== expectedNonce) {
+  // Apple embeds EXACTLY the string the client set on request.nonce — it does
+  // NOT hash it again. Our iOS client sets the lowercase-hex sha256 digest;
+  // base64url is tolerated for other client conventions.
+  const expectedHex = await sha256Hex(rawNonce);
+  const expectedB64 = await sha256Base64Url(rawNonce);
+  if (!payload.nonce || (payload.nonce !== expectedHex && payload.nonce !== expectedB64)) {
     throw new ApiError("AUTH_INVALID_TOKEN", "Nonce mismatch");
   }
   if (!payload.sub) {

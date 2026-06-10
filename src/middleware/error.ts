@@ -23,6 +23,11 @@ export function registerErrorHandler(app: Hono<AppEnv>): void {
     const requestId = c.get("requestId") ?? uuidv7();
     c.header("X-Request-Id", requestId);
     const status = err instanceof ApiError ? err.status : 500;
+    // Server-side only: log unexpected causes so `wrangler tail` / observability
+    // can diagnose 500s. The client envelope below stays generic — never leaks.
+    if (status === 500) {
+      console.error(`[${requestId}] unhandled:`, err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+    }
     // Rate-limit errors carry the seconds-to-reset in details.retryAfter; surface
     // it as the standard Retry-After header (e.g. for 429 RATE_LIMITED).
     if (err instanceof ApiError) {

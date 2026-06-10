@@ -1,0 +1,12 @@
+{
+  "name": "snapceipt-site",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": false,
+  // Assets-only Worker: no script, Cloudflare serves ./public directly.
+  // html_handling default serves /privacy from privacy.html.
+  "assets": { "directory": "./public" },
+  "routes": [
+    { "pattern": "snapceipt.cc", "custom_domain": true },
+    { "pattern": "www.snapceipt.cc", "custom_domain": true }
+  ]
+}

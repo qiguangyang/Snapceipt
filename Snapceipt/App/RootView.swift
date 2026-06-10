@@ -125,16 +125,17 @@ struct ShellView: View {
                                value: profiles.activeProfileId)
             }
 
-            // --- Floating sync status pill (top-trailing, hidden when idle) ---
+            // --- Floating sync status pill (top-center, hidden when idle) ---
+            // Top-center is empty on all four tab headers; top-trailing covered
+            // the Home alerts bell / Reports export pill. Hit-test-inert so it
+            // can never swallow taps meant for the header underneath.
             VStack {
-                HStack {
-                    Spacer()
-                    SyncStatusView(status: sync.status)
-                        .padding(.trailing, 18)
-                        .padding(.top, 6)
-                }
+                SyncStatusView(status: sync.status)
+                    .padding(.top, 6)
                 Spacer()
             }
+            .frame(maxWidth: .infinity)
+            .allowsHitTesting(false)
 
             // --- Floating raised-center tab bar ---
             // `.accessibilityElement(children: .contain)` makes this an a11y CONTAINER:

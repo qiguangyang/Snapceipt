@@ -150,7 +150,7 @@ describe("e2e (real HTTP): POST /quotes/:id/send -> /quotes/dl round-trip", () =
     expect(typeof sendRes.json.pdfUrl).toBe("string");
     expect(sendRes.json.pdfUrl).toContain("/quotes/dl/");
 
-    const dlPath = sendRes.json.pdfUrl.slice(baseUrl.length);
+    const dlPath = new URL(sendRes.json.pdfUrl).pathname; // origin-agnostic: wrangler dev rewrites the worker-visible origin when custom-domain routes exist
     const dl = await api(dlPath);
     expect(dl.status).toBe(200);
     expect(dl.text.startsWith("%PDF")).toBe(true);

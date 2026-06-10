@@ -89,6 +89,7 @@ final class SyncEntityRegistry {
 /// backend `rowToEntity` envelope). Domain fields are merged on top by each mapper.
 func sharedFields(_ e: any Syncable) -> [String: JSONValue] {
     var f: [String: JSONValue] = [
+        "type": .string(e.entityType.rawValue),
         "id": .string(e.id),
         "userId": .string(e.userId),
         "createdAt": .number(Double(e.createdAt)),
@@ -96,7 +97,8 @@ func sharedFields(_ e: any Syncable) -> [String: JSONValue] {
         "rev": .number(Double(e.rev)),
     ]
     f["deletedAt"] = e.deletedAt.map { .number(Double($0)) } ?? .null
-    f["lastEditedDeviceId"] = e.lastEditedDeviceId.map { .string($0) } ?? .null
+    // Omit (rather than JSON-null) when unset — the server stamps it anyway.
+    if let deviceId = e.lastEditedDeviceId { f["lastEditedDeviceId"] = .string(deviceId) }
     if let pid = e.profileId { f["profileId"] = .string(pid) }
     return f
 }
@@ -120,9 +122,14 @@ protocol SyncRowMapper {
 
 extension SyncRowMapper {
     func fetch(_ context: ModelContext, _ id: String) -> Model? {
-        var d = FetchDescriptor<Model>(predicate: #Predicate { $0.id == id })
-        d.fetchLimit = 1
-        return (try? context.fetch(d))?.first
+        // SwiftData #Predicate built in a generic protocol-extension context forms its
+        // keypath through the Syncable witness; in Release codegen the keypath fails
+        // schema resolution and traps inside SwiftData (fatal assertion — seen as two
+        // device crash logs on build 0.1.0(1)). Concrete-context predicates are fine
+        // (e.g. pendingOutbox); generic ones are NOT. Filter in memory instead —
+        // per-user row counts are small, and correctness beats micro-perf here.
+        let rows = (try? context.fetch(FetchDescriptor<Model>())) ?? []
+        return rows.first { $0.id == id }
     }
 
     func localUpdatedAt(_ context: ModelContext, _ id: String) -> Int? { fetch(context, id)?.updatedAt }

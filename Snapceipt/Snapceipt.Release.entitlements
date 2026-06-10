@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- Release archives are signed directly with the match App Store profile
+	     (manual signing), which pins aps-environment to production — the file
+	     value must match or the archive fails validation. -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

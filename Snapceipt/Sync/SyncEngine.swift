@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Observation
+import os
 
 /// Coarse sync state surfaced to `SyncStatusView` / `OfflineBanner`.
 enum SyncStatus: Equatable {
@@ -45,6 +46,7 @@ final class SyncEngine {
     @ObservationIgnored private let auth: AuthStore
     @ObservationIgnored private let toast: ToastCenter
     @ObservationIgnored private let registry = SyncEntityRegistry.shared
+    @ObservationIgnored private let log = Logger(subsystem: "app.snapceipt", category: "sync")
 
     @ObservationIgnored private let cursorKey = "sc.syncCursor"
     @ObservationIgnored private let pushBatchSize = 200
@@ -86,6 +88,12 @@ final class SyncEngine {
 
     /// Drain pending outbox rows in batches (≤200) and reconcile each result.
     func push() async {
+        // Crash recovery: a previous process died mid-push (after marking a batch
+        // "inflight" but before/while on the wire), stranding those rows forever —
+        // pendingOutbox only selects "pending". push() is serialized via sync(), so
+        // a blanket requeue of every inflight row at the start of a run is safe.
+        requeueStrandedInflight()
+
         let pending = pendingOutbox()
         guard !pending.isEmpty else { return }
         status = .syncing
@@ -113,7 +121,22 @@ final class SyncEngine {
                 applyPushResults(resp.results, batch: batch)
                 try? context.save()
             } catch {
-                // Network/transport failure: roll in-flight back to pending and stop.
+                // A deterministic 4xx contract rejection (excluding 401, which the
+                // APIClient already refresh-retries, and 429, which is transient)
+                // will never succeed on retry: mark the batch failed so it stops
+                // blocking the outbox head, and surface a real error state instead
+                // of masquerading as offline and silently retrying forever.
+                if let apiError = error as? APIError,
+                   (400..<500).contains(apiError.status),
+                   apiError.status != 401, apiError.status != 408, apiError.status != 429 {
+                    for m in batch where m.status == "inflight" { m.status = "failed" }
+                    try? context.save()
+                    log.error("sync push rejected (\(apiError.status)) \(apiError.code): \(apiError.message)")
+                    status = .error(apiError.message)
+                    return
+                }
+                // Network/transport failure (or 5xx/429): roll in-flight back to
+                // pending and stop.
                 for m in batch where m.status == "inflight" { m.status = "pending" }
                 try? context.save()
                 status = .offline
@@ -216,6 +239,9 @@ final class SyncEngine {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.push()
+            // A push contract rejection sets .error — let it stay visible instead
+            // of letting pull() immediately clobber it back to .idle.
+            if case .error = self.status { return }
             await self.pull()
         }
         syncTask = task
@@ -224,6 +250,18 @@ final class SyncEngine {
     }
 
     // MARK: outbox queries
+
+    /// Reset stranded "inflight" rows to "pending" (concrete-context #Predicate — safe).
+    private func requeueStrandedInflight() {
+        let descriptor = FetchDescriptor<OutboxMutation>(
+            predicate: #Predicate { $0.status == "inflight" }
+        )
+        let stranded = (try? context.fetch(descriptor)) ?? []
+        guard !stranded.isEmpty else { return }
+        for m in stranded { m.status = "pending" }
+        try? context.save()
+        log.info("requeued \(stranded.count) stranded inflight outbox row(s)")
+    }
 
     private func pendingOutbox() -> [OutboxMutation] {
         let descriptor = FetchDescriptor<OutboxMutation>(

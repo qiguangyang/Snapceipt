@@ -1,21 +1,23 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "snapceipt-api",
+  "account_id": "bb4412973b5e4f6d7a10a4e68b713177",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "triggers": { "crons": ["0 * * * *"] },
+  "routes": [{ "pattern": "api.snapceipt.cc", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "snapceipt",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "109965c6-0c74-40c0-aff9-4b94271add43",
       "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
-    { "binding": "KV", "id": "00000000000000000000000000000000" }
+    { "binding": "KV", "id": "3f5104b31d8c4589833a1ceec7fda212" }
   ],
   "r2_buckets": [
     { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" }
@@ -29,7 +31,9 @@
     { "name": "EMAIL", "allowed_sender_addresses": ["noreply@snapceipt.cc"] }
   ],
   "vars": {
-    "APPLE_BUNDLE_ID": "com.snapceipt.app",
+    // The iOS app's real bundle id — SIWA verifies identityToken.aud against this.
+    // Tests pin their own value in vitest.config.ts; this var is prod-only.
+    "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
     "DEEPSEEK_MODEL": "deepseek-chat"
   }
 }

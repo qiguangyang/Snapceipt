@@ -18,18 +18,28 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 const cents = z.number().int(); // signed; negative = expense
 const pct = z.number().int().min(0).max(100);
 
-/** Every syncable row (D1 + push payload + pull change) carries these fields. */
+/**
+ * Every syncable row (D1 + push payload + pull change) carries these fields.
+ *
+ * `type` is OPTIONAL and `lastEditedDeviceId` is OPTIONAL + NULLABLE on purpose:
+ * the push route never reads either — it derives the entity type from the
+ * mutation's `entityType` and server-stamps `last_edited_device_id` from the
+ * authed request's deviceId. The real iOS encoder (SyncEntityRegistry.swift
+ * sharedFields()) never emits a `type` key and sends `lastEditedDeviceId: null`
+ * for locally-created rows; requiring them here 400'd every real-device push
+ * (production outage — see the contract regression test in sync-push.test.ts).
+ */
 export const baseEnvelope = z
   .object({
     id: uuid,
     userId: uuid,
     profileId: uuid.optional(),
-    type: z.string().min(1),
+    type: z.string().min(1).optional(),
     createdAt: epochMs,
     updatedAt: epochMs,
     deletedAt: epochMs.nullable().default(null),
     rev: z.number().int().nonnegative(),
-    lastEditedDeviceId: z.string().min(1),
+    lastEditedDeviceId: z.string().min(1).nullable().optional(),
   })
   .passthrough();
 
