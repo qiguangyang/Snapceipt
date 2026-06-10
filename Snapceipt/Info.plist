@@ -57,6 +57,11 @@
 	</array>
 	<key>UIRequiresFullScreen</key>
 	<true/>
+	<!-- v1 ships light-only (spec: OS dark mode out of scope). The design system
+	     uses fixed cream/ink colors; without this, dynamic-colored elements
+	     (TextField text, cursors, alerts) go white-on-white in OS dark mode. -->
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>SchibstedGrotesk-Regular.ttf</string>
