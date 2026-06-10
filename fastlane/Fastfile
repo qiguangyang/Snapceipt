@@ -49,8 +49,11 @@ platform :ios do
       export_options: {
         provisioningProfiles: {
           "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt"
-        }
-      }
+        },
+        # Same duplicate-cert disambiguation for the export re-sign step
+        # (accepts a SHA-1 hash); .compact drops it when the env is unset.
+        signingCertificate: ENV["CODESIGN_IDENTITY"]
+      }.compact
     )
     pilot(
       api_key: api_key,
