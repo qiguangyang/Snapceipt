@@ -38,7 +38,7 @@ struct LbHeader: View {
                 Color.clear.frame(width: 40, height: 40)
             }
         }
-        .padding(.top, 54).padding(.horizontal, 18).padding(.bottom, 12)
+        .padding(.top, 12).padding(.horizontal, 18).padding(.bottom, 12)
     }
 }
 
@@ -130,7 +130,7 @@ struct LbFloatingCTA: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(a11yId)
-        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 34)
+        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 12)
         .background(
             LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream],
                            startPoint: .top, endPoint: .bottom)

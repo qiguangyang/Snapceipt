@@ -66,8 +66,11 @@ struct TabBar: View {
                         .shadow(color: Palette.ink.opacity(0.18), radius: 4, x: 0, y: 3)
                     Icon(name: "camera", size: 28, color: .white)
                 }
-                .offset(y: -26)
+                // contentShape BEFORE offset so the hit area moves with the
+                // visible button (after offset it leaves a phantom tap zone
+                // at the un-raised position).
                 .contentShape(.rect)
+                .offset(y: -26)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
@@ -86,9 +89,18 @@ struct TabBar: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 64)
-        .background(.regularMaterial)
-        .background(Palette.paper.opacity(0.55))
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        // Shape the backgrounds instead of clipping the bar: .clipShape masked
+        // children too, decapitating the raised Snap FAB (top ~23pt + ring +
+        // shadows). Back-to-front: paper behind, material in front (same result
+        // as the old .background(.regularMaterial).background(paper) chain).
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(Palette.paper.opacity(0.55))
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(.regularMaterial)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .stroke(Palette.line, lineWidth: 1)
