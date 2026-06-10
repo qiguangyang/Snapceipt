@@ -12,7 +12,7 @@ settings:
     # (see beta-launch.env.example) and (2) `bundle exec fastlane certs` to
     # install the match profile. Don't fix signing in Xcode's UI — the
     # .xcodeproj is generated from this file.
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "2SU47GHJQX"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
