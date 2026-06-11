@@ -7,9 +7,19 @@ struct MagicLinkWaitView: View {
     @Environment(AuthViewModel.self) private var vm
     @Environment(\.accent) private var accent
 
-    /// Briefly flips to true after a resend so the button confirms it fired
-    /// (otherwise tapping Resend gives no visible feedback at all).
-    @State private var justSent = false
+    /// How long the "Link sent" confirmation stays up after a successful (re)send.
+    private static let confirmationDuration: Duration = .milliseconds(1600)
+
+    /// The `vm.linkSentCount` value this view is currently confirming. Each successful
+    /// send bumps the VM's count; the `.task(id:)` below re-runs, shows the checkmark
+    /// for `confirmationDuration`, then clears it. Driving the confirmation off the VM
+    /// (not local `@State` seeded inside `resend()`) means it survives the
+    /// `.requestingLink → .awaitingLink` view recreation RootView performs, and a fresh
+    /// send's `.task(id:)` cancellation supersedes the prior timer (no stale truncation).
+    @State private var confirmedCount = 0
+
+    /// True while the confirmation window for the latest successful send is open.
+    private var justSent: Bool { confirmedCount > 0 && confirmedCount == vm.linkSentCount }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,24 +79,25 @@ struct MagicLinkWaitView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream.ignoresSafeArea())
+        // Confirmation timer keyed on the VM's successful-send count: each new send
+        // supersedes the prior one (old `.task` is cancelled), and the count living on
+        // the VM keeps the confirmation alive across RootView's wait-screen recreation.
+        .task(id: vm.linkSentCount) {
+            guard vm.linkSentCount > 0, !isError else { return }
+            withAnimation { confirmedCount = vm.linkSentCount }
+            try? await Task.sleep(for: Self.confirmationDuration)
+            withAnimation { confirmedCount = 0 }
+        }
     }
 
     /// True while a (re)send request is in flight — drives the inline spinner.
     private var isSending: Bool { vm.state == .requestingLink }
 
-    /// Resend the link, then briefly confirm with a "Link sent" label so the tap
-    /// has visible feedback. The spinner covers the in-flight window; on success
-    /// the confirmation shows for ~1.6s before reverting to "Resend email".
+    /// Resend the link. The in-flight window is covered by the spinner (driven by
+    /// `vm.state`); on success the VM bumps `linkSentCount`, which re-fires the
+    /// `.task(id:)` above to flash the "Link sent" confirmation.
     private func resend() {
-        justSent = false
-        Task {
-            await vm.resendMagicLink()
-            if case .awaitingLink = vm.state {
-                withAnimation { justSent = true }
-                try? await Task.sleep(nanoseconds: 1_600_000_000)
-                withAnimation { justSent = false }
-            }
-        }
+        Task { await vm.resendMagicLink() }
     }
 
     private var isError: Bool {

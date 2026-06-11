@@ -60,11 +60,14 @@ struct RootView: View {
                         if phase == .background { appLock.lockIfEnabled() }
                     }
                 }
-            case .requestingLink:
-                // A link request is in flight — keep the wait screen up so the UI does
-                // not flash back to Sign-in between request and "link sent".
-                MagicLinkWaitView()
-            case .awaitingLink:
+            case .requestingLink, .awaitingLink:
+                // A link request is in flight OR sent — render the wait screen from ONE
+                // switch branch so it keeps a single structural identity across the
+                // `.requestingLink → .awaitingLink` round-trip a resend drives. Splitting
+                // these into separate @ViewBuilder cases would destroy + recreate the view
+                // mid-resend, wiping any transient confirmation state. (The spinner derives
+                // from `vm.state`; the "Link sent" flash derives from `vm.linkSentCount`,
+                // which lives on the VM and survives regardless.)
                 MagicLinkWaitView()
             case .verifying where authVM.pendingEmail != nil:
                 // A tapped magic link is verifying — keep the wait screen up so the UI
