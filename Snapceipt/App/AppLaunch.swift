@@ -9,6 +9,7 @@ struct AppLaunch {
     let useStub: Bool
     let reset: Bool
     let seed: Bool
+    let lockAvailable: Bool
     let tour: Bool
     let tourEmpty: Bool
     let apiBaseURLOverride: URL?
@@ -18,6 +19,7 @@ struct AppLaunch {
         useStub = arguments.contains("-uiTestStub")
         reset = arguments.contains("-uiTestReset")
         seed = arguments.contains("-uiTestSeed")
+        lockAvailable = arguments.contains("-uiTestLockAvailable")
         tour = arguments.contains("-uiTestTour")
         tourEmpty = arguments.contains("-uiTestTourEmpty")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
@@ -301,12 +303,19 @@ struct AppLaunch {
     }
 
     /// The biometric app-lock controller for the run. Under `-uiTestStub` the
-    /// evaluator is hard-stubbed (`canEvaluate: { false }`) so the lock never
-    /// gates a seeded UI-test launch; otherwise the real `LAContext`-backed
-    /// controller is returned. `@MainActor` because `AppLockController` is.
+    /// evaluator reports `canEvaluate: { lockAvailable }` — false by default so the
+    /// lock never gates a seeded UI-test launch, but `-uiTestLockAvailable` flips it
+    /// true with an always-succeed evaluator so the J08 lock journey can run;
+    /// otherwise the real `LAContext`-backed controller is returned. `@MainActor`
+    /// because `AppLockController` is.
     @MainActor
     func makeAppLock() -> AppLockController {
-        if useStub { return AppLockController(canEvaluate: { false }, evaluate: { true }) }
+        if useStub {
+            // Default stub disables biometrics; -uiTestLockAvailable enables a
+            // deterministic always-succeed evaluator so the lock journey can run.
+            return AppLockController(canEvaluate: { self.lockAvailable },
+                                     evaluate: { true })
+        }
         return AppLockController()
     }
 
