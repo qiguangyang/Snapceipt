@@ -108,7 +108,7 @@ struct ClientPickerSheet: View {
                 }
             }
             Spacer()
-            Icon(name: "chevD", size: 14, color: Palette.ink3)
+            Icon(name: "chevR", size: 14, color: Palette.ink3)
         }
         .padding(.vertical, 6)
     }
