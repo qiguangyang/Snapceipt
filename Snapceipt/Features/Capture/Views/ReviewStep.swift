@@ -41,10 +41,15 @@ struct ReviewStep: View {
                 Text("Total detected").font(.ui(13)).foregroundStyle(Palette.ink2)
                 Spacer()
                 if let gst = draft.gst {
-                    Text("GST \(amount(gst))")
-                        .font(.ui(11.5, .semibold)).foregroundStyle(accent.deep)
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(accent.soft, in: Capsule())
+                    // The GST/income pill is pinned to income-green in BOTH profile
+                    // modes (spec §2 L123) — it is NOT accent-driven.
+                    HStack(spacing: 5) {
+                        Icon(name: "check", size: 12, color: Palette.income)
+                        Text("incl. \(amount(gst)) GST")
+                    }
+                    .font(.ui(11.5, .semibold)).foregroundStyle(Palette.income)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Palette.incomeSoft, in: Capsule())
                 }
             }
             Text(amount(draft.total)).numeric(40)
@@ -58,20 +63,25 @@ struct ReviewStep: View {
 
     @ViewBuilder
     private var aiBanner: some View {
-        let text = draft.needsReview
+        let body = draft.needsReview
             ? "Double-check the details below."
             : bannerTemplate
-        HStack(alignment: .top, spacing: 10) {
-            Icon(name: "sparkles", size: 18, color: accent.base)
-            Text(text).font(.ui(13)).foregroundStyle(Palette.ink)
-            Spacer()
-            if !draft.needsReview {
-                Text("\(draft.confidenceBadge)%")
-                    .font(.ui(12, .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(accent.base, in: Capsule())
-                    .accessibilityIdentifier(AccessibilityID.captureReviewBadge)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Icon(name: "sparkles", size: 18, color: accent.base)
+                Text(draft.needsReview ? "Review needed" : "AI categorised this for you")
+                    .font(.ui(13.5, .bold)).foregroundStyle(accent.deep)
+                Spacer()
+                if !draft.needsReview {
+                    Text("\(draft.confidenceBadge)% match")
+                        .font(.ui(11, .bold)).foregroundStyle(accent.deep)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Palette.paper, in: Capsule())
+                        .accessibilityIdentifier(AccessibilityID.captureReviewBadge)
+                }
             }
+            Text(body).font(.ui(13)).foregroundStyle(Palette.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
@@ -123,18 +133,23 @@ struct ReviewStep: View {
     // `profiles.activeProfile` (scope-by-active-profileId). This is intentional for
     // v1; switching the save target is deferred.
     private var profileToggle: some View {
-        HStack(spacing: 8) {
-            ForEach(ProfileType.allCases) { type in
-                let selected = mode == type.rawValue
-                Button { mode = type.rawValue } label: {
-                    Text(type.label)
-                        .font(.ui(13, .semibold))
-                        .foregroundStyle(selected ? .white : Palette.ink2)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(selected ? accent.base : Palette.paper2,
-                                    in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Assign to profile")
+                .font(.ui(13, .bold)).foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                ForEach(ProfileType.allCases) { type in
+                    let selected = mode == type.rawValue
+                    Button { mode = type.rawValue } label: {
+                        Text(type.label)
+                            .font(.ui(13, .semibold))
+                            .foregroundStyle(selected ? .white : Palette.ink2)
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .background(selected ? accent.base : Palette.paper2,
+                                        in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
@@ -178,10 +193,12 @@ struct ReviewStep: View {
 
     private var saveButton: some View {
         Button(action: onSave) {
-            Text("Save receipt")
-                .font(.ui(16, .bold)).foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+            HStack(spacing: 8) {
+                Icon(name: "check", size: 20, color: .white)
+                Text("Save receipt").font(.ui(16, .bold)).foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.captureSave)
