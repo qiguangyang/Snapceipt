@@ -53,12 +53,20 @@ struct ExportSheet: View {
     }
 
     private var header: some View {
-        HStack {
-            Text("Export").font(.display(22)).foregroundStyle(Palette.ink)
-            Spacer()
-            Button { onClose() } label: {
-                Icon(name: "close", size: 18, color: Palette.ink2)
-            }.buttonStyle(.plain)
+        // The grabber is intentionally omitted here: the sheet is presented via the
+        // shell's system .sheet(item:) with .presentationDragIndicator(.visible), which
+        // already draws it (adding one would double the handle).
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Export").font(.display(22)).foregroundStyle(Palette.ink)
+                Spacer()
+                Button { onClose() } label: {
+                    Icon(name: "close", size: 18, color: Palette.ink2)
+                }.buttonStyle(.plain)
+            }
+            Text("Tax-ready summary with all receipts attached.")
+                .font(.ui(13.5)).foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 6)
     }
