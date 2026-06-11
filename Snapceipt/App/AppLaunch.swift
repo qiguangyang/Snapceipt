@@ -222,10 +222,17 @@ struct AppLaunch {
         let client = Client(userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")
         context.insert(client)
+        // DISTINCT createdAt per quote so the "newest first" list is deterministic
+        // run-to-run. Both quotes default createdAt to the PINNED Epoch.nowMs(), which
+        // would tie the sort key; SwiftData then returns the tied rows in undefined order
+        // and the row order flips between tour runs (the pixel-stability gate, Task 7).
+        // A \.id tiebreaker can't fix this — ID.uuidv7() reads the real wall clock + random
+        // bytes (IDClock.swift), so ids differ every launch. Offset the older (draft) quote
+        // one minute behind the sent one; sent stays newest.
         let draft = Quote(userId: DevAccount.userId, profileId: p1.id,
                           clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
                           gstEnabled: true, subtotalCents: 200_00, gstCents: 20_00, totalCents: 220_00,
-                          status: "draft")
+                          status: "draft", createdAt: Epoch.nowMs() - 60_000)
         context.insert(draft)
         context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: draft.id,
                                      itemDescription: "Brand identity package", quantity: 1,
