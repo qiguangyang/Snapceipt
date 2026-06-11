@@ -7,6 +7,10 @@ struct MagicLinkWaitView: View {
     @Environment(AuthViewModel.self) private var vm
     @Environment(\.accent) private var accent
 
+    /// Briefly flips to true after a resend so the button confirms it fired
+    /// (otherwise tapping Resend gives no visible feedback at all).
+    @State private var justSent = false
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -36,13 +40,22 @@ struct MagicLinkWaitView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: 12) {
-                Button { Task { await vm.resendMagicLink() } } label: {
-                    Text(isError ? "Send a new link" : "Resend email")
-                        .font(.ui(16, .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Button { resend() } label: {
+                    Group {
+                        if isSending {
+                            ProgressView().tint(.white)
+                        } else if justSent && !isError {
+                            Label("Link sent", systemImage: "checkmark")
+                        } else {
+                            Text(isError ? "Send a new link" : "Resend email")
+                        }
+                    }
+                    .font(.ui(16, .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
+                .disabled(isSending)
 
                 Button { Task { await vm.signOut() } } label: {
                     Text("Use a different email")
@@ -56,6 +69,24 @@ struct MagicLinkWaitView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream.ignoresSafeArea())
+    }
+
+    /// True while a (re)send request is in flight — drives the inline spinner.
+    private var isSending: Bool { vm.state == .requestingLink }
+
+    /// Resend the link, then briefly confirm with a "Link sent" label so the tap
+    /// has visible feedback. The spinner covers the in-flight window; on success
+    /// the confirmation shows for ~1.6s before reverting to "Resend email".
+    private func resend() {
+        justSent = false
+        Task {
+            await vm.resendMagicLink()
+            if case .awaitingLink = vm.state {
+                withAnimation { justSent = true }
+                try? await Task.sleep(nanoseconds: 1_600_000_000)
+                withAnimation { justSent = false }
+            }
+        }
     }
 
     private var isError: Bool {
