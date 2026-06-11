@@ -13,6 +13,8 @@ struct ReviewStep: View {
     // profileId rule). See the toggle comment below.
     @Binding var mode: String                 // "personal" | "business"
     let onSave: () -> Void
+    /// Dismisses the whole capture overlay (the only cancel affordance on Review).
+    let onClose: () -> Void
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -21,18 +23,46 @@ struct ReviewStep: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                totalCard
-                aiBanner
-                fieldsCard
-                lineItemsCard
-                disabledChips
-                saveButton
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(spacing: 16) {
+                    totalCard
+                    aiBanner
+                    fieldsCard
+                    lineItemsCard
+                    disabledChips
+                    saveButton
+                }
+                .padding(18)
             }
-            .padding(18)
         }
         .background(Palette.cream)
+    }
+
+    /// Top bar: a close button (the only cancel affordance on Review) + the
+    /// "Review receipt" title (spec §2 L142-145). The prototype's decorative,
+    /// no-handler edit button is intentionally omitted (no `edit` icon, no action).
+    private var header: some View {
+        ZStack {
+            Text("Review receipt")
+                .font(.ui(17, .bold)).foregroundStyle(Palette.ink)
+            HStack {
+                Button(action: onClose) {
+                    Icon(name: "close", size: 20, color: Palette.ink2)
+                        .frame(width: 40, height: 40)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                                .stroke(Palette.line, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.captureClose)
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 12)
     }
 
     private var totalCard: some View {

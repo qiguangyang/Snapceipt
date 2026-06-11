@@ -25,10 +25,10 @@ struct CaptureFlow: View {
                     },
                     onClose: onClose)
             case .scanning:
-                ScanStep(image: vm.capturedImage, draft: vm.draft)
+                ScanStep(image: vm.capturedImage, draft: vm.draft, onClose: onClose)
             case .review:
                 if let binding = draftBinding {
-                    ReviewStep(draft: binding, mode: $mode, onSave: { vm.save() })
+                    ReviewStep(draft: binding, mode: $mode, onSave: { vm.save() }, onClose: onClose)
                 }
             case .saved:
                 SavedStep(total: vm.draft?.total ?? 0,

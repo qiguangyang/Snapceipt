@@ -7,6 +7,8 @@ struct ScanStep: View {
     @Environment(\.accent) private var accent
     let image: UIImage?
     let draft: ExtractedReceipt?
+    /// Dismisses the whole capture overlay (cancel affordance during scanning).
+    let onClose: () -> Void
 
     @State private var scanY: CGFloat = 0
     @State private var revealed = 0
@@ -14,6 +16,31 @@ struct ScanStep: View {
     private let chips = ["Merchant", "Date", "GST", "Total", "Category"]
 
     var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onClose) {
+                    Icon(name: "close", size: 20, color: Palette.ink2)
+                        .frame(width: 40, height: 40)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                                .stroke(Palette.line, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.captureClose)
+                Spacer()
+            }
+            .padding(.horizontal, 18).padding(.top, 12)
+
+            scanBody
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.cream)
+        .onAppear { animate() }
+    }
+
+    private var scanBody: some View {
         VStack(spacing: 22) {
             Text("Reading your receipt…")
                 .font(.display(20))
@@ -54,8 +81,6 @@ struct ScanStep: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Palette.cream)
-        .onAppear { animate() }
     }
 
     private func animate() {

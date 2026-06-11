@@ -22,6 +22,7 @@ enum AccessibilityID {
     static let addProfileName = "addprofile.name"
 
     // Capture flow
+    static let captureClose = "capture.close"
     static let captureScanTitle = "capture.scan.title"
     static let captureReviewMerchant = "capture.review.merchant"
     static let captureReviewCategory = "capture.review.category"
