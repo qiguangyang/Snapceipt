@@ -200,8 +200,10 @@ struct QuoteEditorView: View {
                     Text(vm.isSending ? "Sending…" : "Send quote").font(.ui(16, .semibold)).foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(vm.canSend ? accent.base : Palette.ink3,
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // Disabled = faded accent (house pattern: Onboarding Continue .5, Reports CTA .45),
+                // not an opaque grey swap.
+                .opacity(vm.canSend ? 1 : 0.45)
             }
             .buttonStyle(.plain)
             .disabled(!vm.canSend || vm.isSending)
