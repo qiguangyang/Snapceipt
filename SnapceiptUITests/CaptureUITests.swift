@@ -37,4 +37,25 @@ final class CaptureUITests: UITestCase {
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 5),
                       "Did not return to the shell after Done")
     }
+
+    /// The Review close affordance (`captureClose`) cancels the whole capture overlay
+    /// and returns to the shell without saving — the only cancel path beyond Camera.
+    func testReviewCloseReturnsToShell() {
+        launchSeeded()
+
+        let snap = app.buttons[AccessibilityID.tabSnap].firstMatch
+        XCTAssertTrue(snap.waitForExistence(timeout: 10), "Snap tab not found")
+        snap.tap()
+
+        // Wait for Review (the stub auto-advances Scan → Review).
+        XCTAssertTrue(app.buttons[AccessibilityID.captureSave].waitForExistence(timeout: 8),
+                      "Review stage did not appear")
+
+        // Tap the close chip and assert the shell tab bar comes back.
+        let close = app.buttons[AccessibilityID.captureClose]
+        XCTAssertTrue(close.exists, "Close affordance missing on Review")
+        close.tap()
+        XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 5),
+                      "Did not return to the shell after closing Review")
+    }
 }

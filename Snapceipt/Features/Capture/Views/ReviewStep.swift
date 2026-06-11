@@ -48,17 +48,7 @@ struct ReviewStep: View {
             Text("Review receipt")
                 .font(.ui(17, .bold)).foregroundStyle(Palette.ink)
             HStack {
-                Button(action: onClose) {
-                    Icon(name: "close", size: 20, color: Palette.ink2)
-                        .frame(width: 40, height: 40)
-                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
-                                .stroke(Palette.line, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(AccessibilityID.captureClose)
+                CaptureCloseButton(onClose: onClose)
                 Spacer()
             }
         }
@@ -75,14 +65,14 @@ struct ReviewStep: View {
                     // modes (spec §2 L123) — it is NOT accent-driven.
                     HStack(spacing: 5) {
                         Icon(name: "check", size: 12, color: Palette.income)
-                        Text("incl. \(amount(gst)) GST")
+                        Text("incl. \(fmt(gst)) GST")
                     }
                     .font(.ui(11.5, .semibold)).foregroundStyle(Palette.income)
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(Palette.incomeSoft, in: Capsule())
                 }
             }
-            Text(amount(draft.total)).numeric(40)
+            Text(fmt(draft.total)).numeric(40)
                 .foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -185,7 +175,7 @@ struct ReviewStep: View {
                 // Sliding white thumb with a soft shadow.
                 Capsule()
                     .fill(Palette.paper)
-                    .shadow(color: Color(hex: 0x211C18).opacity(0.18), radius: 3, x: 0, y: 2)
+                    .shadow(color: Palette.ink.opacity(0.18), radius: 3, x: 0, y: 2)
                     .frame(width: thumbW)
                     .padding(.vertical, 4)
                     .offset(x: 4 + CGFloat(selectedIndex) * thumbW)
@@ -228,7 +218,7 @@ struct ReviewStep: View {
                         HStack {
                             Text(li.name).font(.ui(13)).foregroundStyle(Palette.ink)
                             Spacer()
-                            Text(amount(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
+                            Text(fmt(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
                         }
                     }
                 }
@@ -276,14 +266,5 @@ struct ReviewStep: View {
                 .frame(width: 92, alignment: .leading)
             control().font(.ui(15)).foregroundStyle(Palette.ink)
         }
-    }
-
-    /// Display a dollar Decimal as "$X.XX".
-    private func amount(_ d: Decimal) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "AUD"
-        f.locale = Locale(identifier: "en_AU")
-        return f.string(from: d as NSDecimalNumber) ?? "$0.00"
     }
 }

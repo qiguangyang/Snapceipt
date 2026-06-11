@@ -38,6 +38,14 @@ func fmt(_ cents: Int, sign: Bool = false, showCents: Bool = true) -> String {
     return prefix + "$" + body
 }
 
+/// Format a dollar **Decimal** as AUD "$42.50" using the same cached decimal
+/// formatter (literal "$", en-AU grouping, no "A$" currency symbol). Used where a
+/// `Decimal` amount — not Int cents — is on hand (e.g. the capture draft total).
+func fmt(_ dollars: Decimal) -> String {
+    let body = moneyWithCents.string(from: dollars as NSDecimalNumber) ?? "0.00"
+    return "$" + body
+}
+
 /// Compact AUD: "$500", "$1.2k", "$12k". Threshold mirrors theme.jsx:
 /// dollars >= 10000 -> integer "k"; >= 1000 -> one-decimal "k"; else plain "$N".
 func fmtK(_ cents: Int) -> String {

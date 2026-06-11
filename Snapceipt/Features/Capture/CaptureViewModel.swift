@@ -17,10 +17,20 @@ final class CaptureViewModel {
     private(set) var capturedImage: UIImage?
     private(set) var rawText: String = ""
     var errorMessage: String?
+    /// The profile mode ("personal" | "business") the txn was actually filed under,
+    /// captured at `save()` from `profiles.activeProfile` (the real save target —
+    /// scope-by-active-profileId). The Saved summary reads THIS, never the cosmetic
+    /// Review toggle, so the sentence can never name the wrong profile.
+    private(set) var savedMode: String = ProfileType.personal.rawValue
 
     /// Live banner/badge state mirrored from the draft for the Scan/Review steps.
     var confidence: Double { draft?.confidence ?? 0 }
     var needsReview: Bool { draft?.needsReview ?? true }
+
+    /// The active profile's mode ("personal" | "business"), used to initialize the
+    /// Review toggle so it opens on the actual save target. Defaults to personal when
+    /// there is no active profile.
+    var activeMode: String { profiles.activeProfile?.type ?? ProfileType.personal.rawValue }
 
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let reducer: ImageReducing
@@ -79,6 +89,7 @@ final class CaptureViewModel {
         }
         let (txn, items) = ReceiptMapper.map(
             draft, mode: profile.type, profileId: profile.id, userId: userId)
+        savedMode = profile.type   // the real save target, for the Saved summary
 
         context.insert(txn)
         sync.enqueue(op: "upsert", entityType: .transaction, entity: txn)

@@ -31,21 +31,25 @@ struct CaptureFlow: View {
                     ReviewStep(draft: binding, mode: $mode, onSave: { vm.save() }, onClose: onClose)
                 }
             case .saved:
+                // The summary names the ACTUAL save target (`vm.savedMode`, captured
+                // from `profiles.activeProfile` in `save()`), never the cosmetic Review
+                // toggle — so it can never claim the wrong profile.
                 SavedStep(total: vm.draft?.total ?? 0,
-                          mode: mode,
+                          mode: vm.savedMode,
                           deductible: vm.draft?.deductible,
                           onSnapAnother: { vm.reset() },
                           onDone: onClose)
             }
         }
-        .onAppear { mode = activeMode }
+        // Open the Review toggle on the active profile (the real save target) instead
+        // of the hard-coded "personal" default — the previous self-assignment was a
+        // no-op and always showed Personal even for a Business active profile.
+        .onAppear { mode = vm.activeMode }
         // v1: the Review Personal/Business toggle is presentation-only — it re-skins
         // the card but is NOT the save target. `vm.save()` persists under
         // `profiles.activeProfile`, so `mode` here drives appearance only.
         .onChange(of: mode) { _, _ in /* re-skin handled by the toggle's accent */ }
     }
-
-    private var activeMode: String { mode }
 
     /// Non-nil binding to the draft once it exists.
     private var draftBinding: Binding<ExtractedReceipt>? {

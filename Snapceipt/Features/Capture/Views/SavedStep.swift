@@ -72,18 +72,9 @@ struct SavedStep: View {
     /// "$42.50 added to Business expenses, and tagged 50% deductible." — total + mode +
     /// (optional) deductible interpolated, mode capitalized (spec §2 L165).
     private var summary: Text {
-        var s = "\(amount(total)) added to \(mode.capitalized) expenses"
+        var s = "\(fmt(total)) added to \(mode.capitalized) expenses"
         if let d = deductible { s += ", and tagged \(d)% deductible" }
         return Text(s + ".")
-    }
-
-    /// Display a dollar Decimal as "$X.XX" (AUD).
-    private func amount(_ d: Decimal) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "AUD"
-        f.locale = Locale(identifier: "en_AU")
-        return f.string(from: d as NSDecimalNumber) ?? "$0.00"
     }
 }
 

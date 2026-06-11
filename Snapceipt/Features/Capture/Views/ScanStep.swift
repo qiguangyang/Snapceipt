@@ -18,17 +18,7 @@ struct ScanStep: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button(action: onClose) {
-                    Icon(name: "close", size: 20, color: Palette.ink2)
-                        .frame(width: 40, height: 40)
-                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
-                                .stroke(Palette.line, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(AccessibilityID.captureClose)
+                CaptureCloseButton(onClose: onClose)
                 Spacer()
             }
             .padding(.horizontal, 18).padding(.top, 12)
