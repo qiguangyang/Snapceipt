@@ -163,8 +163,12 @@ struct QuoteEditorView: View {
         let t = vm.totals
         return VStack(spacing: 8) {
             totalRow("Subtotal", fmt(t.subtotal), bold: false)
-            if vm.gstEnabled { totalRow("GST (10%)", fmt(t.gst), bold: false) }
-            Divider()
+            // Hairline between each ledger line (design ref: screens.md §9 totals card).
+            Divider().overlay(Palette.line2)
+            if vm.gstEnabled {
+                totalRow("GST (10%)", fmt(t.gst), bold: false)
+                Divider().overlay(Palette.line2)
+            }
             totalRow("Total", fmt(t.total), bold: true)
         }
         .padding(14)
