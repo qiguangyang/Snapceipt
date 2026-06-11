@@ -71,6 +71,9 @@ private struct FirstProfileForm: View {
         (0xC79A1E, 0xFBF1D2, 0x9C7610), // gold
     ]
 
+    /// VoiceOver labels for the accent swatches (index-aligned with `swatches`).
+    private static let swatchNames = ["Terracotta", "Teal", "Blue", "Violet", "Pink", "Gold"]
+
     private var accent: AccentPalette {
         let s = Self.swatches[accentIndex]
         return AccentPalette(base: Color(hex: s.base), soft: Color(hex: s.soft), deep: Color(hex: s.deep))
@@ -141,6 +144,11 @@ private struct FirstProfileForm: View {
                                         .padding(-3)
                                 )
                         }
+                        // Bare colour swatches carry no text, so VoiceOver would
+                        // announce an unlabelled "Button" and the selected ring is a
+                        // colour-only state cue. Name each swatch and expose selection.
+                        .accessibilityLabel(Self.swatchNames[i])
+                        .accessibilityAddTraits(accentIndex == i ? [.isSelected] : [])
                     }
                 }
                 .frame(maxWidth: .infinity)
