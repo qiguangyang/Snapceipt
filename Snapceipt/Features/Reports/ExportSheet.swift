@@ -119,6 +119,11 @@ struct ExportSheet: View {
         }
     }
 
+    /// True while generating, or when "To accountant" is selected with no email yet.
+    private var ctaDisabled: Bool {
+        phase == .inProgress || (format == .accountant && email.isEmpty)
+    }
+
     private var cta: some View {
         Button { Task { await generate() } } label: {
             HStack {
@@ -127,9 +132,13 @@ struct ExportSheet: View {
             }
             .frame(maxWidth: .infinity).padding(.vertical, 14)
             .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+            // Dim when unavailable so the disabled state is visible (the awaiting-email
+            // case otherwise looks tappable but does nothing).
+            .opacity(ctaDisabled ? 0.45 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(phase == .inProgress || (format == .accountant && email.isEmpty))
+        .disabled(ctaDisabled)
+        .animation(.easeOut(duration: 0.18), value: ctaDisabled)
         .accessibilityIdentifier(AccessibilityID.exportGenerate)
     }
 
