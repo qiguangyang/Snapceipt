@@ -61,6 +61,6 @@ struct AlertsSheet: View {
 
     private func relativeTime(_ ms: Int) -> String {
         let f = RelativeDateTimeFormatter()
-        return f.localizedString(for: Date(timeIntervalSince1970: Double(ms) / 1000.0), relativeTo: Date())
+        return f.localizedString(for: Date(timeIntervalSince1970: Double(ms) / 1000.0), relativeTo: Epoch.now())
     }
 }

@@ -49,7 +49,7 @@ final class WFHViewModel {
         WFHCalc.hero(entries: entries(), fyStartYear: fyStartYear, startMonth: startMonth)
     }
 
-    func thisWeekMinutes(today: Date = Date()) -> [Int] {
+    func thisWeekMinutes(today: Date = Epoch.now()) -> [Int] {
         WFHCalc.thisWeekMinutes(entries: entries(), today: today)
     }
 

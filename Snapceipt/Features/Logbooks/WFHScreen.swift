@@ -15,7 +15,7 @@ struct WFHScreen: View {
     @State private var showSheet = false
 
     private static let dow = ["M", "T", "W", "T", "F", "S", "S"]
-    private var fyStartYear: Int { FinancialYear.of(Date(), startMonth: startMonth).startYear }
+    private var fyStartYear: Int { FinancialYear.of(Epoch.now(), startMonth: startMonth).startYear }
 
     private func rate() -> Int {
         let pid = profileId

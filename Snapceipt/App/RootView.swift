@@ -469,7 +469,7 @@ struct ShellView: View {
                             alertSentAt: $0.budget.alertSentAt)
         }
         _ = budgets
-        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Date()))
+        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Epoch.now()))
     }
 
     /// One Home quick-action tile -> opens a logbook overlay.
@@ -617,7 +617,7 @@ struct ShellView: View {
     private var exportWindow: (from: String, to: String, label: String,
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
-        let now = Date()
+        let now = Epoch.now()
         let window = exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId

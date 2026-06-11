@@ -19,7 +19,7 @@ struct MileageScreen: View {
         var id: Int { hashValue }
     }
 
-    private var fyStartYear: Int { FinancialYear.of(Date(), startMonth: startMonth).startYear }
+    private var fyStartYear: Int { FinancialYear.of(Epoch.now(), startMonth: startMonth).startYear }
 
     var body: some View {
         ZStack(alignment: .bottom) {

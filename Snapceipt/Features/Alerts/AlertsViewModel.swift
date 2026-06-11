@@ -16,7 +16,7 @@ final class AlertsViewModel {
     private(set) var items: [AlertFeed.Item] = []
 
     init(context: ModelContext, userId: String, profileId: String,
-         now: Date = Date(), cache: AlertCache = AlertCache()) {
+         now: Date = Epoch.now(), cache: AlertCache = AlertCache()) {
         self.context = context
         self.userId = userId
         self.profileId = profileId
