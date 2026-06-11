@@ -198,10 +198,14 @@ struct AppLaunch {
                                    fromLabel: "Home", toLabel: "Supplier", purpose: "Pickup",
                                    distanceM: 6_100, isBusiness: true, claimCents: 4_88,
                                    vehicleId: "v1", odometerStartM: 51_180_000, odometerEndM: 51_186_100))
-        // WFH logs across two weeks
-        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(-1),
+        // WFH logs across two weeks RELATIVE TO THE FROZEN NOW (15 Jan 2026, a
+        // Thursday): dayISO is monthStart-relative, so dayISO(13) = 14 Jan
+        // ("yesterday", inside the frozen Mon 12 – Sun 18 Jan week → the
+        // "this week" BarPair renders a non-zero Wednesday bar, the Task 6
+        // Step 4b gate) and dayISO(6) = 7 Jan (prior week).
+        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(13),
                               minutes: 480, note: "Admin + quotes", rateCentsPerHour: 70, claimCents: 5_60))
-        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(-8),
+        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(6),
                               minutes: 300, rateCentsPerHour: 70, claimCents: 3_50))
 
         // loyalty: two formats
