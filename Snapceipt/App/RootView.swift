@@ -541,11 +541,14 @@ struct ShellView: View {
     private func sheetContent(for overlay: Overlay) -> some View {
         switch overlay {
         case .profilePicker:
+            // Top-anchored on the cream sheet surface (the system .sheet owns the
+            // grabber + rounded corners) — no bottom-anchored white sub-panel, which
+            // previously read as a sheet-within-a-sheet. Matches AddProfileView.
             ProfilePickerSheet(
                 store: profiles,
                 onAddProfile: { router.go(.overlay(.addProfile)) }
             )
-            .frame(maxHeight: .infinity, alignment: .bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Palette.cream)
         case .addProfile:
             AddProfileView(vm: makeAddProfileVM())
