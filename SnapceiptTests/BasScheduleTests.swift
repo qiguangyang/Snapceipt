@@ -43,38 +43,29 @@ struct BasScheduleTests {
     /// Regression guard for the TaxSettingsView "Next BAS due" display fix.
     /// `nextDue` returns the 28th anchored to Australia/Sydney midnight, so a
     /// statutory BAS date must render as its AU wall-clock day regardless of the
-    /// device's UTC offset. A device-tz formatter shows it a day early west of
-    /// Sydney (the bug); the Sydney-pinned formatter `TaxSettingsView` uses does not.
-    @Test("BAS-due display reads its AU wall-clock day in every device time zone")
+    /// device's UTC offset. The production `fmtBasDue` pins Australia/Sydney; a
+    /// device-tz formatter (the old bug) shows it a day early west of Sydney.
+    @Test("fmtBasDue reads the AU wall-clock day, independent of the device zone")
     func dueDisplayIsTimeZoneStable() {
         let due = BasSchedule.nextDue(.quarterly, on: date("2026-07-01")) // 28 Jul 2026 AEST
 
-        // The recipe TaxSettingsView.basDueFormatter uses (Sydney-pinned).
-        func sydneyPinned(_ tz: String) -> String {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "en_AU")
-            f.timeZone = TimeZone(identifier: "Australia/Sydney")
-            f.dateFormat = "d MMM yyyy"
-            // The device zone is irrelevant when the formatter pins its own zone,
-            // but set it to prove independence from the ambient TimeZone.default.
-            _ = tz
-            return f.string(from: due)
-        }
-        // Sydney-pinned: every device zone reads the correct statutory day.
-        for tz in ["Australia/Sydney", "Australia/Perth", "Australia/Adelaide",
-                   "Australia/Brisbane", "UTC", "America/Los_Angeles"] {
-            #expect(sydneyPinned(tz) == "28 Jul 2026")
-        }
+        // Exercise the PRODUCTION formatter directly (not a hand-copied recipe):
+        // mis-pinning `fmtBasDue`'s zone west of Sydney makes this read "27 Jul"
+        // and turns it red. Paired with the explicit-zone assertions below, this is
+        // the literal regression guard for the Sydney pin.
+        #expect(fmtBasDue(due) == "28 Jul 2026")
 
-        // The OLD device-tz behaviour: west of Sydney it slips to 27 Jul — the bug.
-        func deviceTz(_ tz: String) -> String {
+        // Pin down WHY the zone matters: this Date is a Sydney-midnight instant.
+        // Rendered in Perth (UTC+8, west of Sydney) it slips to 27 Jul — the exact
+        // bug `fmtBasDue`'s Sydney pin prevents; rendered in Sydney it stays 28 Jul.
+        func render(in tz: String) -> String {
             let f = DateFormatter()
             f.locale = Locale(identifier: "en_AU")
             f.timeZone = TimeZone(identifier: tz)
             f.dateFormat = "d MMM yyyy"
             return f.string(from: due)
         }
-        #expect(deviceTz("Australia/Perth") == "27 Jul 2026")
-        #expect(deviceTz("Australia/Sydney") == "28 Jul 2026")
+        #expect(render(in: "Australia/Perth") == "27 Jul 2026")
+        #expect(render(in: "Australia/Sydney") == "28 Jul 2026")
     }
 }

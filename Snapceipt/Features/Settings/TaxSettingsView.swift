@@ -28,20 +28,6 @@ struct TaxSettingsView: View {
         cal.locale = auLocale
         return cal.monthSymbols
     }()
-    /// en-AU "28 Jul 2026" (day-month-year, no comma) — the app's house date style
-    /// (`Formatters.swift`), not the runtime locale's US "Jul 28, 2026".
-    /// Pin the time zone to Australia/Sydney to match `BasSchedule`'s anchor
-    /// (`BasSchedule.swift` L9-20): `vm.nextBasDue` is the 28th at Sydney midnight, so
-    /// rendering in the device zone shows the deadline a day early west of Sydney
-    /// (e.g. Perth/Adelaide render '27 Jul' for the 28-Jul due date) — statutory BAS
-    /// dates must read as their AU wall-clock day regardless of device offset.
-    private static let basDueFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = auLocale
-        f.timeZone = TimeZone(identifier: "Australia/Sydney")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
     private let entityTypes = ["Sole trader", "Company", "Partnership", "Trust"]
     private let gstBases = ["Cash", "Accruals"]
 
@@ -114,7 +100,7 @@ struct TaxSettingsView: View {
                 HStack {
                     Text("Next BAS due").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     Spacer()
-                    Text(Self.basDueFormatter.string(from: vm.nextBasDue))
+                    Text(fmtBasDue(vm.nextBasDue))
                         .font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
                 }
             }
