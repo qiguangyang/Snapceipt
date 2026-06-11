@@ -191,13 +191,28 @@ struct ReportsView: View {
     }
 
     private func insightCard(_ vm: ReportsViewModel) -> some View {
-        Card {
-            HStack(alignment: .top, spacing: 12) {
-                IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                Text(vm.insight).font(.ui(14)).foregroundStyle(Palette.ink2)
-                Spacer(minLength: 0)
+        // Accent-branded gradient card (screens.md §4 L385-388): gradient bg +
+        // accent border + a "Snapceipt insight" header above the body copy.
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Icon(name: "sparkles", size: 18, color: accent.base)
+                Text("Snapceipt insight").font(.ui(13.5, .semibold)).foregroundStyle(accent.deep)
             }
+            Text(vm.insight).font(.ui(14)).foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            LinearGradient(colors: [accent.soft, Palette.paper],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(accent.base, lineWidth: 1)
+        )
+        .cardShadow()
         .accessibilityIdentifier(AccessibilityID.reportsInsight)
     }
 
