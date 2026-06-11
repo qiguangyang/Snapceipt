@@ -69,7 +69,8 @@ struct AddLoyaltyView: View {
                     numberField(vm)
                 }
             }
-            .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 120)
+            .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 160)
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
