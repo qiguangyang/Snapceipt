@@ -167,22 +167,57 @@ struct ReviewStep: View {
             Text("Assign to profile")
                 .font(.ui(13, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 8) {
-                ForEach(ProfileType.allCases) { type in
-                    let selected = mode == type.rawValue
-                    Button { mode = type.rawValue } label: {
-                        Text(type.label)
-                            .font(.ui(13, .semibold))
-                            .foregroundStyle(selected ? .white : Palette.ink2)
+            segmented
+        }
+        .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
+    }
+
+    /// The default ModeToggle Segmented sliding control (spec §2 L152-155): a paper-2
+    /// track with a single white thumb that animates between Personal/Business, each
+    /// option carrying a leading icon tinted to its FIXED per-option color (Personal
+    /// wallet+terracotta, Business building+teal) when selected, else --ink-3.
+    private var segmented: some View {
+        let types = ProfileType.allCases
+        let selectedIndex = types.firstIndex { mode == $0.rawValue } ?? 0
+        return GeometryReader { geo in
+            let thumbW = (geo.size.width - 8) / CGFloat(types.count)
+            ZStack(alignment: .leading) {
+                // Sliding white thumb with a soft shadow.
+                Capsule()
+                    .fill(Palette.paper)
+                    .shadow(color: Color(hex: 0x211C18).opacity(0.18), radius: 3, x: 0, y: 2)
+                    .frame(width: thumbW)
+                    .padding(.vertical, 4)
+                    .offset(x: 4 + CGFloat(selectedIndex) * thumbW)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selectedIndex)
+
+                HStack(spacing: 0) {
+                    ForEach(types) { type in
+                        let selected = mode == type.rawValue
+                        Button { mode = type.rawValue } label: {
+                            HStack(spacing: 6) {
+                                Icon(name: type.iconName, size: 16,
+                                     color: selected ? optionTint(type) : Palette.ink3)
+                                Text(type.label)
+                                    .font(.ui(14, .semibold))
+                                    .foregroundStyle(selected ? Palette.ink : Palette.ink3)
+                            }
                             .frame(maxWidth: .infinity, minHeight: 38)
-                            .background(selected ? accent.base : Palette.paper2,
-                                        in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-        .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
+        .frame(height: 46)
+        .background(Palette.paper2, in: Capsule())
+    }
+
+    /// FIXED per-option tint (spec §2 L155): Personal terracotta, Business teal,
+    /// independent of the active accent.
+    private func optionTint(_ type: ProfileType) -> Color {
+        type == .personal ? AccentPalette.personal.base : AccentPalette.business.base
     }
 
     private var lineItemsCard: some View {
