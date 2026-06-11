@@ -175,11 +175,21 @@ struct MileageScreen: View {
 
     @ViewBuilder private func tripsList(_ vm: MileageViewModel) -> some View {
         if vm.trips.isEmpty {
-            VStack(spacing: 12) {
-                EmptyArt(size: 110)
-                Text("No trips yet").font(.ui(14, .semibold)).foregroundStyle(Palette.ink2)
+            // Compact inline empty row (icon + copy). The tall centred EmptyArt is
+            // dropped here on purpose: with four action cards + hero above it, a big
+            // illustration lands under the floating "Add a trip" CTA at scroll-top.
+            // This compact treatment stays fully visible above the CTA.
+            HStack(spacing: 12) {
+                IconCircle(name: "car", tint: accent.base, soft: accent.soft, size: 40, iconSize: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("No trips yet").font(.ui(14, .semibold)).foregroundStyle(Palette.ink2)
+                    Text("Tap Add a trip to log your first drive")
+                        .font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity).padding(.vertical, 24)
+            .padding(14)
+            .background(Palette.paper2, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
         } else {
             Card(padding: 0) {
                 VStack(spacing: 0) {
