@@ -70,8 +70,8 @@ struct AddLoyaltyView: View {
                 }
             }
             .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 160)
-            .scrollDismissesKeyboard(.interactively)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var scanButton: some View {
@@ -111,7 +111,7 @@ struct AddLoyaltyView: View {
     @ViewBuilder private func numberField(_ vm: AddLoyaltyViewModel) -> some View {
         let brand = vm.selectedBrand
         VStack(alignment: .leading, spacing: 4) {
-            Text((brand.map { $0.name == "Custom" ? "Member" : $0.name } ?? "Member") + " number")
+            Text((brand.map { $0.key == "custom" ? "Member" : $0.name } ?? "Member") + " number")
                 .font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
             HStack(spacing: 10) {
                 if let brand {
