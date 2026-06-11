@@ -59,8 +59,11 @@ struct BudgetEditorView: View {
                 SheetHeader(title: budgetId == nil ? "New budget" : "Edit budget", onClose: onClose)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Segmented(options: categoryOptions, selection: $scopeSelection)
-                            .accessibilityIdentifier(AccessibilityID.budgetEditorScopeProfile)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Scope").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+                            Segmented(options: categoryOptions, selection: $scopeSelection)
+                                .accessibilityIdentifier(AccessibilityID.budgetEditorScopeProfile)
+                        }
                         if scopeSelection == "category" { categoryPicker }
                         field("Label", text: $label)
                         capField
