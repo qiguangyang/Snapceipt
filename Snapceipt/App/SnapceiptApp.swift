@@ -44,6 +44,8 @@ struct SnapceiptApp: App {
         let api: APIClient = launch.makeAPIClient(auth: auth)
         let container = launch.makeContainer()
         launch.applySeedIfNeeded(authStore: auth, context: container.mainContext)
+        launch.applyTourSeedIfNeeded(authStore: auth, context: container.mainContext)
+        launch.applyTourEmptySeedIfNeeded(authStore: auth, context: container.mainContext)
         // Stub-bypassed under -uiTestStub (canEvaluate:{false}) so the lock gate
         // never blocks a seeded UI-test launch.
         let appLock = launch.makeAppLock()
