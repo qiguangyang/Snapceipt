@@ -483,6 +483,9 @@ struct ShellView: View {
             HStack(spacing: 10) {
                 IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
                 Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    // Dynamic-Type robustness: shrink slightly before breaking so a
+                    // short label like "Mileage" never splits mid-word at large sizes.
+                    .lineLimit(2).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
             }
             .padding(12)
