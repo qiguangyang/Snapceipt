@@ -31,7 +31,9 @@ struct CaptureFlow: View {
                     ReviewStep(draft: binding, mode: $mode, onSave: { vm.save() })
                 }
             case .saved:
-                SavedStep(merchant: vm.draft?.merchant ?? "",
+                SavedStep(total: vm.draft?.total ?? 0,
+                          mode: mode,
+                          deductible: vm.draft?.deductible,
                           onSnapAnother: { vm.reset() },
                           onDone: onClose)
             }
