@@ -109,12 +109,24 @@ struct AddLoyaltyView: View {
     }
 
     @ViewBuilder private func numberField(_ vm: AddLoyaltyViewModel) -> some View {
+        let brand = vm.selectedBrand
         VStack(alignment: .leading, spacing: 4) {
-            Text("Member number").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
-            TextField("Number", text: Binding(get: { vm.number }, set: { vm.number = $0 }))
-                .keyboardType(.numbersAndPunctuation)
-                .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityIdentifier(AccessibilityID.loyaltyAddNumber)
+            Text((brand.map { $0.name == "Custom" ? "Member" : $0.name } ?? "Member") + " number")
+                .font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+            HStack(spacing: 10) {
+                if let brand {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(LinearGradient(colors: [brand.c1, brand.c2], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        Text(brand.monogram).font(.ui(12, .bold)).foregroundStyle(.white)
+                    }
+                    .frame(width: 30, height: 30)
+                }
+                TextField("Number", text: Binding(get: { vm.number }, set: { vm.number = $0 }))
+                    .keyboardType(.numbersAndPunctuation)
+                    .accessibilityIdentifier(AccessibilityID.loyaltyAddNumber)
+            }
+            .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
