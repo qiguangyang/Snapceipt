@@ -60,7 +60,12 @@ struct AlertsSheet: View {
     }
 
     private func relativeTime(_ ms: Int) -> String {
+        let fired = Date(timeIntervalSince1970: Double(ms) / 1000.0)
+        let now = Epoch.now()
+        // A just-fired alert (firedAt at/after now) would otherwise render as the
+        // future-tense "in 0 seconds"; clamp to a sensible past-tense label.
+        if fired >= now { return "Just now" }
         let f = RelativeDateTimeFormatter()
-        return f.localizedString(for: Date(timeIntervalSince1970: Double(ms) / 1000.0), relativeTo: Epoch.now())
+        return f.localizedString(for: fired, relativeTo: now)
     }
 }
