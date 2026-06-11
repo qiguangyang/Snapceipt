@@ -64,4 +64,41 @@ final class LiveJourneyUITests: UITestCase {
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
                       "Did not reach the shell after live onboarding")
     }
+
+    /// J18c (live): a receipt captured offline drains to the backend on reconnect.
+    func testOfflineCaptureDrainsOnReconnect() throws {
+        let base = try launchLive()
+        tapDevSignIn()
+        // (onboard if a fresh account lands on the form — state-tolerant, see J02/J12.)
+        if app.textFields[AccessibilityID.onboardingName].waitForExistence(timeout: 8) {
+            app.textFields[AccessibilityID.onboardingName].tap()
+            app.textFields[AccessibilityID.onboardingName].typeText("Drain Co")
+            app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
+            app.buttons[AccessibilityID.onboardingCreate].tap()
+            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
+            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+        }
+        XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
+                      "Did not reach the live shell")
+        // Relaunch offline, capture (queues), then relaunch online → the queue drains.
+        app.terminate()
+        app.launchArguments = ["-uiTestOffline"]
+        app.launchEnvironment["API_BASE_URL"] = base
+        app.launch()
+        app.buttons[AccessibilityID.tabSnap].firstMatch.tap()
+        let save = app.buttons[AccessibilityID.captureSave]
+        XCTAssertTrue(save.waitForExistence(timeout: 12), "Offline review did not appear (live)")
+        save.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.captureQueuedBadge].firstMatch
+                        .waitForExistence(timeout: 8), "Offline capture did not queue (live)")
+        // Reconnect: relaunch WITHOUT -uiTestOffline → ReceiptUploadQueue drains on next sync.
+        app.terminate()
+        app.launchArguments = []
+        app.launchEnvironment["API_BASE_URL"] = base
+        app.launch()
+        // The queued badge clears once the receipt drains (the reconciler re-extracts server-side).
+        let queued = app.descendants(matching: .any)[AccessibilityID.captureQueuedBadge].firstMatch
+        XCTAssertFalse(queued.waitForExistence(timeout: 20),
+                       "Queued receipt did not drain after reconnect")
+    }
 }

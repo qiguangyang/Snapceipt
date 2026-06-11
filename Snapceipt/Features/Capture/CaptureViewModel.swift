@@ -27,6 +27,11 @@ final class CaptureViewModel {
     var confidence: Double { draft?.confidence ?? 0 }
     var needsReview: Bool { draft?.needsReview ?? true }
 
+    /// True when the saved receipt came from the offline HeuristicParser fallback
+    /// (`/extract` was unreachable) and is therefore queued in the outbox awaiting a
+    /// reconnect drain + server re-extract. Drives the Saved-step "Queued" badge (J18b).
+    var isQueued: Bool { draft?.extractionStatus == "pending" }
+
     /// The active profile's mode ("personal" | "business"), used to initialize the
     /// Review toggle so it opens on the actual save target. Defaults to personal when
     /// there is no active profile.

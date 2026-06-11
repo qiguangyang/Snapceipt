@@ -13,6 +13,10 @@ struct AppLaunch {
     let tour: Bool
     let tourEmpty: Bool
     let cannedNeedsReview: Bool
+    /// Test seam (`-uiTestOffline`): the API client throws a transport error on
+    /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
+    /// outbox queue exactly as a real offline capture would. Drives J18b/J18c.
+    let offline: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -24,6 +28,7 @@ struct AppLaunch {
         tour = arguments.contains("-uiTestTour")
         tourEmpty = arguments.contains("-uiTestTourEmpty")
         cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
+        offline = arguments.contains("-uiTestOffline")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 
@@ -42,6 +47,22 @@ struct AppLaunch {
         // on a passcode-less simulator — would lock the shell permanently. -uiTestReset
         // heals it for both the hermetic and live paths.
         UserDefaults.standard.removeObject(forKey: "sc.lock.enabled")
+    }
+
+    /// Purges the on-disk SwiftData store under `-uiTestReset` so a live journey that
+    /// signs into a FRESH backend account isn't blocked by a stale Profile left in the
+    /// local container by a PRIOR run. RootView's onboarding gate is a GLOBAL
+    /// `@Query profileRows.isEmpty` (all users), so a leftover profile from any earlier
+    /// run suppresses onboarding for the new account — leaving the new user with no
+    /// active profile and dead-ending capture's save() (J18c). The hermetic path uses an
+    /// in-memory store (purge is a harmless no-op there; seeds run afterwards and never
+    /// pass `-uiTestReset`). DEBUG-only seam; never compiled into Release.
+    func purgeLocalStoreIfNeeded(context: ModelContext) {
+        guard reset else { return }
+        for type in SnapceiptSchema.models {
+            try? context.delete(model: type)
+        }
+        try? context.save()
     }
 
     /// Seeds an already-signed-in dev session + two profiles, for shell-level UI tests
@@ -333,9 +354,12 @@ struct AppLaunch {
     }
 
     /// Canned (image, rawText) for the camera-less capture UI test. Loaded from the
-    /// app bundle when `-uiTestStub` is set; nil otherwise (production uses the camera).
+    /// app bundle when `-uiTestStub` OR `-uiTestOffline` is set; nil otherwise
+    /// (production uses the camera). `-uiTestOffline` is admitted so the LIVE offline
+    /// journey (J18c, no `-uiTestStub`) can still drive a camera-less capture against the
+    /// real backend; both flags are test-only, so the seam never loads in production.
     var cannedScan: (image: UIImage, rawText: String)? {
-        guard useStub,
+        guard useStub || offline,
               let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
               let data = try? Data(contentsOf: url),
               let image = UIImage(data: data) else { return nil }

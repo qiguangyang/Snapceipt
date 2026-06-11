@@ -31,6 +31,9 @@ enum AccessibilityID {
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureSave = "capture.save"
     static let captureSavedTitle = "capture.saved.title"
+    /// Shown on the Saved confirmation only when the receipt was captured offline
+    /// (HeuristicParser fallback → outbox queue, extractionStatus=="pending"). Drives J18b/J18c.
+    static let captureQueuedBadge = "capture.queued.badge"
     static let captureSnapAnother = "capture.snapAnother"
     static let captureDone = "capture.done"
 

@@ -23,6 +23,11 @@ final class StubAPIClient: APIClient {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: 0)
     }
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        // J18b offline seam: throw a transport error BEFORE the canned result so the
+        // capture flow falls back to HeuristicParser and enqueues the receipt (outbox).
+        if AppLaunch.current.offline {
+            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+        }
         // Simulate the extraction round-trip so the `.scanning` stage is reliably
         // observable by XCUITest (otherwise the synchronous decode advances
         // .scanning -> .review in a single MainActor turn and SwiftUI never renders the
@@ -44,7 +49,11 @@ final class StubAPIClient: APIClient {
         return try JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
     }
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
-        UploadedImage(imageKey: "u/\(DevAccount.userId)/stub.jpg",
+        // J18b offline seam: the image upload also fails while offline (mirrors extract).
+        if AppLaunch.current.offline {
+            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+        }
+        return UploadedImage(imageKey: "u/\(DevAccount.userId)/stub.jpg",
                       getUrl: "/images/u/\(DevAccount.userId)/stub.jpg",
                       byteSize: jpeg.count)
     }

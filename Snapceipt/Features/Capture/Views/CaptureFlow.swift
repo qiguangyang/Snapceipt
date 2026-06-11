@@ -37,6 +37,7 @@ struct CaptureFlow: View {
                 SavedStep(total: vm.draft?.total ?? 0,
                           mode: vm.savedMode,
                           deductible: vm.draft?.deductible,
+                          queued: vm.isQueued,
                           onSnapAnother: { vm.reset() },
                           onDone: onClose)
             }

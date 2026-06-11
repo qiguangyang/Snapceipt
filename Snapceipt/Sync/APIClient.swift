@@ -113,6 +113,14 @@ final class LiveAPIClient: APIClient {
     }
 
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        #if DEBUG
+        // J18c offline seam (test-only): when -uiTestOffline is set the live client also
+        // throws a transport error so the capture flow falls back to HeuristicParser +
+        // outbox queue against the REAL backend. Compiled out of Release entirely.
+        if AppLaunch.current.offline {
+            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+        }
+        #endif
         // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
         // (UUIDv7 from the same `ID` helper the model inits use).
         let body = ExtractBody(ocrText: ocrText, source: source,
@@ -122,6 +130,12 @@ final class LiveAPIClient: APIClient {
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        #if DEBUG
+        // J18c offline seam (test-only): mirror extract — fail the image upload offline.
+        if AppLaunch.current.offline {
+            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+        }
+        #endif
         var items = [URLQueryItem(name: "width", value: String(width)),
                      URLQueryItem(name: "height", value: String(height))]
         if let transactionId { items.append(URLQueryItem(name: "transactionId", value: transactionId)) }

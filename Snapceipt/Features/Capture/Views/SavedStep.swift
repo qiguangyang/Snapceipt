@@ -10,6 +10,9 @@ struct SavedStep: View {
     let mode: String
     /// Tax-deductible %, when present (drives the "tagged N% deductible" clause).
     let deductible: Int?
+    /// True when the receipt was captured offline (HeuristicParser fallback) and is
+    /// queued in the outbox awaiting a reconnect drain — surfaces the "Queued" badge.
+    var queued: Bool = false
     let onSnapAnother: () -> Void
     let onDone: () -> Void
 
@@ -35,6 +38,19 @@ struct SavedStep: View {
             Text("Receipt saved!")
                 .font(.display(24)).foregroundStyle(Palette.ink)
                 .accessibilityIdentifier(AccessibilityID.captureSavedTitle)
+            if queued {
+                // Offline capture: the on-device heuristic filled the draft and it is
+                // queued in the outbox; it syncs + re-extracts when the device reconnects.
+                HStack(spacing: 6) {
+                    Icon(name: "clock", size: 13, color: Palette.ink2)
+                    Text("Queued — syncs when you're back online")
+                        .font(.ui(12.5, .bold)).foregroundStyle(Palette.ink2)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Palette.paper, in: Capsule())
+                .overlay(Capsule().stroke(Palette.line, lineWidth: 1))
+                .accessibilityIdentifier(AccessibilityID.captureQueuedBadge)
+            }
             summary
                 .font(.ui(14.5)).foregroundStyle(Palette.ink2)
                 .multilineTextAlignment(.center)
