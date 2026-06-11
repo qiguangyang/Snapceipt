@@ -33,6 +33,13 @@ struct AppLaunch {
         authStore.clear()
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         UserDefaults.standard.removeObject(forKey: "sc.syncCursor")
+        // Clear the app-lock flag too: J08 (AppLockUITests) persists sc.lock.enabled=true
+        // and it survives across launches in the simulator container. Without this, a
+        // later -uiTestReset launch — including the live (E2E_LIVE) suite, which runs
+        // WITHOUT -uiTestStub and so gets the real LAContext evaluator that can't succeed
+        // on a passcode-less simulator — would lock the shell permanently. -uiTestReset
+        // heals it for both the hermetic and live paths.
+        UserDefaults.standard.removeObject(forKey: "sc.lock.enabled")
     }
 
     /// Seeds an already-signed-in dev session + two profiles, for shell-level UI tests
