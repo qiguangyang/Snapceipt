@@ -55,9 +55,11 @@ struct BudgetListView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(row.budget.label).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                Spacer()
+                    .lineLimit(1).layoutPriority(1)
+                Spacer(minLength: 8)
                 Text("\(fmt(row.spentCents)) / \(fmt(row.budget.capCents))")
                     .font(.ui(13, .semibold)).foregroundStyle(over ? Palette.alert : Palette.ink2).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
             ProgressBar(value: Double(row.spentCents),
                         max: Double(Swift.max(1, row.budget.capCents)),
