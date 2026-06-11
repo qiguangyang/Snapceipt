@@ -129,6 +129,7 @@ struct ReviewStep: View {
                     ForEach(categoryKeys, id: \.self) { Text(label($0)).tag($0) }
                 }
                 .pickerStyle(.menu)
+                .tint(accent.base)   // active accent, not the iOS system-blue menu tint
                 .accessibilityIdentifier(AccessibilityID.captureReviewCategory)
             }
             field("Payment") {
