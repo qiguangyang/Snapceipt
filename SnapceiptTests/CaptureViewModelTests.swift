@@ -26,12 +26,13 @@ struct CaptureViewModelTests {
         }
     }
 
-    private func fixture(extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
+    private func fixture(activeType: String = "personal",
+                         extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
-        let profile = Profile(userId: "u1", name: "Me", type: "personal",
+        let profile = Profile(userId: "u1", name: "Me", type: activeType,
                               accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)
         ctx.insert(profile); try ctx.save()
         let storeSync = SpySync()
@@ -97,5 +98,20 @@ struct CaptureViewModelTests {
         #expect(pending.count == 1)
         #expect(pending[0].transactionId == txns[0].id)
         #expect(pending[0].ocrText == "CAFE\nTOTAL 10.00")
+    }
+
+    /// Locks the Saved-summary save target (Finding 1) against the active profile, not
+    /// the default. `business` differs from the "personal" default, so this fails if
+    /// `savedMode = profile.type` in save() is removed (it would stay "personal"), and
+    /// `activeMode` fails if the activeProfile mode stops feeding the Review toggle.
+    @Test("save() captures the ACTIVE profile's mode as savedMode (not the default)")
+    func savedModeFollowsActiveProfile() async throws {
+        let (vm, _, _, _) = try fixture(activeType: "business") { _, _, _ in self.okResponse() }
+        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        // The Review toggle seeds from the active profile's mode, pre-save.
+        #expect(vm.activeMode == "business")
+        vm.save()
+        // The Saved summary reads the real save target captured in save().
+        #expect(vm.savedMode == "business")
     }
 }
