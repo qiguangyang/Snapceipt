@@ -45,3 +45,6 @@ beta-launch.env
 
 # Brainstorm visual companion sessions
 .superpowers/
+
+# Screenshot-tour artifacts — local PNG runs + result bundles, never committed.
+artifacts/
