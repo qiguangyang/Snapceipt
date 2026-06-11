@@ -12,6 +12,7 @@ struct AppLaunch {
     let lockAvailable: Bool
     let tour: Bool
     let tourEmpty: Bool
+    let cannedNeedsReview: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -22,6 +23,7 @@ struct AppLaunch {
         lockAvailable = arguments.contains("-uiTestLockAvailable")
         tour = arguments.contains("-uiTestTour")
         tourEmpty = arguments.contains("-uiTestTourEmpty")
+        cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 

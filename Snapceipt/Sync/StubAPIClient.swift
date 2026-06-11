@@ -35,7 +35,7 @@ final class StubAPIClient: APIClient {
          "receipt":{"merchant":"The Grounds","date":"\(capturedAt ?? "2026-05-28")","currencyCode":"AUD",
            "total":42.50,"gst":3.86,"category":"meals","deductible":50,
            "lineItems":[{"name":"Flat White x2","price":9.00},{"name":"Big Brekkie","price":24.00}],
-           "confidence":0.92,"needsReview":false},
+           "confidence":\(AppLaunch.current.cannedNeedsReview ? 0.40 : 0.92),"needsReview":\(AppLaunch.current.cannedNeedsReview ? "true" : "false")},
          "meta":{"model":"stub","source":"\(source)","latencyMs":1,"attempts":1,"stub":true}}
         """
         return try JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))

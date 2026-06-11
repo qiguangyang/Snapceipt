@@ -48,6 +48,18 @@ struct CaptureHost: View {
                 await model.onScanned(image: stub.image, rawText: stub.rawText)
             }
         }
+        // Stub seam: "Snap another" (`vm.reset()`) returns the flow to `.camera`, which
+        // shows the real VisionKit scanner in production — but the simulator has no
+        // camera, so the canned page must be re-fed. The initial `.task` already feeds
+        // the FIRST scan; this re-delivers the same canned (image, rawText) only on a
+        // genuine RETURN to `.camera` (a non-nil prior stage → `.camera`), so the
+        // snap-another loop is observable hermetically without double-feeding on first
+        // appear. No-op without a stub (production keeps the live camera). (Task 12 seam,
+        // extended for J18.)
+        .onChange(of: vm?.stage) { old, new in
+            guard let stub, let model = vm, old != nil, new == .camera else { return }
+            Task { await model.onScanned(image: stub.image, rawText: stub.rawText) }
+        }
         .onChange(of: reachability.isOnline) { _, online in
             if online { Task { await drainQueues() } }
         }
