@@ -102,6 +102,7 @@ struct ReviewStep: View {
             }
             Text(body).font(.ui(13)).foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier(AccessibilityID.captureReviewBanner)
         }
         .padding(14)
         .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))

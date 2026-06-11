@@ -27,6 +27,7 @@ enum AccessibilityID {
     static let captureReviewMerchant = "capture.review.merchant"
     static let captureReviewCategory = "capture.review.category"
     static let captureReviewBadge = "capture.review.badge"
+    static let captureReviewBanner = "capture.review.banner"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureSave = "capture.save"
     static let captureSavedTitle = "capture.saved.title"
