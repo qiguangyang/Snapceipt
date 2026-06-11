@@ -32,6 +32,8 @@ struct QuoteEditorView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.quoteEditorScreen)
         .transition(.opacity)
+        // Success haptic when the quote send succeeds (drives the success overlay).
+        .sensoryFeedback(.success, trigger: sent)
         .task {
             if vm == nil {
                 let model = QuoteEditorViewModel(context: context, sync: sync,

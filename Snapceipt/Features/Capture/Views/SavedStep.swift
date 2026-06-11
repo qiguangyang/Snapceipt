@@ -67,6 +67,8 @@ struct SavedStep: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
         .onAppear { pop = true }
+        // Success haptic on the save confirmation (fires once as the disc pops in).
+        .sensoryFeedback(.success, trigger: pop)
     }
 
     /// "$42.50 added to Business expenses, and tagged 50% deductible." — total + mode +
