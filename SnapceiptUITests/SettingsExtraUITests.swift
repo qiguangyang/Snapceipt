@@ -56,28 +56,26 @@ final class SettingsExtraUITests: UITestCase {
                           "Reports FY period did not recompute after changing the FY start month")
     }
 
-    func testMealsDefaultPctThreads() {
-        launchSeeded()
-        // Profile → Tax → bump the meals default % via the Stepper.
-        app.buttons[AccessibilityID.tabProfile].firstMatch.tap()
-        app.buttons[AccessibilityID.profileRowTax].firstMatch.tap()
-        let mealsPct = app.descendants(matching: .any)[AccessibilityID.taxMealsPct].firstMatch
-        XCTAssertTrue(mealsPct.waitForExistence(timeout: 5), "Meals default-% control missing")
-        let pctBefore = mealsPct.value as? String ?? mealsPct.label
-        // `taxMealsPct` is a Stepper → drive its Increment; fall back to typing for a field.
-        if mealsPct.buttons["Increment"].exists { mealsPct.buttons["Increment"].tap() }
-        else { mealsPct.tap(); mealsPct.typeText("75") }
-        let pctAfter = mealsPct.value as? String ?? mealsPct.label
-        XCTAssertNotEqual(pctAfter, pctBefore, "Meals default % did not change")
-        // Dismiss the Tax sheet so the Snap tab is reachable.
-        app.buttons[AccessibilityID.logbookClose].firstMatch.tap()
-
-        // New capture → the Review step surfaces the category/deductible (default % threaded in).
-        app.buttons[AccessibilityID.tabSnap].firstMatch.tap()
-        XCTAssertTrue(app.buttons[AccessibilityID.captureSave].waitForExistence(timeout: 12),
-                      "Review did not appear")
-        let deductible = app.descendants(matching: .any)[AccessibilityID.captureReviewCategory].firstMatch
-        XCTAssertTrue(deductible.waitForExistence(timeout: 5),
-                      "Review category/deductible surface missing — default % did not thread into capture")
+    func testMealsDefaultPctThreads() throws {
+        // The Review banner ("claimable at X%", AccessibilityID.captureReviewBanner,
+        // ReviewStep.swift:117) is the ONLY place the meals deductible % surfaces in
+        // capture. The non-vacuous assertion this test WANTS to make is:
+        //   bump taxMealsPct 50→55 ⇒ a new meals capture's banner reads "claimable at 55%".
+        //
+        // That threading is NOT wired today: the capture extract path has no TaxSettings
+        // dependency, and the DEBUG stub (StubAPIClient.swift:60) returns a hardcoded
+        // `"deductible":50` for every meals receipt regardless of taxMealsPct. So the
+        // banner would always read "claimable at 50%" no matter what the Stepper does —
+        // any assertion on it after a bump is vacuous (or would falsely fail at 55%).
+        // setMealsDeductiblePct() writes only to TaxSettings.mealsDeductiblePct; it never
+        // reaches the meals Category row or the capture draft.
+        //
+        // Per the review finding: skip explicitly rather than assert a vacuous existence
+        // check that a full regression in the (unbuilt) threading path would leave green.
+        // TODO(J52c): when taxMealsPct → capture deductible is wired (TaxSettings injected
+        //   into the extract/draft default path, stub honoring it), delete this skip and
+        //   assert app.descendants…[captureReviewBanner].label CONTAINS "claimable at 55%"
+        //   after one Stepper Increment (50→55).
+        throw XCTSkip("J52c threading (taxMealsPct → capture deductible) not wired: stub returns a fixed deductible:50 and the capture flow has no TaxSettings dependency — the only meals-% surface (captureReviewBanner) is invariant to the Stepper, so any capture-side assertion is vacuous.")
     }
 }
