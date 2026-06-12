@@ -157,6 +157,11 @@ struct ReportsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // Merge caption + value into ONE accessibility element so the pill's label
+        // carries its dollar amount (VoiceOver reads "Deductible YTD, $250.00" rather
+        // than the bare caption). Without this the value Text is a sibling element and
+        // the pill's label omits the figure entirely (J33 gap).
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier(id)
     }
 
