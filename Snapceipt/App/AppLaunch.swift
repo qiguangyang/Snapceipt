@@ -19,8 +19,17 @@ struct AppLaunch {
     let offline: Bool
     /// Test seam (`-uiTestPushReject`): the stub `syncPush` throws a 422 contract
     /// rejection so `SyncEngine` marks the batch failed and surfaces `.error`.
-    /// Drives J23b (visible-failure) and J23c (inflight crash-recovery requeue).
+    /// Drives J23b (visible-failure).
     let pushReject: Bool
+    /// Test seam (`-uiTestPushStall`): both the stub and live `syncPush` sleep
+    /// indefinitely instead of returning. `SyncEngine.push()` marks the batch
+    /// `inflight` + saves BEFORE calling `syncPush` (SyncEngine.swift:104-105), so
+    /// `app.terminate()` while the call is parked strands a persisted `inflight`
+    /// outbox row — the exact crash-recovery precondition for J23c. On the on-disk
+    /// live store (no `-uiTestStub`) that row survives the relaunch, where
+    /// `requeueStrandedInflight()` (run unconditionally at the head of every push)
+    /// re-marks it `pending` and the next clean push drains it. DEBUG-only.
+    let pushStall: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -34,6 +43,7 @@ struct AppLaunch {
         cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
         offline = arguments.contains("-uiTestOffline")
         pushReject = arguments.contains("-uiTestPushReject")
+        pushStall = arguments.contains("-uiTestPushStall")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 

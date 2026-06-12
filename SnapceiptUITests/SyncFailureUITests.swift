@@ -26,44 +26,83 @@ final class SyncFailureUITests: UITestCase {
         wait(for: [expectation(for: errored, evaluatedWith: pill)], timeout: 12)
     }
 
-    /// Relaunch-cleanliness net for the crash-recovery requeue path.
+    /// J23c (live crash-recovery): an inflight push, interrupted by a terminate,
+    /// requeues to pending on the next launch and drains.
     ///
-    /// NOTE: the FULL `requeueStrandedInflight()` crash-recovery scenario is NOT
-    /// exercisable through the seams this program ships — under `-uiTestStub` the
-    /// SwiftData store is in-memory (`makeSnapceiptContainer(inMemory: useStub)`),
-    /// so `app.terminate()` wipes the outbox and no `inflight` row survives the
-    /// relaunch; and on the live runner the `-uiTestPushReject` seam is read inside
-    /// `StubAPIClient` only, so the real client never strands an `inflight` row to
-    /// begin with. Stranding a surviving `inflight` row would need a new "die
-    /// mid-push" / persistent-stub seam — flow/seam restructuring, out of guardrail
-    /// (deferred-findings: "J23c inflight crash-recovery requeue").
+    /// Runs on the LIVE-wrangler path (no `-uiTestStub`) so the SwiftData store is
+    /// ON DISK and survives `app.terminate()` — under `-uiTestStub` the store is
+    /// in-memory (`makeSnapceiptContainer(inMemory: useStub)`) and the outbox is
+    /// wiped on terminate, which is why the plan's fallback (line 1180) prescribes
+    /// the live runner here. Invoke via:
+    ///   scripts/ios-e2e-journeys.sh --persist .e2e-journey-state SyncFailureUITests
+    /// (the runner sets E2E_LIVE=1 + API_BASE_URL and boots local wrangler dev).
     ///
-    /// What this DOES verify: a session that hit a 4xx push rejection (.error) does
-    /// not poison a subsequent clean relaunch — the next launch's sync reaches a
-    /// non-error state. `requeueStrandedInflight()` (shipped, SyncEngine.swift:255)
-    /// still runs unconditionally at the head of every `push()`.
-    func testRelaunchAfterRejectReachesNonErrorSync() {
-        // First run: reject pushes so the session ends in .error.
-        app.launchArguments += ["-uiTestStub", "-uiTestSeed", "-uiTestPushReject"]
+    /// Mechanism: `-uiTestPushStall` parks the live `syncPush` indefinitely. SyncEngine
+    /// marks the batch `inflight` and saves it to the on-disk store BEFORE that call
+    /// (SyncEngine.swift:104-105), so terminating while it is parked strands a real
+    /// persisted `inflight` row. The clean relaunch's first sync runs
+    /// `requeueStrandedInflight()` (SyncEngine.swift:255, unconditional at push() head),
+    /// which re-marks the row `pending`; the push then drains it → the pill is non-error.
+    func testInflightRequeuesAfterRelaunch() throws {
+        let env = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(env["E2E_LIVE"] == "1",
+                          "J23c crash-recovery requeue needs the live runner: "
+                          + "scripts/ios-e2e-journeys.sh --persist .e2e-journey-state SyncFailureUITests")
+        let base = env["API_BASE_URL"] ?? "http://127.0.0.1:8787"
+
+        // --- First run: reach the live shell, capture+save (enqueues a mutation),
+        //     then drive a push that PARKS inflight, and terminate to strand it. ---
+        // `-uiTestOffline` is required on the live path purely to admit the camera-less
+        // canned scan (AppLaunch.cannedScan gates on `useStub || offline`) so capture can
+        // reach Review without a real camera — same reason J18c uses it. It gates only
+        // extract/uploadImage (HeuristicParser fallback), NOT enqueue/push: the
+        // transaction mutation is still enqueued and the push still runs (and parks).
+        app.launchArguments += ["-uiTestReset", "-uiTestOffline", "-uiTestPushStall"]
+        app.launchEnvironment["API_BASE_URL"] = base
         app.launch()
-        app.buttons[AccessibilityID.tabSnap].firstMatch.tap()
+        tapDevSignIn()
+        // State-tolerant onboarding (shared-persist dev account; see LiveJourneyUITests).
+        if app.textFields[AccessibilityID.onboardingName].waitForExistence(timeout: 8) {
+            let name = app.textFields[AccessibilityID.onboardingName]
+            name.tap(); name.typeText("Requeue Co")
+            app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
+            app.buttons[AccessibilityID.onboardingCreate].tap()
+            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
+            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+        }
+        XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
+                      "Did not reach the live shell")
+        let snap = app.buttons[AccessibilityID.tabSnap].firstMatch
+        XCTAssertTrue(snap.waitForExistence(timeout: 12), "Snap tab not found")
+        snap.tap()
         let save = app.buttons[AccessibilityID.captureSave]
         XCTAssertTrue(save.waitForExistence(timeout: 12), "Review did not appear")
-        save.tap()
+        save.tap()   // enqueues the transaction mutation (synchronous outbox insert)
+        if app.buttons[AccessibilityID.captureDone].waitForExistence(timeout: 5) {
+            app.buttons[AccessibilityID.captureDone].tap()
+        }
+        // Drive the push (scenePhase→.active fires SyncEngine.sync()). The stub-less
+        // live syncPush parks → the batch is saved `inflight` on disk and the pill
+        // shows `syncing` (never resolves while stalled).
         XCUIDevice.shared.press(.home)
-        app.activate()   // drive the rejecting push so the session is in .error
+        app.activate()
         let pill = app.descendants(matching: .any)[AccessibilityID.syncStatusPill].firstMatch
         XCTAssertTrue(pill.waitForExistence(timeout: 12), "Sync status pill missing")
-        let errored = NSPredicate(format: "value CONTAINS[c] 'error' OR value CONTAINS[c] 'fail'")
-        wait(for: [expectation(for: errored, evaluatedWith: pill)], timeout: 12)
-        app.terminate()
-        // Relaunch WITHOUT the reject seam: the next sync (incl. the unconditional
-        // requeueStrandedInflight() at the head of push()) must reach a non-error state.
-        app.launchArguments = ["-uiTestStub", "-uiTestSeed"]
+        let syncing = NSPredicate(format: "value CONTAINS[c] 'sync'")
+        wait(for: [expectation(for: syncing, evaluatedWith: pill)], timeout: 15)
+        app.terminate()   // strand the inflight row on the persisted store
+
+        // --- Clean relaunch (no stall, no reset → on-disk outbox survives): the first
+        //     sync requeues the stranded inflight row to pending and drains it. ---
+        app.launchArguments = []
+        app.launchEnvironment["API_BASE_URL"] = base
         app.launch()
         let pill2 = app.descendants(matching: .any)[AccessibilityID.syncStatusPill].firstMatch
         XCTAssertTrue(pill2.waitForExistence(timeout: 15), "Sync pill missing after relaunch")
-        let drained = NSPredicate(format: "NOT (value CONTAINS[c] 'error' OR value CONTAINS[c] 'fail')")
-        wait(for: [expectation(for: drained, evaluatedWith: pill2)], timeout: 20)
+        // The requeued row drains: the pill must NOT be stuck in error/failed, and must
+        // settle non-syncing (idle) — proving requeueStrandedInflight()→push() applied it.
+        let drained = NSPredicate(format:
+            "NOT (value CONTAINS[c] 'error' OR value CONTAINS[c] 'fail' OR value CONTAINS[c] 'sync')")
+        wait(for: [expectation(for: drained, evaluatedWith: pill2)], timeout: 25)
     }
 }

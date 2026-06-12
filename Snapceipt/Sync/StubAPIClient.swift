@@ -22,6 +22,11 @@ final class StubAPIClient: APIClient {
         if AppLaunch.current.pushReject {
             throw APIError(code: "VALIDATION_FAILED", message: "push rejected (uiTest seam)", status: 422)
         }
+        // J23c seam: park forever so the batch stays `inflight` (SyncEngine marked +
+        // saved the rows before this call) until app.terminate() strands it.
+        if AppLaunch.current.pushStall {
+            try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+        }
         return PushResponse(results: mutations.map { PushResult(mutationId: $0.mutationId, status: "applied", reason: nil, entity: nil) },
                             serverTime: 0)
     }
