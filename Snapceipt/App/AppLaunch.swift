@@ -155,6 +155,14 @@ struct AppLaunch {
                                    number: "QF1234567", barcodeFormat: "qr",
                                    pointsLabel: nil,
                                    color1: "#E40000", color2: "#A30000", sortOrder: 1))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Flybuys", subBrand: nil, number: "6011000990139424",
+                                   barcodeFormat: "code128", pointsLabel: nil,
+                                   color1: "#005EB8", color2: "#003E7E", sortOrder: 2))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Boarding Pass", subBrand: nil, number: "PDF417DATA12345",
+                                   barcodeFormat: "pdf417", pointsLabel: nil,
+                                   color1: "#444444", color2: "#222222", sortOrder: 3))
         // F5: seed a saved client + a draft quote (+ one line item) on p1 (active business).
         let client = Client(userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")
