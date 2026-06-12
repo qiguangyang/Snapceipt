@@ -5,7 +5,11 @@ final class CaptureOfflineUITests: UITestCase {
     func testOfflineCaptureFallsBackAndQueues() {
         app.launchArguments += ["-uiTestStub", "-uiTestSeed", "-uiTestOffline"]
         app.launch()
-        app.buttons[AccessibilityID.tabSnap].firstMatch.tap()
+        // tap() does NOT poll for existence; wait for the shell's a11y tree to attach
+        // before tapping (mirrors CaptureUITests / CaptureEditUITests).
+        let snap = app.buttons[AccessibilityID.tabSnap].firstMatch
+        XCTAssertTrue(snap.waitForExistence(timeout: 10), "Snap tab not found")
+        snap.tap()
         // Review still appears — filled by HeuristicParser (the network extractor threw).
         let save = app.buttons[AccessibilityID.captureSave]
         XCTAssertTrue(save.waitForExistence(timeout: 12),

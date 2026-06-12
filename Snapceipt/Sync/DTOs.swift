@@ -23,6 +23,11 @@ struct APIError: Error, Equatable {
 
     static let transport = APIError(code: "TRANSPORT", message: "Network request failed", status: 0)
     static let decoding = APIError(code: "DECODING", message: "Could not decode the server response", status: 0)
+    #if DEBUG
+    /// `-uiTestOffline` seam: the transport-shaped error the stub/live extractors throw
+    /// to force the HeuristicParser fallback + outbox queue (J18b/J18c). DEBUG-only.
+    static let uiTestOffline = APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+    #endif
 }
 
 // MARK: - Auth request bodies

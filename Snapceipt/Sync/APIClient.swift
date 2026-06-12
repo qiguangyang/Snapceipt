@@ -117,8 +117,10 @@ final class LiveAPIClient: APIClient {
         // J18c offline seam (test-only): when -uiTestOffline is set the live client also
         // throws a transport error so the capture flow falls back to HeuristicParser +
         // outbox queue against the REAL backend. Compiled out of Release entirely.
+        // Seam scope: only extract/uploadImage are gated — push/pull still reach the live
+        // Worker, so the transaction row syncs while just the image + re-extract queue.
         if AppLaunch.current.offline {
-            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+            throw APIError.uiTestOffline
         }
         #endif
         // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
@@ -133,7 +135,7 @@ final class LiveAPIClient: APIClient {
         #if DEBUG
         // J18c offline seam (test-only): mirror extract — fail the image upload offline.
         if AppLaunch.current.offline {
-            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+            throw APIError.uiTestOffline
         }
         #endif
         var items = [URLQueryItem(name: "width", value: String(width)),

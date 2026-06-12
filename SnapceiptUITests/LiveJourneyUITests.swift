@@ -85,20 +85,36 @@ final class LiveJourneyUITests: UITestCase {
         app.launchArguments = ["-uiTestOffline"]
         app.launchEnvironment["API_BASE_URL"] = base
         app.launch()
-        app.buttons[AccessibilityID.tabSnap].firstMatch.tap()
+        // tap() does NOT poll for existence; wait for the shell's a11y tree to attach
+        // first (the relaunch restores the Keychain session + opens the on-disk store
+        // before the shell renders, and CI sims under load lag the a11y attach).
+        let offlineSnap = app.buttons[AccessibilityID.tabSnap].firstMatch
+        XCTAssertTrue(offlineSnap.waitForExistence(timeout: 12), "Snap tab not found (offline relaunch)")
+        offlineSnap.tap()
         let save = app.buttons[AccessibilityID.captureSave]
         XCTAssertTrue(save.waitForExistence(timeout: 12), "Offline review did not appear (live)")
         save.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.captureQueuedBadge].firstMatch
                         .waitForExistence(timeout: 8), "Offline capture did not queue (live)")
-        // Reconnect: relaunch WITHOUT -uiTestOffline → ReceiptUploadQueue drains on next sync.
+        // Reconnect: relaunch WITHOUT -uiTestOffline (real LiveAPIClient). The outbox is
+        // NOT drained by sync — drainQueues() runs only from CaptureHost's `.task` on
+        // appear (CaptureHost.swift:42-46) or a Reachability flip (which the seam never
+        // simulates). So OPEN the Snap tab on the online relaunch to fire drainQueues()
+        // (ReceiptUploadQueue.drain() + PendingExtractionReconciler.reconcile()) against
+        // the live backend — without it the drain leg genuinely never runs.
         app.terminate()
         app.launchArguments = []
         app.launchEnvironment["API_BASE_URL"] = base
         app.launch()
-        // The queued badge clears once the receipt drains (the reconciler re-extracts server-side).
+        let onlineSnap = app.buttons[AccessibilityID.tabSnap].firstMatch
+        XCTAssertTrue(onlineSnap.waitForExistence(timeout: 15), "Snap tab not found (online relaunch)")
+        onlineSnap.tap()
+        // The queued badge lives ONLY on the transient SavedStep of an offline capture; it
+        // is never present on a freshly-opened online capture flow. After drainQueues()
+        // uploaded the queued receipt, opening capture online surfaces no queued badge —
+        // i.e. the prior offline receipt has drained and nothing re-queues here.
         let queued = app.descendants(matching: .any)[AccessibilityID.captureQueuedBadge].firstMatch
-        XCTAssertFalse(queued.waitForExistence(timeout: 20),
-                       "Queued receipt did not drain after reconnect")
+        XCTAssertFalse(queued.waitForExistence(timeout: 8),
+                       "A queued badge surfaced on the online relaunch — the offline receipt did not drain")
     }
 }

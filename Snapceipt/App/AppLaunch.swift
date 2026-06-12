@@ -59,10 +59,22 @@ struct AppLaunch {
     /// pass `-uiTestReset`). DEBUG-only seam; never compiled into Release.
     func purgeLocalStoreIfNeeded(context: ModelContext) {
         guard reset else { return }
-        for type in SnapceiptSchema.models {
-            try? context.delete(model: type)
+        // Fail FAST on a delete/save error: this purge is the fix for the stale-Profile
+        // bug J18c root-caused, so a silently-swallowed failure would resurface as an
+        // unexplained downstream test failure (onboarding skipped → no active profile →
+        // capture.save() dead-ends). assertionFailure fires only in DEBUG (this whole
+        // struct is #if DEBUG), so it's a loud test-time signal, never a Release crash.
+        // NOTE: deleting PendingReceipt rows orphans their JPEGs under Application Support
+        // (ReceiptCleanupPass reclaims by row, not by orphan sweep), so live-run simulators
+        // slowly accumulate orphan files. Harmless for the simulator container.
+        do {
+            for type in SnapceiptSchema.models {
+                try context.delete(model: type)
+            }
+            try context.save()
+        } catch {
+            assertionFailure("purgeLocalStoreIfNeeded failed: \(error)")
         }
-        try? context.save()
     }
 
     /// Seeds an already-signed-in dev session + two profiles, for shell-level UI tests

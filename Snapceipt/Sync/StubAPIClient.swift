@@ -25,8 +25,13 @@ final class StubAPIClient: APIClient {
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         // J18b offline seam: throw a transport error BEFORE the canned result so the
         // capture flow falls back to HeuristicParser and enqueues the receipt (outbox).
+        // NOTE: `-uiTestOffline` gates only extract/uploadImage — push/pull still succeed,
+        // so the transaction row itself syncs; only the image upload + server re-extract
+        // are genuinely queued. Reachability.isOnline also stays true (no reconnect flip is
+        // simulated). "Offline" in the J18b/J18c names is therefore scoped to the
+        // capture-extraction path, not a full network partition.
         if AppLaunch.current.offline {
-            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+            throw APIError.uiTestOffline
         }
         // Simulate the extraction round-trip so the `.scanning` stage is reliably
         // observable by XCUITest (otherwise the synchronous decode advances
@@ -49,9 +54,10 @@ final class StubAPIClient: APIClient {
         return try JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
     }
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
-        // J18b offline seam: the image upload also fails while offline (mirrors extract).
+        // J18b offline seam: the image upload also fails while offline (mirrors extract;
+        // see the scope note on `extract`).
         if AppLaunch.current.offline {
-            throw APIError(code: "TRANSPORT", message: "offline (uiTest seam)", status: 0)
+            throw APIError.uiTestOffline
         }
         return UploadedImage(imageKey: "u/\(DevAccount.userId)/stub.jpg",
                       getUrl: "/images/u/\(DevAccount.userId)/stub.jpg",
