@@ -63,7 +63,6 @@ struct NotificationsSettingsView: View {
                     set: { vm.quietHoursEnabled = $0; Task { await vm.persist() } }))
                     .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     .tint(accent.base)
-                    .accessibilityIdentifier(AccessibilityID.notifQuietToggle)
                 if vm.quietHoursEnabled {
                     DatePicker("From", selection: $quietStart, displayedComponents: .hourAndMinute)
                         .accessibilityIdentifier(AccessibilityID.notifQuietStart)

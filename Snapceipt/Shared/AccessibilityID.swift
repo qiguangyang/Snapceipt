@@ -122,7 +122,6 @@ enum AccessibilityID {
     // Notifications settings (F3)
     static let notifSettingsScreen = "notif.settings.screen"
     static let notifPushToggle = "notif.push.toggle"
-    static let notifQuietToggle = "notif.quiet.toggle"
     static let notifQuietStart = "notif.quiet.start"
     static let notifQuietEnd = "notif.quiet.end"
     static let notifBasToggle = "notif.bas.toggle"
