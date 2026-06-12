@@ -17,6 +17,10 @@ struct AppLaunch {
     /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
     /// outbox queue exactly as a real offline capture would. Drives J18b/J18c.
     let offline: Bool
+    /// Test seam (`-uiTestPushReject`): the stub `syncPush` throws a 422 contract
+    /// rejection so `SyncEngine` marks the batch failed and surfaces `.error`.
+    /// Drives J23b (visible-failure) and J23c (inflight crash-recovery requeue).
+    let pushReject: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -29,6 +33,7 @@ struct AppLaunch {
         tourEmpty = arguments.contains("-uiTestTourEmpty")
         cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
         offline = arguments.contains("-uiTestOffline")
+        pushReject = arguments.contains("-uiTestPushReject")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 

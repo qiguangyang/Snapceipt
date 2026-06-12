@@ -16,8 +16,14 @@ final class StubAPIClient: APIClient {
     func signOut() async throws {}
     func me() async throws -> MeResponse { MeResponse(user: devSession().user, devices: []) }
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
-        PushResponse(results: mutations.map { PushResult(mutationId: $0.mutationId, status: "applied", reason: nil, entity: nil) },
-                     serverTime: 0)
+        // J23b/J23c seam: a deterministic 4xx contract rejection. 422 is in the
+        // 400..<500 band and is not 401/408/429, so SyncEngine marks the batch
+        // failed and sets status = .error (SyncEngine.swift:124-135).
+        if AppLaunch.current.pushReject {
+            throw APIError(code: "VALIDATION_FAILED", message: "push rejected (uiTest seam)", status: 422)
+        }
+        return PushResponse(results: mutations.map { PushResult(mutationId: $0.mutationId, status: "applied", reason: nil, entity: nil) },
+                            serverTime: 0)
     }
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: 0)

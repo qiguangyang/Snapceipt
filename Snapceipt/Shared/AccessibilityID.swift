@@ -93,6 +93,11 @@ enum AccessibilityID {
     static let exportGenerate = "export.generate"
     static let exportStatus = "export.status"
 
+    // Sync status pill (J23b/J23c). Always present in the shell; its a11y VALUE
+    // reflects the SyncEngine state (idle/syncing/offline/error) even when the
+    // pill is visually hidden (idle), so XCUITest can poll the drain.
+    static let syncStatusPill = "sync.status.pill"
+
     // Budgets (F3)
     static let homeBudgetTracker = "home.budgetTracker"
     static let homeBudgetEditLink = "home.budget.edit"
