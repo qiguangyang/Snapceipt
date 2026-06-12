@@ -99,10 +99,13 @@ final class SyncFailureUITests: UITestCase {
         app.launch()
         let pill2 = app.descendants(matching: .any)[AccessibilityID.syncStatusPill].firstMatch
         XCTAssertTrue(pill2.waitForExistence(timeout: 15), "Sync pill missing after relaunch")
-        // The requeued row drains: the pill must NOT be stuck in error/failed, and must
-        // settle non-syncing (idle) — proving requeueStrandedInflight()→push() applied it.
-        let drained = NSPredicate(format:
-            "NOT (value CONTAINS[c] 'error' OR value CONTAINS[c] 'fail' OR value CONTAINS[c] 'sync')")
+        // The requeued row drains: assert the pill settles on the exact `idle` token.
+        // `SyncStatusView.stateToken` emits only `idle | syncing | offline | error`; a
+        // negative predicate would falsely pass on `offline` (transport flap re-marks the
+        // row pending and the push throws → `.offline`) without the drain completing.
+        // `status = .idle` is set only at SyncEngine.swift:146, AFTER every batch drains
+        // successfully, so equality on `idle` is the precise drain-completed postcondition.
+        let drained = NSPredicate(format: "value == 'idle'")
         wait(for: [expectation(for: drained, evaluatedWith: pill2)], timeout: 25)
     }
 }
