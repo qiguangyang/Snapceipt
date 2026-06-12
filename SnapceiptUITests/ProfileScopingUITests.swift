@@ -56,7 +56,10 @@ final class ProfileScopingUITests: UITestCase {
                         .waitForExistence(timeout: 10), "Wallet did not open on p1")
         let p1CardRows = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.loyaltyCardRowPrefix))
-        XCTAssertGreaterThan(p1CardRows.count, 0, "p1 should have seeded loyalty cards")
+        // ForEach renders rows asynchronously after the container appears — synchronise
+        // on the first row before snapshot-querying .count (else slow CI sees 0).
+        XCTAssertTrue(p1CardRows.firstMatch.waitForExistence(timeout: 5),
+                      "p1 should have seeded loyalty cards")
         // Dismiss the wallet overlay via its close affordance (the LbHeader back
         // button carries logbookClose) — the wallet is a full-screen overlay, not a
         // swipe-dismiss sheet — and switch to personal p2.
