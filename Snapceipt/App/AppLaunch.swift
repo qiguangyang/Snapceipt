@@ -175,6 +175,11 @@ struct AppLaunch {
         context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Officeworks",
                                    catKey: "office", amountCents: -45_00, txnDate: dayISO(2),
                                    isAi: true, gstCents: 4_09, source: "email_in", extractionStatus: "done"))
+        // p2 (personal) distinct data so profile-scope leaks are observable in both directions.
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p2.id, merchant: "Coles Personal",
+                                   catKey: "groceries", amountCents: -64_00, txnDate: dayISO(2)))
+        context.insert(Budget(userId: DevAccount.userId, profileId: p2.id, categoryId: nil,
+                              label: "Personal cap", capCents: 300_00, alertThresholdPct: 90))
         try? context.save()
     }
 

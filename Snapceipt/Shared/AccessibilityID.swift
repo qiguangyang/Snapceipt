@@ -20,6 +20,7 @@ enum AccessibilityID {
     static let tabProfile = "tab.profile"
     static let tabSnap = "tabbar.snap"
     static let addProfileName = "addprofile.name"
+    static let addProfileCreate = "addprofile.create"
 
     // Capture flow
     static let captureClose = "capture.close"

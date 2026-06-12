@@ -4,8 +4,17 @@ import SwiftData
 /// Two-step "Add a profile": a form with live accent preview, then a success
 /// screen. Persists optimistically (local-first) via `AddProfileViewModel.create`.
 struct AddProfileView: View {
-    @Bindable var vm: AddProfileViewModel
+    /// Owned in `@State` so the view-model survives the shell's re-renders. Creating
+    /// a profile activates it, which mutates the observed `ProfilesStore` and re-renders
+    /// RootView; if the VM were rebuilt on each render the `didCreate` success step would
+    /// be wiped back to an empty form (J26 scoping probe). `@State` pins it to this view's
+    /// identity for the sheet's lifetime.
+    @State private var vm: AddProfileViewModel
     @Environment(\.dismiss) private var dismiss
+
+    init(vm: AddProfileViewModel) {
+        _vm = State(wrappedValue: vm)
+    }
 
     var body: some View {
         Group {
@@ -119,6 +128,7 @@ struct AddProfileView: View {
         .buttonStyle(.plain)
         .disabled(!vm.isValid)
         .opacity(vm.isValid ? 1 : 0.5)
+        .accessibilityIdentifier(AccessibilityID.addProfileCreate)
     }
 
     // MARK: Success
