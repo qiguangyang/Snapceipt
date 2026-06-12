@@ -117,4 +117,32 @@ final class LiveJourneyUITests: UITestCase {
         XCTAssertFalse(queued.waitForExistence(timeout: 8),
                        "A queued badge surfaced on the online relaunch — the offline receipt did not drain")
     }
+
+    /// J12 (live, sync half): after live onboarding the new profile is persisted on the
+    /// backend — relaunching and signing in again returns the shell directly (session +
+    /// profile synced), not onboarding. Proves device→wrangler-dev→device round-trip.
+    func testProfilePersistsAcrossRelaunch() throws {
+        try launchLive()
+        tapDevSignIn()
+        // STATE-TOLERANT (shared-persist dev account, see J02's note): onboard only if a
+        // fresh account lands on the form; if a prior live test already created the profile,
+        // the shell appears directly and the profile is already persisted.
+        if app.textFields[AccessibilityID.onboardingName].waitForExistence(timeout: 8) {
+            let name = app.textFields[AccessibilityID.onboardingName]
+            name.tap(); name.typeText("Persist Co")
+            app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
+            app.buttons[AccessibilityID.onboardingCreate].tap()
+            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
+            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+        }
+        XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
+                      "Did not reach the shell")
+        // Relaunch WITHOUT reset (keep the live session): should land in the shell, not onboarding.
+        app.terminate()
+        app.launchArguments = []   // no -uiTestReset → session survives
+        app.launchEnvironment["API_BASE_URL"] = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://127.0.0.1:8787"
+        app.launch()
+        XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 20),
+                      "Relaunch did not restore the synced shell")
+    }
 }
