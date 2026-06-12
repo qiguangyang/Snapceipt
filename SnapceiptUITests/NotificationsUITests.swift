@@ -11,7 +11,11 @@ import XCTest
 /// guardrail, spec §8), so it is deferred, not built. This test keeps the plan's
 /// verbatim push-only flow and its stated core invariant — `start.tap()` proving
 /// the screen does not crash — and treats the pickers as optionally present
-/// (plan note line 2135: "If they only appear when push is ON…").
+/// (plan note line 2135: "If they only appear when push is ON…"). The
+/// start/end assertions are softened SYMMETRICALLY: both run only when the
+/// quiet-hours block is visible (`start` present), and when it is, BOTH
+/// `notifQuietStart` and `notifQuietEnd` are hard-asserted together (the plan's
+/// verbatim `end.exists` check, plan line 2126). Logged in deferred-findings (J53).
 final class NotificationsUITests: UITestCase {
     func testQuietHoursPickers() {
         launchSeeded()
@@ -29,7 +33,11 @@ final class NotificationsUITests: UITestCase {
         // not crash. (They are gated behind the Quiet hours toggle on the app as-built
         // — see the deferred finding — so push-only may leave them hidden.)
         let start = app.descendants(matching: .any)[AccessibilityID.notifQuietStart].firstMatch
+        let end = app.descendants(matching: .any)[AccessibilityID.notifQuietEnd].firstMatch
         if start.waitForExistence(timeout: 5) {
+            // When the quiet-hours block is visible, BOTH controls must be present
+            // (plan line 2126 verbatim `end.exists` check) before driving the picker.
+            XCTAssertTrue(end.exists, "Quiet-hours end control missing")
             start.tap()   // opens the time picker; confirm it does not crash
         }
         // Dismiss any picker by tapping the screen background.
