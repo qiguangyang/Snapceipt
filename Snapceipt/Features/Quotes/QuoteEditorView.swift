@@ -32,6 +32,8 @@ struct QuoteEditorView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.quoteEditorScreen)
         .transition(.opacity)
+        // Success haptic when the quote send succeeds (drives the success overlay).
+        .sensoryFeedback(.success, trigger: sent)
         .task {
             if vm == nil {
                 let model = QuoteEditorViewModel(context: context, sync: sync,
@@ -90,7 +92,7 @@ struct QuoteEditorView: View {
                     }
                 }
                 Spacer()
-                Icon(name: "chevD", size: 14, color: Palette.ink3)
+                Icon(name: "chevR", size: 14, color: Palette.ink3)
             }
             .padding(12)
             .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
@@ -163,8 +165,12 @@ struct QuoteEditorView: View {
         let t = vm.totals
         return VStack(spacing: 8) {
             totalRow("Subtotal", fmt(t.subtotal), bold: false)
-            if vm.gstEnabled { totalRow("GST (10%)", fmt(t.gst), bold: false) }
-            Divider()
+            // Hairline between each ledger line (design ref: screens.md §9 totals card).
+            Divider().overlay(Palette.line2)
+            if vm.gstEnabled {
+                totalRow("GST (10%)", fmt(t.gst), bold: false)
+                Divider().overlay(Palette.line2)
+            }
             totalRow("Total", fmt(t.total), bold: true)
         }
         .padding(14)
@@ -196,8 +202,10 @@ struct QuoteEditorView: View {
                     Text(vm.isSending ? "Sending…" : "Send quote").font(.ui(16, .semibold)).foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(vm.canSend ? accent.base : Palette.ink3,
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // Disabled = faded accent (house pattern: Onboarding Continue .5, Reports CTA .45),
+                // not an opaque grey swap.
+                .opacity(vm.canSend ? 1 : 0.45)
             }
             .buttonStyle(.plain)
             .disabled(!vm.canSend || vm.isSending)

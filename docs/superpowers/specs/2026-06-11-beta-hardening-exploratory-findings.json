@@ -1,0 +1,247 @@
+[
+  {
+    "id": "EXP1-001",
+    "sweep": "EXP1",
+    "title": "Quote line Qty/Unit$ filter to digits and clamp — negative/emoji/script never produce an invalid total",
+    "repro": [
+      "launchSeeded",
+      "Home → Create quote → New → Add line item",
+      "type -1, 999999999, and 👻 into Qty and Unit$",
+      "dismiss keyboard, observe Subtotal/Total"
+    ],
+    "observed": "Qty setter = max(1, digits-only); Unit$ setter = (digits-only ?? 0)*100. -1 → 1 / 0; emoji/script → 0. Total renders $0.00, Send stays disabled+faded (no client). No crash. (artifacts/exploratory/EXP1-quote-total.png)",
+    "expected": "Numeric fields reject non-numeric input and never yield a negative total; Send gated on a client + line.",
+    "severity": "low",
+    "class": "input-validation",
+    "screenshot": "artifacts/exploratory/EXP1-quote-total.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP1-002",
+    "sweep": "EXP1",
+    "title": "Capture Review merchant accepts a pasted <script> string and renders it verbatim as plain text (no injection sink)",
+    "repro": [
+      "launchSeeded",
+      "Snap → Review receipt",
+      "type <script>alert(1)</script> into Merchant",
+      "observe AI banner + field, then Save"
+    ],
+    "observed": "The string is stored verbatim and shown literally in the SwiftUI Text banner ('Looks like a <script>alert(1)</script> …'); SwiftUI Text never interprets markup, there is no WebView/HTML sink. Save (ungated) succeeds, reaches Saved. No crash, no execution. (artifacts/exploratory/EXP1-capture-merchant-5.png, EXP1-capture-saved.png)",
+    "expected": "Free-text merchant is a plain String with no markup interpretation; not an XSS surface in a native SwiftUI view.",
+    "severity": "low",
+    "class": "input-validation",
+    "screenshot": "artifacts/exploratory/EXP1-capture-merchant-5.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP1-003",
+    "sweep": "EXP1",
+    "title": "Capture Review merchant has no length cap — a 200-char name is accepted and saved",
+    "repro": [
+      "launchSeeded",
+      "Snap → Review receipt",
+      "type a 200-char 'A…' string into Merchant",
+      "Save"
+    ],
+    "observed": "The 200-char merchant is accepted into the free-text TextField (capture Save is ungated) and persists. No truncation/cap; the banner wraps it. No crash. (artifacts/exploratory/EXP1-capture-merchant-0.png)",
+    "expected": "Acceptable for a free-text merchant field in v1; a length cap is a polish nicety, not a correctness bug. Downstream PDF/list layout already wraps/truncates on display.",
+    "severity": "low",
+    "class": "input-validation",
+    "screenshot": "artifacts/exploratory/EXP1-capture-merchant-0.png",
+    "guardrail": "out-of-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP1-004",
+    "sweep": "EXP1",
+    "title": "Email-in review Save is gated on a positive numeric amount + non-empty date — junk amount can't resolve a failed receipt",
+    "repro": [
+      "launchSeeded",
+      "Profile → Email-in receipts → failed row → Review",
+      "type -1 / emoji / <script> into Amount (decimalPad)",
+      "observe Save enablement"
+    ],
+    "observed": "EmailInReviewView.canSave requires Double(amountText) > 0 AND non-empty date; the field is .decimalPad. Non-positive/non-numeric input leaves Save disabled. (Covered already by EmailInUITests as a hard contract.) No crash.",
+    "expected": "Save stays disabled until a positive amount + date are present.",
+    "severity": "low",
+    "class": "input-validation",
+    "screenshot": null,
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP2-001",
+    "sweep": "EXP2",
+    "title": "Rapid tab thrash (Snap↔Home↔Reports↔Activity↔Profile) for 25s does not freeze the tab bar or crash",
+    "repro": [
+      "launchSeeded",
+      "tap each tab as fast as possible in a 25s deadline loop, closing the capture overlay between hits",
+      "after the loop, return to Home"
+    ],
+    "observed": "After 25s of un-settled tab switching the shell stays interactive: Home renders and the profile switcher is present. No frozen tab, no crash. (artifacts/exploratory/EXP2-after-tab-thrash.png)",
+    "expected": "Tab bar remains responsive under rapid switching; no stuck/frozen tab.",
+    "severity": "low",
+    "class": "jank",
+    "screenshot": "artifacts/exploratory/EXP2-after-tab-thrash.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP2-002",
+    "sweep": "EXP2",
+    "title": "Single-slot router overlays (loyalty wallet) open/close back-to-back without orphaning",
+    "repro": [
+      "launchSeeded",
+      "Home → Loyalty wallet → close → repeat",
+      "confirm Home is reachable after each close"
+    ],
+    "observed": "Opening the wallet then closing it returns cleanly to Home (profile switcher present); the single router.overlay slot is fully released. No stacked/orphaned overlay. (artifacts/exploratory/EXP2-overlay-cycle.png)",
+    "expected": "Each overlay fully replaces/releases the slot; no orphaned overlay.",
+    "severity": "low",
+    "class": "state-leak",
+    "screenshot": "artifacts/exploratory/EXP2-overlay-cycle.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP2-003",
+    "sweep": "EXP2",
+    "title": "Background + foreground mid-overlay survives — overlay/shell stays alive and dismissable",
+    "repro": [
+      "launchSeeded",
+      "open the loyalty wallet",
+      "press Home (background)",
+      "reactivate the app",
+      "dismiss the overlay"
+    ],
+    "observed": "After backgrounding mid-overlay and reactivating, the app returns to the foreground with the overlay/shell intact; the close affordance still works and the tab bar is responsive. No crash, no orphaned overlay. (artifacts/exploratory/EXP2-foreground-mid-overlay.png)",
+    "expected": "App restores cleanly from background while an overlay is open.",
+    "severity": "low",
+    "class": "crash",
+    "screenshot": "artifacts/exploratory/EXP2-foreground-mid-overlay.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP3-001",
+    "sweep": "EXP3",
+    "title": "Empty Reports renders its screen (no raw/blank, no crash) on a freshly-onboarded shell",
+    "repro": [
+      "launchStub (reset-to-empty)",
+      "dev sign-in → onboard a single business profile, skip priming",
+      "Reports tab"
+    ],
+    "observed": "Reports renders its screen container with no transactions; no raw list, no blank white, no crash. (artifacts/exploratory/EXP3-empty-reports.png)",
+    "expected": "Empty Reports shows its empty/zeroed state, not a blank or crash.",
+    "severity": "low",
+    "class": "visual",
+    "screenshot": "artifacts/exploratory/EXP3-empty-reports.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP3-002",
+    "sweep": "EXP3",
+    "title": "Empty Loyalty wallet renders its EmptyArt state",
+    "repro": [
+      "launchStub (reset-to-empty)",
+      "onboard a business profile",
+      "Home → Loyalty wallet"
+    ],
+    "observed": "The wallet opens with no cards and shows its empty state (LoyaltyWalletView uses EmptyArt). No crash. (artifacts/exploratory/EXP3-empty-loyalty.png)",
+    "expected": "Empty wallet shows EmptyArt, not a blank list.",
+    "severity": "low",
+    "class": "visual",
+    "screenshot": "artifacts/exploratory/EXP3-empty-loyalty.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP3-003",
+    "sweep": "EXP3",
+    "title": "Empty Quotes list renders its EmptyArt state (business profile)",
+    "repro": [
+      "launchStub (reset-to-empty)",
+      "onboard a business profile",
+      "Home → Create quote (quotes list)"
+    ],
+    "observed": "The quotes list opens with no quotes and shows its empty state (QuoteListView uses EmptyArt). No crash. (artifacts/exploratory/EXP3-empty-quotes.png)",
+    "expected": "Empty quotes list shows EmptyArt, not a blank list.",
+    "severity": "low",
+    "class": "visual",
+    "screenshot": "artifacts/exploratory/EXP3-empty-quotes.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP3-004",
+    "sweep": "EXP3",
+    "title": "Empty Budgets list renders its EmptyArt state",
+    "repro": [
+      "launchStub (reset-to-empty)",
+      "onboard a business profile",
+      "Profile → Budgets"
+    ],
+    "observed": "The budget list opens with no budgets and shows its empty state (BudgetListView uses EmptyArt). No crash. (artifacts/exploratory/EXP3-empty-budgets.png)",
+    "expected": "Empty budgets list shows EmptyArt, not a blank list.",
+    "severity": "low",
+    "class": "visual",
+    "screenshot": "artifacts/exploratory/EXP3-empty-budgets.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP3-005",
+    "sweep": "EXP3",
+    "title": "Empty Home renders its tracker empty-CTA, not a blank shell",
+    "repro": [
+      "launchStub (reset-to-empty)",
+      "onboard a business profile, skip priming",
+      "land on Home"
+    ],
+    "observed": "Home renders the budget-tracker empty CTA and quick actions on a profile with no data. No crash. (artifacts/exploratory/EXP3-empty-home.png)",
+    "expected": "Empty Home shows its empty-state CTA, not a blank shell.",
+    "severity": "low",
+    "class": "visual",
+    "screenshot": "artifacts/exploratory/EXP3-empty-home.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP4-001",
+    "sweep": "EXP4",
+    "title": "Profile switcher is NOT reachable while a single-slot overlay (loyalty wallet) is open — overlay correctly captures the screen",
+    "repro": [
+      "launchSeeded",
+      "Home → Loyalty wallet (p1 cards present)",
+      "attempt to tap the profile switcher while the overlay is open"
+    ],
+    "observed": "With the wallet overlay up, the profile switcher button is not hittable (the full-screen router overlay covers the Home header). No mid-overlay profile switch is possible, so no stale-data window exists. (artifacts/exploratory/EXP4-switcher-blocked-by-overlay.png, EXP4-wallet-p1.png)",
+    "expected": "Single-slot overlays sit above the switcher so the active profile can't change underneath an open overlay.",
+    "severity": "low",
+    "class": "state-leak",
+    "screenshot": "artifacts/exploratory/EXP4-switcher-blocked-by-overlay.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  },
+  {
+    "id": "EXP4-002",
+    "sweep": "EXP4",
+    "title": "After switching business→personal and reopening the wallet, p1 loyalty cards do NOT leak into p2",
+    "repro": [
+      "launchSeeded",
+      "open p1 wallet (cards present) → close",
+      "switch to personal 'Home Budget'",
+      "reopen the wallet"
+    ],
+    "observed": "On p2 the reopened wallet renders zero loyalty card rows (loyalty.card.row.* count == 0); the p1-seeded cards do not bleed across. No orphaned overlay, no crash. (artifacts/exploratory/EXP4-wallet-p2.png)",
+    "expected": "Wallet rescopes to the active profile on switch; no other-profile rows leak (scope-by-active-profileId).",
+    "severity": "low",
+    "class": "state-leak",
+    "screenshot": "artifacts/exploratory/EXP4-wallet-p2.png",
+    "guardrail": "in-guardrail",
+    "disposition": "defer-log"
+  }
+]

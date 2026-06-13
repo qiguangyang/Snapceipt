@@ -84,7 +84,14 @@ struct LoyaltyWalletView: View {
                 .lineLimit(1)
         }
         .padding(16)
-        .background(LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .background(
+            LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(Color.white.opacity(0.08))
+                        .frame(width: 110, height: 110)
+                        .offset(x: 28, y: -28)
+                }
+        )
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .shadow(color: c2.opacity(0.4), radius: 12, x: 0, y: 10)
     }

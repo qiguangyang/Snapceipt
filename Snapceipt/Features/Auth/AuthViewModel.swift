@@ -156,6 +156,11 @@ final class AuthViewModel {
     private(set) var state: AuthState = .signedOut
     /// The email a magic link was last sent to (drives resend + the wait screen).
     private(set) var pendingEmail: String?
+    /// Monotonic count of magic links successfully sent. Lives on the VM (not the
+    /// wait view's `@State`) so the "Link sent" confirmation survives the
+    /// `.requestingLink → .awaitingLink` view recreation RootView performs, and so a
+    /// fresh send supersedes the prior confirmation timer via `.task(id:)`.
+    private(set) var linkSentCount = 0
 
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let auth: AuthStore
@@ -213,6 +218,7 @@ final class AuthViewModel {
         do {
             try await api.magicLinkRequest(email: normalized)
             state = .awaitingLink(email: normalized)
+            linkSentCount += 1   // success only → the wait screen confirms "Link sent"
         } catch let e as APIError {
             state = .error(Self.message(for: e))
         } catch {

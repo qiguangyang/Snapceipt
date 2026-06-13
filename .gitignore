@@ -42,3 +42,12 @@ fastlane/test_output/
 
 # TestFlight beta launch config (filled working copy; template is .example)
 beta-launch.env
+
+# Brainstorm visual companion sessions
+.superpowers/
+
+# Screenshot-tour artifacts — local PNG runs + result bundles, never committed.
+artifacts/
+
+# Live-dev journey runner persist dirs (Plan B)
+.e2e-journey-state*/

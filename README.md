@@ -156,3 +156,16 @@ dev`/`wrangler deploy` use the real binding unchanged.
 
 - **Hermetic suite (no backend, default/CI):** `xcodebuild test -scheme Snapceipt -destination "platform=iOS Simulator,name=iPhone 16" -only-testing:SnapceiptUITests` — launches the app against an in-app stub (`-uiTestStub`) and drives sign-in → onboarding → shell + the profile switcher. `LiveSmokeUITests` `XCTSkip`s here.
 - **Live smoke (real Worker):** `./scripts/ios-e2e-live.sh` — applies D1 migrations to a fresh local store, starts `wrangler dev` with `E2E_TEST_MODE=1`, and runs `LiveSmokeUITests` (real `LiveAPIClient` → dev sign-in hits the live `/auth/magic-link/*` seam → onboarding). The script tears the Worker down on exit.
+
+### E2E journey suites (live wrangler dev)
+
+Run a subset of UITest classes against a local `wrangler dev` with the E2E seams:
+
+```bash
+scripts/ios-e2e-journeys.sh LiveJourneyUITests
+scripts/ios-e2e-journeys.sh ProfileScopingUITests CaptureEditUITests
+# Crash-recovery journeys need a stable persist dir across restarts:
+scripts/ios-e2e-journeys.sh --persist .e2e-journey-state LiveJourneyUITests
+```
+
+Backend e2e (real HTTP via `unstable_dev`): `npm run test:e2e`.

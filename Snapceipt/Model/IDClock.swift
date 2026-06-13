@@ -46,8 +46,23 @@ enum ID {
 /// Epoch-millisecond clock. All `createdAt`/`updatedAt`/`deletedAt` timestamps
 /// (the LWW + cursor key) are integer ms in UTC.
 enum Epoch {
-    /// Current time as integer epoch milliseconds.
+    /// DEBUG-only pin for deterministic UI-test/tour runs. When non-nil, `nowMs()`
+    /// and `now()` return this fixed instant instead of the wall clock. nil in
+    /// Release (the property is compiled out).
+    #if DEBUG
+    static var override: Int?
+    #endif
+
+    /// Current time as integer epoch milliseconds (or the pinned override).
     static func nowMs() -> Int {
-        Int((Date().timeIntervalSince1970 * 1000).rounded())
+        #if DEBUG
+        if let override { return override }
+        #endif
+        return Int((Date().timeIntervalSince1970 * 1000).rounded())
+    }
+
+    /// Current time as a `Date` (or the pinned override). Used by seeders.
+    static func now() -> Date {
+        Date(timeIntervalSince1970: Double(nowMs()) / 1000)
     }
 }

@@ -25,8 +25,11 @@ struct LoyaltyCardDetailView: View {
                     barcodePanel(card)
                     Text(card.number).font(.display(18, .bold)).monospacedDigit()
                         .kerning(1.5).foregroundStyle(.white)
-                    Text("Screen brightness boosted for scanning")
-                        .font(.ui(12)).foregroundStyle(.white.opacity(0.8))
+                    HStack(spacing: 7) {
+                        Icon(name: "sparkles", size: 14, color: .white.opacity(0.85))
+                        Text("Screen brightness boosted for scanning")
+                            .font(.ui(12)).foregroundStyle(.white.opacity(0.8))
+                    }
                     Spacer()
                     footer(card)
                 }
@@ -50,6 +53,14 @@ struct LoyaltyCardDetailView: View {
             }
         }
         .padding(.top, 30)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if let label = card.pointsLabel {
+                Text(label).font(.ui(12, .semibold)).foregroundStyle(.white)
+                    .padding(.vertical, 6).padding(.horizontal, 12)
+                    .background(Color.white.opacity(0.2), in: Capsule())
+            }
+        }
     }
 
     @ViewBuilder private func barcodePanel(_ card: LoyaltyCard) -> some View {

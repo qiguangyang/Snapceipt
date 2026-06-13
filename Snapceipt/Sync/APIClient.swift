@@ -101,8 +101,22 @@ final class LiveAPIClient: APIClient {
     }
 
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
-        try await send("POST", "/sync/push",
+        #if DEBUG
+        // J23c crash-recovery seam (test-only): park the push indefinitely. SyncEngine
+        // has already marked the batch `inflight` and saved it to the on-disk store
+        // (SyncEngine.swift:104-105), so app.terminate() while this is parked strands a
+        // persisted `inflight` outbox row. On the next (clean) launch
+        // requeueStrandedInflight() re-marks it `pending` and the push drains it.
+        // Compiled out of Release entirely; mirrors the -uiTestOffline seam.
+        if AppLaunch.current.pushStall {
+            // Park ~1h (well past any terminate the test issues) — long enough that the
+            // batch stays `inflight` until app.terminate() strands it.
+            try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+        }
+        #endif
+        let resp: PushResponse = try await send("POST", "/sync/push",
                        body: PushBody(deviceId: deviceId, mutations: mutations), authenticated: true)
+        return resp
     }
 
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
@@ -113,6 +127,16 @@ final class LiveAPIClient: APIClient {
     }
 
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        #if DEBUG
+        // J18c offline seam (test-only): when -uiTestOffline is set the live client also
+        // throws a transport error so the capture flow falls back to HeuristicParser +
+        // outbox queue against the REAL backend. Compiled out of Release entirely.
+        // Seam scope: only extract/uploadImage are gated — push/pull still reach the live
+        // Worker, so the transaction row syncs while just the image + re-extract queue.
+        if AppLaunch.current.offline {
+            throw APIError.uiTestOffline
+        }
+        #endif
         // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
         // (UUIDv7 from the same `ID` helper the model inits use).
         let body = ExtractBody(ocrText: ocrText, source: source,
@@ -122,6 +146,12 @@ final class LiveAPIClient: APIClient {
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
+        #if DEBUG
+        // J18c offline seam (test-only): mirror extract — fail the image upload offline.
+        if AppLaunch.current.offline {
+            throw APIError.uiTestOffline
+        }
+        #endif
         var items = [URLQueryItem(name: "width", value: String(width)),
                      URLQueryItem(name: "height", value: String(height))]
         if let transactionId { items.append(URLQueryItem(name: "transactionId", value: transactionId)) }

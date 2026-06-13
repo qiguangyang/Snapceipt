@@ -47,7 +47,7 @@ final class ReportsViewModel {
     private var txns: [TransactionQuery.Txn] = []
 
     init(context: ModelContext, userId: String, profileId: String,
-         startMonth: Int, now: Date = Date()) {
+         startMonth: Int, now: Date = Epoch.now()) {
         self.context = context
         self.userId = userId
         self.profileId = profileId

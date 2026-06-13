@@ -60,11 +60,14 @@ struct RootView: View {
                         if phase == .background { appLock.lockIfEnabled() }
                     }
                 }
-            case .requestingLink:
-                // A link request is in flight — keep the wait screen up so the UI does
-                // not flash back to Sign-in between request and "link sent".
-                MagicLinkWaitView()
-            case .awaitingLink:
+            case .requestingLink, .awaitingLink:
+                // A link request is in flight OR sent — render the wait screen from ONE
+                // switch branch so it keeps a single structural identity across the
+                // `.requestingLink → .awaitingLink` round-trip a resend drives. Splitting
+                // these into separate @ViewBuilder cases would destroy + recreate the view
+                // mid-resend, wiping any transient confirmation state. (The spinner derives
+                // from `vm.state`; the "Link sent" flash derives from `vm.linkSentCount`,
+                // which lives on the VM and survives regardless.)
                 MagicLinkWaitView()
             case .verifying where authVM.pendingEmail != nil:
                 // A tapped magic link is verifying — keep the wait screen up so the UI
@@ -469,7 +472,7 @@ struct ShellView: View {
                             alertSentAt: $0.budget.alertSentAt)
         }
         _ = budgets
-        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Date()))
+        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Epoch.now()))
     }
 
     /// One Home quick-action tile -> opens a logbook overlay.
@@ -480,6 +483,9 @@ struct ShellView: View {
             HStack(spacing: 10) {
                 IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
                 Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    // Dynamic-Type robustness: shrink slightly before breaking so a
+                    // short label like "Mileage" never splits mid-word at large sizes.
+                    .lineLimit(2).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
             }
             .padding(12)
@@ -538,11 +544,14 @@ struct ShellView: View {
     private func sheetContent(for overlay: Overlay) -> some View {
         switch overlay {
         case .profilePicker:
+            // Top-anchored on the cream sheet surface (the system .sheet owns the
+            // grabber + rounded corners) — no bottom-anchored white sub-panel, which
+            // previously read as a sheet-within-a-sheet. Matches AddProfileView.
             ProfilePickerSheet(
                 store: profiles,
                 onAddProfile: { router.go(.overlay(.addProfile)) }
             )
-            .frame(maxHeight: .infinity, alignment: .bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Palette.cream)
         case .addProfile:
             AddProfileView(vm: makeAddProfileVM())
@@ -617,7 +626,7 @@ struct ShellView: View {
     private var exportWindow: (from: String, to: String, label: String,
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
-        let now = Date()
+        let now = Epoch.now()
         let window = exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId

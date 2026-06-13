@@ -18,7 +18,16 @@ struct TaxSettingsView: View {
     @State private var abnText = ""
     @State private var wfhText = ""
 
-    private static let monthNames = Calendar(identifier: .gregorian).monthSymbols
+    /// Pin the calendar's locale to en-AU so `monthSymbols` resolves to full English
+    /// month names ("July"), not the generic ISO placeholders ("M07") the runtime
+    /// locale (e.g. en_US@rg=auzzzz) yields — matching the app-wide en-AU house style
+    /// (`Formatters.swift`, `Period.swift`).
+    private static let auLocale = Locale(identifier: "en_AU")
+    private static let monthNames: [String] = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.locale = auLocale
+        return cal.monthSymbols
+    }()
     private let entityTypes = ["Sole trader", "Company", "Partnership", "Trust"]
     private let gstBases = ["Cash", "Accruals"]
 
@@ -91,7 +100,7 @@ struct TaxSettingsView: View {
                 HStack {
                     Text("Next BAS due").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     Spacer()
-                    Text(vm.nextBasDue, format: .dateTime.day().month(.abbreviated).year())
+                    Text(fmtBasDue(vm.nextBasDue))
                         .font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
                 }
             }

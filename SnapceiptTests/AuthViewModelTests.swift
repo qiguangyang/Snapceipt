@@ -152,6 +152,47 @@ struct AuthViewModelTests {
         #expect(vm.state == .awaitingLink(email: "maya@example.com"))
     }
 
+    @Test("each successful send bumps linkSentCount so the wait screen can confirm it fired")
+    func linkSentCountTracksSuccessfulSends() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let vm = AuthViewModel(api: api, auth: makeStore())
+        #expect(vm.linkSentCount == 0)
+
+        await vm.requestMagicLink(email: "maya@example.com")
+        #expect(vm.linkSentCount == 1)
+
+        await vm.resendMagicLink()
+        #expect(vm.linkSentCount == 2)
+    }
+
+    @Test("a failed send does not bump linkSentCount")
+    func linkSentCountUnchangedOnFailure() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        api.magicLinkRequestHandler = { email in
+            rec.requestedEmails.append(email)
+            throw APIError(code: "RATE_LIMITED", message: "Too many attempts", status: 429)
+        }
+        let vm = AuthViewModel(api: api, auth: makeStore())
+
+        await vm.requestMagicLink(email: "maya@example.com")
+
+        #expect(vm.linkSentCount == 0)
+        if case .error = vm.state {} else { Issue.record("expected .error, got \(vm.state)") }
+    }
+
+    @Test("an invalid email never reaches the network and never bumps linkSentCount")
+    func linkSentCountUnchangedOnInvalidEmail() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let vm = AuthViewModel(api: api, auth: makeStore())
+
+        await vm.requestMagicLink(email: "nope")
+
+        #expect(vm.linkSentCount == 0)
+    }
+
     @Test("signOut clears the session and returns to signedOut")
     func signOut() async {
         let rec = Recorder()

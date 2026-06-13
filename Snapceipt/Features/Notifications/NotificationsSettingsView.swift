@@ -20,16 +20,22 @@ struct NotificationsSettingsView: View {
                 if let vm {
                     ScrollView {
                         VStack(spacing: 14) {
-                            Toggle("Budget alerts", isOn: Binding(
-                                get: { vm.pushEnabled },
-                                set: { on in vm.pushEnabled = on; Task { await vm.persist(); if on { await NotificationDelegate.requestAndRegister() } } }))
-                                .tint(accent.base)
-                                .accessibilityIdentifier(AccessibilityID.notifPushToggle)
+                            Card {
+                                Toggle("Budget alerts", isOn: Binding(
+                                    get: { vm.pushEnabled },
+                                    set: { on in vm.pushEnabled = on; Task { await vm.persist(); if on { await NotificationDelegate.requestAndRegister() } } }))
+                                    .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                                    .tint(accent.base)
+                                    .accessibilityIdentifier(AccessibilityID.notifPushToggle)
+                            }
                             quietHoursCard(vm)
-                            Toggle("BAS-due reminder", isOn: Binding(
-                                get: { vm.basReminderEnabled }, set: { vm.basReminderEnabled = $0 }))
-                                .tint(accent.base)
-                                .accessibilityIdentifier(AccessibilityID.notifBasToggle)
+                            Card {
+                                Toggle("BAS-due reminder", isOn: Binding(
+                                    get: { vm.basReminderEnabled }, set: { vm.basReminderEnabled = $0 }))
+                                    .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                                    .tint(accent.base)
+                                    .accessibilityIdentifier(AccessibilityID.notifBasToggle)
+                            }
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
@@ -55,6 +61,7 @@ struct NotificationsSettingsView: View {
                 Toggle("Quiet hours", isOn: Binding(
                     get: { vm.quietHoursEnabled },
                     set: { vm.quietHoursEnabled = $0; Task { await vm.persist() } }))
+                    .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     .tint(accent.base)
                 if vm.quietHoursEnabled {
                     DatePicker("From", selection: $quietStart, displayedComponents: .hourAndMinute)

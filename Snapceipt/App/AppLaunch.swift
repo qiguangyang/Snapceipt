@@ -9,6 +9,27 @@ struct AppLaunch {
     let useStub: Bool
     let reset: Bool
     let seed: Bool
+    let lockAvailable: Bool
+    let tour: Bool
+    let tourEmpty: Bool
+    let cannedNeedsReview: Bool
+    /// Test seam (`-uiTestOffline`): the API client throws a transport error on
+    /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
+    /// outbox queue exactly as a real offline capture would. Drives J18b/J18c.
+    let offline: Bool
+    /// Test seam (`-uiTestPushReject`): the stub `syncPush` throws a 422 contract
+    /// rejection so `SyncEngine` marks the batch failed and surfaces `.error`.
+    /// Drives J23b (visible-failure).
+    let pushReject: Bool
+    /// Test seam (`-uiTestPushStall`): both the stub and live `syncPush` sleep
+    /// indefinitely instead of returning. `SyncEngine.push()` marks the batch
+    /// `inflight` + saves BEFORE calling `syncPush` (SyncEngine.swift:104-105), so
+    /// `app.terminate()` while the call is parked strands a persisted `inflight`
+    /// outbox row — the exact crash-recovery precondition for J23c. On the on-disk
+    /// live store (no `-uiTestStub`) that row survives the relaunch, where
+    /// `requeueStrandedInflight()` (run unconditionally at the head of every push)
+    /// re-marks it `pending` and the next clean push drains it. DEBUG-only.
+    let pushStall: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -16,6 +37,13 @@ struct AppLaunch {
         useStub = arguments.contains("-uiTestStub")
         reset = arguments.contains("-uiTestReset")
         seed = arguments.contains("-uiTestSeed")
+        lockAvailable = arguments.contains("-uiTestLockAvailable")
+        tour = arguments.contains("-uiTestTour")
+        tourEmpty = arguments.contains("-uiTestTourEmpty")
+        cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
+        offline = arguments.contains("-uiTestOffline")
+        pushReject = arguments.contains("-uiTestPushReject")
+        pushStall = arguments.contains("-uiTestPushStall")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 
@@ -27,6 +55,41 @@ struct AppLaunch {
         authStore.clear()
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         UserDefaults.standard.removeObject(forKey: "sc.syncCursor")
+        // Clear the app-lock flag too: J08 (AppLockUITests) persists sc.lock.enabled=true
+        // and it survives across launches in the simulator container. Without this, a
+        // later -uiTestReset launch — including the live (E2E_LIVE) suite, which runs
+        // WITHOUT -uiTestStub and so gets the real LAContext evaluator that can't succeed
+        // on a passcode-less simulator — would lock the shell permanently. -uiTestReset
+        // heals it for both the hermetic and live paths.
+        UserDefaults.standard.removeObject(forKey: "sc.lock.enabled")
+    }
+
+    /// Purges the on-disk SwiftData store under `-uiTestReset` so a live journey that
+    /// signs into a FRESH backend account isn't blocked by a stale Profile left in the
+    /// local container by a PRIOR run. RootView's onboarding gate is a GLOBAL
+    /// `@Query profileRows.isEmpty` (all users), so a leftover profile from any earlier
+    /// run suppresses onboarding for the new account — leaving the new user with no
+    /// active profile and dead-ending capture's save() (J18c). The hermetic path uses an
+    /// in-memory store (purge is a harmless no-op there; seeds run afterwards and never
+    /// pass `-uiTestReset`). DEBUG-only seam; never compiled into Release.
+    func purgeLocalStoreIfNeeded(context: ModelContext) {
+        guard reset else { return }
+        // Fail FAST on a delete/save error: this purge is the fix for the stale-Profile
+        // bug J18c root-caused, so a silently-swallowed failure would resurface as an
+        // unexplained downstream test failure (onboarding skipped → no active profile →
+        // capture.save() dead-ends). assertionFailure fires only in DEBUG (this whole
+        // struct is #if DEBUG), so it's a loud test-time signal, never a Release crash.
+        // NOTE: deleting PendingReceipt rows orphans their JPEGs under Application Support
+        // (ReceiptCleanupPass reclaims by row, not by orphan sweep), so live-run simulators
+        // slowly accumulate orphan files. Harmless for the simulator container.
+        do {
+            for type in SnapceiptSchema.models {
+                try context.delete(model: type)
+            }
+            try context.save()
+        } catch {
+            assertionFailure("purgeLocalStoreIfNeeded failed: \(error)")
+        }
     }
 
     /// Seeds an already-signed-in dev session + two profiles, for shell-level UI tests
@@ -92,6 +155,14 @@ struct AppLaunch {
                                    number: "QF1234567", barcodeFormat: "qr",
                                    pointsLabel: nil,
                                    color1: "#E40000", color2: "#A30000", sortOrder: 1))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Flybuys", subBrand: nil, number: "6011000990139424",
+                                   barcodeFormat: "code128", pointsLabel: nil,
+                                   color1: "#005EB8", color2: "#003E7E", sortOrder: 2))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Boarding Pass", subBrand: nil, number: "PDF417DATA12345",
+                                   barcodeFormat: "pdf417", pointsLabel: nil,
+                                   color1: "#444444", color2: "#222222", sortOrder: 3))
         // F5: seed a saved client + a draft quote (+ one line item) on p1 (active business).
         let client = Client(userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")
@@ -112,6 +183,186 @@ struct AppLaunch {
         context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Officeworks",
                                    catKey: "office", amountCents: -45_00, txnDate: dayISO(2),
                                    isAi: true, gstCents: 4_09, source: "email_in", extractionStatus: "done"))
+        // p2 (personal) distinct data so profile-scope leaks are observable in both directions.
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p2.id, merchant: "Coles Personal",
+                                   catKey: "groceries", amountCents: -64_00, txnDate: dayISO(2)))
+        context.insert(Budget(userId: DevAccount.userId, profileId: p2.id, categoryId: nil,
+                              label: "Personal cap", capCents: 300_00, alertThresholdPct: 90))
+        try? context.save()
+    }
+
+    /// Tour-only fixture: a superset of the seed fixture, populated on BOTH
+    /// profiles, with months spread, a real Vehicle + trips, WFH logs, a smart
+    /// rule, and a SENT quote — so `ScreenshotTourUITests` can shoot every
+    /// populated state on each accent. Selected by `-uiTestTour` (independent of
+    /// `-uiTestSeed`, which 11 existing classes still depend on unchanged).
+    func applyTourSeedIfNeeded(authStore: AuthStore, context: ModelContext) {
+        guard tour else { return }
+        // Pin the clock to a fixed instant so seeded dates + every Epoch.nowMs()
+        // timestamp (budget alertSentAt, quote sentAt) AND the view-layer "now"
+        // seams (Epoch.now(), wired in Task 3) are deterministic across tour runs
+        // (15 Jan 2026 12:00:00 UTC). Requires Epoch.override, added in Task 3 —
+        // so Task 3 is executed BEFORE this task (see ordering note above).
+        Epoch.override = 1_768_478_400_000
+        authStore.save(SessionResponse(
+            accessToken: "tour-access", refreshToken: "tour-refresh", expiresIn: 900,
+            user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
+        let p1 = Profile(userId: DevAccount.userId, name: "Studio North", type: "business",
+                         initials: "SN", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950",
+                         sortOrder: 0, isDefault: true)
+        let p2 = Profile(userId: DevAccount.userId, name: "Home Budget", type: "personal",
+                         initials: "HB", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
+                         sortOrder: 1, isDefault: false)
+        context.insert(p1); context.insert(p2)
+
+        let cal: Calendar = {
+            var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c
+        }()
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: Epoch.now()))!
+        let isoFmt: DateFormatter = {
+            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"; return f
+        }()
+        func dayISO(_ d: Int) -> String { isoFmt.string(from: cal.date(byAdding: .day, value: d, to: monthStart)!) }
+
+        // --- p1 (business) — transactions across categories + months ---
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, catKey: "income",
+                                   amountCents: 500_00, txnDate: dayISO(1)))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "The Grounds",
+                                   catKey: "meals", amountCents: -120_00, txnDate: dayISO(3),
+                                   deductiblePct: 50, gstCents: 10_91))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "BP",
+                                   catKey: "fuel", amountCents: -80_00, txnDate: dayISO(5),
+                                   deductiblePct: 100, gstCents: 7_27))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Adobe",
+                                   catKey: "software", amountCents: -29_99, txnDate: dayISO(-30),
+                                   deductiblePct: 100, gstCents: 2_72))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Cafe",
+                                   catKey: "meals", amountCents: -95_00, txnDate: dayISO(2)))
+
+        // budgets on p1: over-cap (red), under-cap, and already-alerted
+        context.insert(Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                              label: "Whole profile", capCents: 150_00, alertThresholdPct: 90))
+        context.insert(Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                              label: "Dining", capCents: 600_00, alertThresholdPct: 90))
+        context.insert(Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
+                              label: "Coffee", capCents: 100_00, alertThresholdPct: 90,
+                              alertSentAt: Epoch.nowMs()))
+
+        // logbook: a real Vehicle (so make/model render) + an active logbook window + two trips.
+        // CRITICAL: pin the Vehicle's id to "v1" so the VehicleYear + both MileageTrips
+        // (which reference vehicleId: "v1") resolve. Vehicle.init defaults id to a random
+        // uuidv7 (Vehicle.swift:30), and MileageViewModel joins VehicleYear by
+        // `$0.vehicleId == vehicle.id` (MileageViewModel.swift:136) — a dangling "v1" would
+        // render the costs/claim card EMPTY and starve the Area 6 audit. Vehicle.init
+        // accepts an explicit `id:` (Vehicle.swift:30).
+        context.insert(Vehicle(id: "v1", userId: DevAccount.userId, profileId: p1.id,
+                               make: "Toyota", model: "HiLux", engineCc: 2800, registration: "ABC123",
+                               logbookStartDate: dayISO(-60), logbookEndDate: dayISO(24), businessUsePct: 72))
+        context.insert(VehicleYear(userId: DevAccount.userId, profileId: p1.id, vehicleId: "v1",
+                                   fyStartYear: FinancialYear.of(Epoch.now(), startMonth: 7).startYear,
+                                   claimCents: 250_00))
+        context.insert(MileageTrip(userId: DevAccount.userId, profileId: p1.id, tripDate: dayISO(-2),
+                                   fromLabel: "Office", toLabel: "Northbridge site", purpose: "Client visit",
+                                   distanceM: 18_400, isBusiness: true, claimCents: 14_72,
+                                   vehicleId: "v1", odometerStartM: 51_200_000, odometerEndM: 51_218_400))
+        context.insert(MileageTrip(userId: DevAccount.userId, profileId: p1.id, tripDate: dayISO(-9),
+                                   fromLabel: "Home", toLabel: "Supplier", purpose: "Pickup",
+                                   distanceM: 6_100, isBusiness: true, claimCents: 4_88,
+                                   vehicleId: "v1", odometerStartM: 51_180_000, odometerEndM: 51_186_100))
+        // WFH logs across two weeks RELATIVE TO THE FROZEN NOW (15 Jan 2026, a
+        // Thursday): dayISO is monthStart-relative, so dayISO(13) = 14 Jan
+        // ("yesterday", inside the frozen Mon 12 – Sun 18 Jan week → the
+        // "this week" BarPair renders a non-zero Wednesday bar, the Task 6
+        // Step 4b gate) and dayISO(6) = 7 Jan (prior week).
+        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(13),
+                              minutes: 480, note: "Admin + quotes", rateCentsPerHour: 70, claimCents: 5_60))
+        context.insert(WFHLog(userId: DevAccount.userId, profileId: p1.id, logDate: dayISO(6),
+                              minutes: 300, rateCentsPerHour: 70, claimCents: 3_50))
+
+        // loyalty: two formats
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Everyday Rewards", subBrand: "Woolworths",
+                                   number: "5901234123457", barcodeFormat: "ean13",
+                                   pointsLabel: "1,240 pts", color1: "#1A8A3C", color2: "#0C5C26", sortOrder: 0))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p1.id,
+                                   brand: "Qantas FF", subBrand: nil,
+                                   number: "QF1234567", barcodeFormat: "qr",
+                                   pointsLabel: nil, color1: "#E40000", color2: "#A30000", sortOrder: 1))
+
+        // quotes: a DRAFT + a SENT (with number + sentAt) + client + line item
+        let client = Client(userId: DevAccount.userId, profileId: p1.id,
+                            name: "Acme Pty Ltd", email: "accounts@acme.example")
+        context.insert(client)
+        // DISTINCT createdAt per quote so the "newest first" list is deterministic
+        // run-to-run. Both quotes default createdAt to the PINNED Epoch.nowMs(), which
+        // would tie the sort key; SwiftData then returns the tied rows in undefined order
+        // and the row order flips between tour runs (the pixel-stability gate, Task 7).
+        // A \.id tiebreaker can't fix this — ID.uuidv7() reads the real wall clock + random
+        // bytes (IDClock.swift), so ids differ every launch. Offset the older (draft) quote
+        // one minute behind the sent one; sent stays newest.
+        let draft = Quote(userId: DevAccount.userId, profileId: p1.id,
+                          clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
+                          gstEnabled: true, subtotalCents: 200_00, gstCents: 20_00, totalCents: 220_00,
+                          status: "draft", createdAt: Epoch.nowMs() - 60_000)
+        context.insert(draft)
+        context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: draft.id,
+                                     itemDescription: "Brand identity package", quantity: 1,
+                                     unitPriceCents: 200_00, sortOrder: 0))
+        let sent = Quote(userId: DevAccount.userId, profileId: p1.id, number: "SN-0001",
+                         clientName: "Acme Pty Ltd", clientEmail: "accounts@acme.example",
+                         gstEnabled: true, subtotalCents: 800_00, gstCents: 80_00, totalCents: 880_00,
+                         status: "sent", sentAt: Epoch.nowMs())
+        context.insert(sent)
+
+        // smart rule on p1
+        context.insert(SmartRule(userId: DevAccount.userId, profileId: p1.id,
+                                 matchType: "merchant_contains", matcher: "BP",
+                                 setDeductiblePct: 100, setMode: "business", priority: 0, enabled: true))
+
+        // email-in: one failed (needs review) + one done
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "",
+                                   catKey: "office", amountCents: 0, txnDate: dayISO(4),
+                                   isAi: true, source: "email_in", extractionStatus: "failed"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Officeworks",
+                                   catKey: "office", amountCents: -45_00, txnDate: dayISO(2),
+                                   isAi: true, gstCents: 4_09, source: "email_in", extractionStatus: "done"))
+
+        // --- p2 (personal) — its OWN data so accent re-skin + profile-switch shoot ---
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p2.id, catKey: "income",
+                                   amountCents: 320_00, txnDate: dayISO(1)))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p2.id, merchant: "Coles",
+                                   catKey: "groceries", amountCents: -64_50, txnDate: dayISO(2)))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p2.id, merchant: "Netflix",
+                                   catKey: "software", amountCents: -18_99, txnDate: dayISO(-12)))
+        context.insert(Budget(userId: DevAccount.userId, profileId: p2.id, categoryId: nil,
+                              label: "Monthly spend", capCents: 200_00, alertThresholdPct: 90))
+        context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p2.id,
+                                   brand: "Flybuys", subBrand: nil,
+                                   number: "6008941234567", barcodeFormat: "ean13",
+                                   pointsLabel: "880 pts", color1: "#0046AD", color2: "#00307A", sortOrder: 0))
+
+        try? context.save()
+    }
+
+    /// EMPTY-state tour fixture: signed-in dev session + the SAME two profiles
+    /// (so both accents are reachable) but NO domain data — every screen renders
+    /// its empty-state art. Pins the clock too (so any "today" header is fixed).
+    /// Selected by `-uiTestTourEmpty` (mutually exclusive with `-uiTestTour`).
+    /// Spec §4 requires "empty AND populated variants"; §5's designer's-eye lens
+    /// explicitly audits empty states.
+    func applyTourEmptySeedIfNeeded(authStore: AuthStore, context: ModelContext) {
+        guard tourEmpty else { return }
+        Epoch.override = 1_768_478_400_000   // same pin as the populated tour
+        authStore.save(SessionResponse(
+            accessToken: "tour-access", refreshToken: "tour-refresh", expiresIn: 900,
+            user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
+        context.insert(Profile(userId: DevAccount.userId, name: "Studio North", type: "business",
+                               initials: "SN", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950",
+                               sortOrder: 0, isDefault: true))
+        context.insert(Profile(userId: DevAccount.userId, name: "Home Budget", type: "personal",
+                               initials: "HB", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
+                               sortOrder: 1, isDefault: false))
         try? context.save()
     }
 
@@ -122,12 +373,19 @@ struct AppLaunch {
     }
 
     /// The biometric app-lock controller for the run. Under `-uiTestStub` the
-    /// evaluator is hard-stubbed (`canEvaluate: { false }`) so the lock never
-    /// gates a seeded UI-test launch; otherwise the real `LAContext`-backed
-    /// controller is returned. `@MainActor` because `AppLockController` is.
+    /// evaluator reports `canEvaluate: { lockAvailable }` — false by default so the
+    /// lock never gates a seeded UI-test launch, but `-uiTestLockAvailable` flips it
+    /// true with an always-succeed evaluator so the J08 lock journey can run;
+    /// otherwise the real `LAContext`-backed controller is returned. `@MainActor`
+    /// because `AppLockController` is.
     @MainActor
     func makeAppLock() -> AppLockController {
-        if useStub { return AppLockController(canEvaluate: { false }, evaluate: { true }) }
+        if useStub {
+            // Default stub disables biometrics; -uiTestLockAvailable enables a
+            // deterministic always-succeed evaluator so the lock journey can run.
+            return AppLockController(canEvaluate: { self.lockAvailable },
+                                     evaluate: { true })
+        }
         return AppLockController()
     }
 
@@ -136,9 +394,12 @@ struct AppLaunch {
     }
 
     /// Canned (image, rawText) for the camera-less capture UI test. Loaded from the
-    /// app bundle when `-uiTestStub` is set; nil otherwise (production uses the camera).
+    /// app bundle when `-uiTestStub` OR `-uiTestOffline` is set; nil otherwise
+    /// (production uses the camera). `-uiTestOffline` is admitted so the LIVE offline
+    /// journey (J18c, no `-uiTestStub`) can still drive a camera-less capture against the
+    /// real backend; both flags are test-only, so the seam never loads in production.
     var cannedScan: (image: UIImage, rawText: String)? {
-        guard useStub,
+        guard useStub || offline,
               let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
               let data = try? Data(contentsOf: url),
               let image = UIImage(data: data) else { return nil }

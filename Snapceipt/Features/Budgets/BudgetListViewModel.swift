@@ -26,7 +26,7 @@ final class BudgetListViewModel {
     }
 
     init(context: ModelContext, sync: any SyncEnqueuing, userId: String,
-         profileId: String, now: Date = Date()) {
+         profileId: String, now: Date = Epoch.now()) {
         self.context = context
         self.sync = sync
         self.userId = userId

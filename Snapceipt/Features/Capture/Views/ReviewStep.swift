@@ -13,6 +13,8 @@ struct ReviewStep: View {
     // profileId rule). See the toggle comment below.
     @Binding var mode: String                 // "personal" | "business"
     let onSave: () -> Void
+    /// Dismisses the whole capture overlay (the only cancel affordance on Review).
+    let onClose: () -> Void
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -21,18 +23,36 @@ struct ReviewStep: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                totalCard
-                aiBanner
-                fieldsCard
-                lineItemsCard
-                disabledChips
-                saveButton
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(spacing: 16) {
+                    totalCard
+                    aiBanner
+                    fieldsCard
+                    lineItemsCard
+                    disabledChips
+                    saveButton
+                }
+                .padding(18)
             }
-            .padding(18)
         }
         .background(Palette.cream)
+    }
+
+    /// Top bar: a close button (the only cancel affordance on Review) + the
+    /// "Review receipt" title (spec §2 L142-145). The prototype's decorative,
+    /// no-handler edit button is intentionally omitted (no `edit` icon, no action).
+    private var header: some View {
+        ZStack {
+            Text("Review receipt")
+                .font(.ui(17, .bold)).foregroundStyle(Palette.ink)
+            HStack {
+                CaptureCloseButton(onClose: onClose)
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 12)
     }
 
     private var totalCard: some View {
@@ -41,13 +61,18 @@ struct ReviewStep: View {
                 Text("Total detected").font(.ui(13)).foregroundStyle(Palette.ink2)
                 Spacer()
                 if let gst = draft.gst {
-                    Text("GST \(amount(gst))")
-                        .font(.ui(11.5, .semibold)).foregroundStyle(accent.deep)
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(accent.soft, in: Capsule())
+                    // The GST/income pill is pinned to income-green in BOTH profile
+                    // modes (spec §2 L123) — it is NOT accent-driven.
+                    HStack(spacing: 5) {
+                        Icon(name: "check", size: 12, color: Palette.income)
+                        Text("incl. \(fmt(gst)) GST")
+                    }
+                    .font(.ui(11.5, .semibold)).foregroundStyle(Palette.income)
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Palette.incomeSoft, in: Capsule())
                 }
             }
-            Text(amount(draft.total)).numeric(40)
+            Text(fmt(draft.total)).numeric(40)
                 .foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -58,20 +83,26 @@ struct ReviewStep: View {
 
     @ViewBuilder
     private var aiBanner: some View {
-        let text = draft.needsReview
+        let body = draft.needsReview
             ? "Double-check the details below."
             : bannerTemplate
-        HStack(alignment: .top, spacing: 10) {
-            Icon(name: "sparkles", size: 18, color: accent.base)
-            Text(text).font(.ui(13)).foregroundStyle(Palette.ink)
-            Spacer()
-            if !draft.needsReview {
-                Text("\(draft.confidenceBadge)%")
-                    .font(.ui(12, .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(accent.base, in: Capsule())
-                    .accessibilityIdentifier(AccessibilityID.captureReviewBadge)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Icon(name: "sparkles", size: 18, color: accent.base)
+                Text(draft.needsReview ? "Review needed" : "AI categorised this for you")
+                    .font(.ui(13.5, .bold)).foregroundStyle(accent.deep)
+                Spacer()
+                if !draft.needsReview {
+                    Text("\(draft.confidenceBadge)% match")
+                        .font(.ui(11, .bold)).foregroundStyle(accent.deep)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Palette.paper, in: Capsule())
+                        .accessibilityIdentifier(AccessibilityID.captureReviewBadge)
+                }
             }
+            Text(body).font(.ui(13)).foregroundStyle(Palette.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier(AccessibilityID.captureReviewBanner)
         }
         .padding(14)
         .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
@@ -99,6 +130,7 @@ struct ReviewStep: View {
                     ForEach(categoryKeys, id: \.self) { Text(label($0)).tag($0) }
                 }
                 .pickerStyle(.menu)
+                .tint(accent.base)   // active accent, not the iOS system-blue menu tint
                 .accessibilityIdentifier(AccessibilityID.captureReviewCategory)
             }
             field("Payment") {
@@ -123,21 +155,61 @@ struct ReviewStep: View {
     // `profiles.activeProfile` (scope-by-active-profileId). This is intentional for
     // v1; switching the save target is deferred.
     private var profileToggle: some View {
-        HStack(spacing: 8) {
-            ForEach(ProfileType.allCases) { type in
-                let selected = mode == type.rawValue
-                Button { mode = type.rawValue } label: {
-                    Text(type.label)
-                        .font(.ui(13, .semibold))
-                        .foregroundStyle(selected ? .white : Palette.ink2)
-                        .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(selected ? accent.base : Palette.paper2,
-                                    in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Assign to profile")
+                .font(.ui(13, .bold)).foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            segmented
         }
         .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
+    }
+
+    /// The default ModeToggle Segmented sliding control (spec §2 L152-155): a paper-2
+    /// track with a single white thumb that animates between Personal/Business, each
+    /// option carrying a leading icon tinted to its FIXED per-option color (Personal
+    /// wallet+terracotta, Business building+teal) when selected, else --ink-3.
+    private var segmented: some View {
+        let types = ProfileType.allCases
+        let selectedIndex = types.firstIndex { mode == $0.rawValue } ?? 0
+        return GeometryReader { geo in
+            let thumbW = (geo.size.width - 8) / CGFloat(types.count)
+            ZStack(alignment: .leading) {
+                // Sliding white thumb with a soft shadow.
+                Capsule()
+                    .fill(Palette.paper)
+                    .shadow(color: Palette.ink.opacity(0.18), radius: 3, x: 0, y: 2)
+                    .frame(width: thumbW)
+                    .padding(.vertical, 4)
+                    .offset(x: 4 + CGFloat(selectedIndex) * thumbW)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selectedIndex)
+
+                HStack(spacing: 0) {
+                    ForEach(types) { type in
+                        let selected = mode == type.rawValue
+                        Button { mode = type.rawValue } label: {
+                            HStack(spacing: 6) {
+                                Icon(name: type.iconName, size: 16,
+                                     color: selected ? optionTint(type) : Palette.ink3)
+                                Text(type.label)
+                                    .font(.ui(14, .semibold))
+                                    .foregroundStyle(selected ? Palette.ink : Palette.ink3)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .frame(height: 46)
+        .background(Palette.paper2, in: Capsule())
+    }
+
+    /// FIXED per-option tint (spec §2 L155): Personal terracotta, Business teal,
+    /// independent of the active accent.
+    private func optionTint(_ type: ProfileType) -> Color {
+        type == .personal ? AccentPalette.personal.base : AccentPalette.business.base
     }
 
     private var lineItemsCard: some View {
@@ -148,7 +220,7 @@ struct ReviewStep: View {
                         HStack {
                             Text(li.name).font(.ui(13)).foregroundStyle(Palette.ink)
                             Spacer()
-                            Text(amount(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
+                            Text(fmt(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
                         }
                     }
                 }
@@ -178,10 +250,12 @@ struct ReviewStep: View {
 
     private var saveButton: some View {
         Button(action: onSave) {
-            Text("Save receipt")
-                .font(.ui(16, .bold)).foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+            HStack(spacing: 8) {
+                Icon(name: "check", size: 20, color: .white)
+                Text("Save receipt").font(.ui(16, .bold)).foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.captureSave)
@@ -194,14 +268,5 @@ struct ReviewStep: View {
                 .frame(width: 92, alignment: .leading)
             control().font(.ui(15)).foregroundStyle(Palette.ink)
         }
-    }
-
-    /// Display a dollar Decimal as "$X.XX".
-    private func amount(_ d: Decimal) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "AUD"
-        f.locale = Locale(identifier: "en_AU")
-        return f.string(from: d as NSDecimalNumber) ?? "$0.00"
     }
 }

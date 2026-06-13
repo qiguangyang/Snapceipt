@@ -20,15 +20,21 @@ enum AccessibilityID {
     static let tabProfile = "tab.profile"
     static let tabSnap = "tabbar.snap"
     static let addProfileName = "addprofile.name"
+    static let addProfileCreate = "addprofile.create"
 
     // Capture flow
+    static let captureClose = "capture.close"
     static let captureScanTitle = "capture.scan.title"
     static let captureReviewMerchant = "capture.review.merchant"
     static let captureReviewCategory = "capture.review.category"
     static let captureReviewBadge = "capture.review.badge"
+    static let captureReviewBanner = "capture.review.banner"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureSave = "capture.save"
     static let captureSavedTitle = "capture.saved.title"
+    /// Shown on the Saved confirmation only when the receipt was captured offline
+    /// (HeuristicParser fallback → outbox queue, extractionStatus=="pending"). Drives J18b/J18c.
+    static let captureQueuedBadge = "capture.queued.badge"
     static let captureSnapAnother = "capture.snapAnother"
     static let captureDone = "capture.done"
 
@@ -87,6 +93,11 @@ enum AccessibilityID {
     static let exportEmailField = "export.emailField"
     static let exportGenerate = "export.generate"
     static let exportStatus = "export.status"
+
+    // Sync status pill (J23b/J23c). Always present in the shell; its a11y VALUE
+    // reflects the SyncEngine state (idle/syncing/offline/error) even when the
+    // pill is visually hidden (idle), so XCUITest can poll the drain.
+    static let syncStatusPill = "sync.status.pill"
 
     // Budgets (F3)
     static let homeBudgetTracker = "home.budgetTracker"

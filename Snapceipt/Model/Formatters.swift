@@ -38,6 +38,14 @@ func fmt(_ cents: Int, sign: Bool = false, showCents: Bool = true) -> String {
     return prefix + "$" + body
 }
 
+/// Format a dollar **Decimal** as AUD "$42.50" using the same cached decimal
+/// formatter (literal "$", en-AU grouping, no "A$" currency symbol). Used where a
+/// `Decimal` amount — not Int cents — is on hand (e.g. the capture draft total).
+func fmt(_ dollars: Decimal) -> String {
+    let body = moneyWithCents.string(from: dollars as NSDecimalNumber) ?? "0.00"
+    return "$" + body
+}
+
 /// Compact AUD: "$500", "$1.2k", "$12k". Threshold mirrors theme.jsx:
 /// dollars >= 10000 -> integer "k"; >= 1000 -> one-decimal "k"; else plain "$N".
 func fmtK(_ cents: Int) -> String {
@@ -84,4 +92,26 @@ func fmtDate(_ iso: String, style: DateStyle = .short) -> String {
     case .short: return dateShort.string(from: date)
     case .long: return dateLong.string(from: date)
     }
+}
+
+/// en-AU "28 Jul 2026" (day-month-year, no comma) for a BAS due `Date`.
+///
+/// Unlike `dateLong` (UTC, for parsing UTC-anchored ISO strings), this pins the
+/// time zone to **Australia/Sydney** to match `BasSchedule.nextDue`'s anchor
+/// (`BasSchedule.swift`): that returns the 28th/21st at Sydney midnight, so
+/// rendering in the device zone would show the deadline a day early west of
+/// Sydney (e.g. Perth/Adelaide render '27 Jul' for the 28-Jul due). Statutory BAS
+/// dates must read as their AU wall-clock day regardless of the device's offset.
+private let basDueFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = auLocale
+    f.timeZone = TimeZone(identifier: "Australia/Sydney")
+    f.dateFormat = "d MMM yyyy"
+    return f
+}()
+
+/// Format a BAS-due `Date` as en-AU "28 Jul 2026", anchored to Australia/Sydney
+/// (see `basDueFormatter`). Used by `TaxSettingsView`'s "Next BAS due" row.
+func fmtBasDue(_ date: Date) -> String {
+    basDueFormatter.string(from: date)
 }

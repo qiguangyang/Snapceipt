@@ -62,13 +62,15 @@ private struct FirstProfileForm: View {
 
     /// Accent swatches offered at onboarding. The first two are the canonical
     /// personal/business presets; the rest are extra terracotta/teal-adjacent picks.
-    private static let swatches: [(base: UInt32, soft: UInt32, deep: UInt32)] = [
-        (0xE8602C, 0xFDEBE0, 0xC2461A), // personal terracotta
-        (0x0E7C72, 0xDCF0ED, 0x0A5950), // business teal
-        (0x3B6FE0, 0xE4ECFC, 0x274FB0), // blue
-        (0x8A4FD6, 0xEEE6FB, 0x6A37AE), // violet
-        (0xD64578, 0xFCE6EE, 0xAE2F5A), // pink
-        (0xC79A1E, 0xFBF1D2, 0x9C7610), // gold
+    /// `name` is the VoiceOver label and is folded INTO the tuple (not a parallel
+    /// array) so a future reorder can never silently mislabel a swatch.
+    private static let swatches: [(name: String, base: UInt32, soft: UInt32, deep: UInt32)] = [
+        ("Terracotta", 0xE8602C, 0xFDEBE0, 0xC2461A), // personal terracotta
+        ("Teal",       0x0E7C72, 0xDCF0ED, 0x0A5950), // business teal
+        ("Blue",       0x3B6FE0, 0xE4ECFC, 0x274FB0), // blue
+        ("Violet",     0x8A4FD6, 0xEEE6FB, 0x6A37AE), // violet
+        ("Pink",       0xD64578, 0xFCE6EE, 0xAE2F5A), // pink
+        ("Gold",       0xC79A1E, 0xFBF1D2, 0x9C7610), // gold
     ]
 
     private var accent: AccentPalette {
@@ -141,6 +143,11 @@ private struct FirstProfileForm: View {
                                         .padding(-3)
                                 )
                         }
+                        // Bare colour swatches carry no text, so VoiceOver would
+                        // announce an unlabelled "Button" and the selected ring is a
+                        // colour-only state cue. Name each swatch and expose selection.
+                        .accessibilityLabel(Self.swatches[i].name)
+                        .accessibilityAddTraits(accentIndex == i ? [.isSelected] : [])
                     }
                 }
                 .frame(maxWidth: .infinity)

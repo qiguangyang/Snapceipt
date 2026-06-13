@@ -43,7 +43,12 @@ struct SnapceiptApp: App {
         launch.applyResetIfNeeded(authStore: auth)
         let api: APIClient = launch.makeAPIClient(auth: auth)
         let container = launch.makeContainer()
+        // Purge any cross-run-stale local rows so -uiTestReset starts the store empty
+        // (live journeys sign into a fresh account; a leftover profile would skip onboarding).
+        launch.purgeLocalStoreIfNeeded(context: container.mainContext)
         launch.applySeedIfNeeded(authStore: auth, context: container.mainContext)
+        launch.applyTourSeedIfNeeded(authStore: auth, context: container.mainContext)
+        launch.applyTourEmptySeedIfNeeded(authStore: auth, context: container.mainContext)
         // Stub-bypassed under -uiTestStub (canEvaluate:{false}) so the lock gate
         // never blocks a seeded UI-test launch.
         let appLock = launch.makeAppLock()

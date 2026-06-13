@@ -57,7 +57,11 @@ struct QuoteListView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(quote.clientName ?? "No client").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                 HStack(spacing: 6) {
-                    Text(quote.number ?? "Draft").font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink3)
+                    // Only show the quote number when one exists; an un-numbered draft
+                    // would otherwise read "Draft  Draft" (placeholder + status badge).
+                    if let number = quote.number {
+                        Text(number).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink3)
+                    }
                     statusBadge(quote)
                 }
             }

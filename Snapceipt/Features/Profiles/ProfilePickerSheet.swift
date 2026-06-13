@@ -9,11 +9,12 @@ struct ProfilePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        // No inner grabber / paper panel: the host `.sheet` already owns the
+        // presentation chrome (rounded corners + system drag indicator). Drawing
+        // our own grabber + white rounded panel on top produced a double-grabber
+        // and a sheet-within-a-sheet artifact — render straight onto the sheet
+        // surface, matching the sibling AddProfileView.
         VStack(spacing: 0) {
-            Capsule().fill(Palette.line)
-                .frame(width: 40, height: 5)
-                .padding(.top, 10).padding(.bottom, 14)
-
             HStack {
                 Text("Switch profile")
                     .font(.display(20, .bold))
@@ -21,6 +22,7 @@ struct ProfilePickerSheet: View {
                 Spacer()
             }
             .padding(.horizontal, 18)
+            .padding(.top, 18)
             .padding(.bottom, 14)
 
             VStack(spacing: 8) {
@@ -32,8 +34,6 @@ struct ProfilePickerSheet: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 24)
         }
-        .background(Palette.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     private func profileRow(_ p: Profile) -> some View {

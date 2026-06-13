@@ -31,6 +31,21 @@ class UITestCase: XCTestCase {
         app.launch()
     }
 
+    /// Launch directly into the RICH tour fixture (both profiles populated,
+    /// clock pinned) — for ScreenshotTourUITests only.
+    func launchTour() {
+        app.launchArguments += ["-uiTestStub", "-uiTestTour"]
+        app.launch()
+    }
+
+    /// Launch into the EMPTY tour fixture (both profiles, NO domain data, clock
+    /// pinned) so every screen renders its empty-state art — for the empty-state
+    /// shots in ScreenshotTourUITests.
+    func launchTourEmpty() {
+        app.launchArguments += ["-uiTestStub", "-uiTestTourEmpty"]
+        app.launch()
+    }
+
     func tapDevSignIn() {
         let b = app.buttons[AccessibilityID.signInDev]
         XCTAssertTrue(b.waitForExistence(timeout: 10), "Dev sign-in button missing")
