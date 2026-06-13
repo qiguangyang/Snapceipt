@@ -147,7 +147,10 @@ struct ShellView: View {
             // `.accessibilityIdentifier` directly to the composite TabBar would instead
             // propagate down and clobber every child id to `shell.tabbar`.
             TabBar(router: router, accent: accent)
-                .padding(.bottom, 22)
+                // Sit the floating bar just above the home-indicator safe area
+                // (the inset itself keeps it clear of the gesture zone) rather
+                // than floating it well above the bottom edge.
+                .padding(.bottom, 8)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
@@ -673,6 +676,9 @@ struct ShellView: View {
     /// The canned (image, rawText) used by the camera-less UI test, or nil in production.
     private var captureStub: (image: UIImage, rawText: String)? {
         #if DEBUG
+        // -uiTestCaptureCamera: suppress the canned feed so the flow stays on `.camera`,
+        // letting the import-affordance UI test inspect the camera stage.
+        if AppLaunch.current.captureCamera { return nil }
         return AppLaunch.current.cannedScan
         #else
         return nil

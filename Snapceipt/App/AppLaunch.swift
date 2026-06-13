@@ -30,6 +30,11 @@ struct AppLaunch {
     /// `requeueStrandedInflight()` (run unconditionally at the head of every push)
     /// re-marks it `pending` and the next clean push drains it. DEBUG-only.
     let pushStall: Bool
+    /// Test seam (`-uiTestCaptureCamera`): keep the capture flow on `.camera` (suppress
+    /// the canned-image feed) AND render a neutral placeholder instead of the live
+    /// `VNDocumentCameraViewController` (unsupported in the simulator) — so the import
+    /// affordance on the camera stage is hermetically inspectable. DEBUG-only.
+    let captureCamera: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -44,6 +49,7 @@ struct AppLaunch {
         offline = arguments.contains("-uiTestOffline")
         pushReject = arguments.contains("-uiTestPushReject")
         pushStall = arguments.contains("-uiTestPushStall")
+        captureCamera = arguments.contains("-uiTestCaptureCamera")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 
