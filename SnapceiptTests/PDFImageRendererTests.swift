@@ -18,14 +18,11 @@ struct PDFImageRendererTests {
     }
 
     @Test("renders the first page of a valid PDF to a non-nil image, longest side ~= maxDimension")
-    func rendersFirstPage() {
-        let img = PDFImageRenderer.firstPage(onePagePDF(), maxDimension: 1000)
-        #expect(img != nil)
-        if let img {
-            let longest = max(img.size.width, img.size.height)
-            #expect(longest > 800 && longest <= 1000)            // 300 -> 1000 (scaled up)
-            #expect(img.size.width < img.size.height)            // portrait aspect preserved
-        }
+    func rendersFirstPage() throws {
+        let img = try #require(PDFImageRenderer.firstPage(onePagePDF(), maxDimension: 1000))
+        let longest = max(img.size.width, img.size.height)
+        #expect(longest > 800 && longest <= 1000)            // 300 -> 1000 (scaled up)
+        #expect(img.size.width < img.size.height)            // portrait aspect preserved
     }
 
     @Test("returns nil for non-PDF and empty data")
