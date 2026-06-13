@@ -19,7 +19,8 @@
 10. [ ] **Loyalty render + scan:** open a card of each format you hold (EAN-13 / QR / Code128 / PDF417) → the barcode renders crisp at full brightness; backgrounding restores brightness. Also SCAN a physical card to add (camera-bound path J44b — simulator can't exercise this) → the barcode auto-fills the add form.
 11. [ ] **Email-in:** open the email-in screen → rotate the alias → the displayed address actually changes; open a failed item → Save is gated until merchant+amount are filled.
 12. [ ] **Polish spot-check:** the Snap FAB is not sliced by the tab bar; no white-on-white text fields; sheets/keyboard avoidance behave on a notched device; accent swatches and AU date/BAS-due labels read correctly.
+13. [ ] **Photo/file import (NEW):** on the camera stage, the bottom-left import button renders above the live scanner, receives taps, and doesn't collide with the native Flash/Filters/Shutter chrome. Tapping it offers **Photo Library** and **Files**. Import a receipt photo from Photos → it lands in Review with extracted fields. Import a receipt **PDF** from Files (ideally from a cloud provider like iCloud Drive, to exercise extension-less URLs) → its first page lands in Review. Pick an obviously-bad file (e.g. a non-receipt PDF) → a "Couldn't read that file." toast appears OR it lands in Review with the low-confidence banner; either way, no crash and you stay in the flow.
 
 ## Sign-off
-- [ ] All 12 pass on a real device against prod → this build is good for the internal beta.
+- [ ] All 13 pass on a real device against prod → this build is good for the internal beta.
 - [ ] Any failure logged with repro → fix → re-cut the next build via `BETA_INTERNAL_ONLY=1 bundle exec fastlane beta`.
