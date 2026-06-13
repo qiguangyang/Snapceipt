@@ -18,6 +18,8 @@ struct CameraStep: View {
     @State private var showingFiles = false
     @State private var photoItem: PhotosPickerItem?
 
+    private static let importFailureMessage = "Couldn't read that file."
+
     var body: some View {
         scannerLayer
             .ignoresSafeArea()
@@ -46,7 +48,7 @@ struct CameraStep: View {
                        let image = UIImage(data: data) {
                         onScanned(image)
                     } else {
-                        toasts.show("Couldn't read that file.", kind: .error)
+                        toasts.show(Self.importFailureMessage, kind: .error)
                     }
                     photoItem = nil
                 }
@@ -112,12 +114,12 @@ struct CameraStep: View {
         guard let data = try? Data(contentsOf: url) else {
             toasts.show("Couldn't read that file.", kind: .error); return
         }
-        let isPDF = UTType(filenameExtension: url.pathExtension)?.conforms(to: .pdf) ?? false
-        let image = isPDF ? PDFImageRenderer.firstPage(data) : UIImage(data: data)
-        if let image {
-            onScanned(image)
-        } else {
-            toasts.show("Couldn't read that file.", kind: .error)
+        // A cloud-provider URL may lack a `.pdf` extension, so don't key off pathExtension:
+        // try PDF first (firstPage returns nil for non-PDF data), then fall back to a bitmap.
+        // The importer already restricts selection to images + PDFs.
+        guard let image = PDFImageRenderer.firstPage(data) ?? UIImage(data: data) else {
+            toasts.show(Self.importFailureMessage, kind: .error); return
         }
+        onScanned(image)
     }
 }
