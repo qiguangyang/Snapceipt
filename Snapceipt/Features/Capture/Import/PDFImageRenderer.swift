@@ -5,6 +5,9 @@ import PDFKit
 /// pipeline. Single-receipt model: only page 0 is used. Returns nil when the data
 /// is not a readable PDF, has no pages, or is password-protected.
 enum PDFImageRenderer {
+    /// - Parameter maxDimension: Longest-edge cap in points. Defaults to 2000 to match
+    ///   `ImageReducer`'s longest-edge bound — OCR sees full resolution before the saved
+    ///   JPEG is reduced.
     static func firstPage(_ data: Data, maxDimension: CGFloat = 2000) -> UIImage? {
         guard let document = PDFDocument(data: data),
               !document.isLocked,

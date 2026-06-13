@@ -112,7 +112,7 @@ struct CameraStep: View {
         let didAccess = url.startAccessingSecurityScopedResource()
         defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else {
-            toasts.show("Couldn't read that file.", kind: .error); return
+            toasts.show(Self.importFailureMessage, kind: .error); return
         }
         // A cloud-provider URL may lack a `.pdf` extension, so don't key off pathExtension:
         // try PDF first (firstPage returns nil for non-PDF data), then fall back to a bitmap.
