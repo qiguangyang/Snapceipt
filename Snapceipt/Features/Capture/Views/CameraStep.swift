@@ -10,6 +10,25 @@ struct CameraStep: View {
     let onClose: () -> Void
 
     var body: some View {
+        scannerLayer
+            .ignoresSafeArea()
+    }
+
+    /// The live scanner — or, under the hermetic camera seam, a neutral placeholder
+    /// (`VNDocumentCameraViewController` is unsupported in the simulator).
+    @ViewBuilder private var scannerLayer: some View {
+        #if DEBUG
+        if AppLaunch.current.captureCamera {
+            Color.black
+        } else {
+            scanner
+        }
+        #else
+        scanner
+        #endif
+    }
+
+    private var scanner: some View {
         DocumentScannerView { result in
             switch result {
             case .failure:
@@ -19,6 +38,5 @@ struct CameraStep: View {
                 onScanned(first)
             }
         }
-        .ignoresSafeArea()
     }
 }

@@ -676,6 +676,9 @@ struct ShellView: View {
     /// The canned (image, rawText) used by the camera-less UI test, or nil in production.
     private var captureStub: (image: UIImage, rawText: String)? {
         #if DEBUG
+        // -uiTestCaptureCamera: suppress the canned feed so the flow stays on `.camera`,
+        // letting the import-affordance UI test inspect the camera stage.
+        if AppLaunch.current.captureCamera { return nil }
         return AppLaunch.current.cannedScan
         #else
         return nil
