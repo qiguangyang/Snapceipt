@@ -137,6 +137,124 @@ describe("e2e (real HTTP): /export csv -> /export/dl round-trip", () => {
     expect(dl.text).toContain("-33.00");
   });
 
+  it("registered business -> POST /export bas -> downloads BOTH pdf and csv (capital+gstFree persist)", async () => {
+    const email = `e2e-bas+${Date.now()}@example.com`;
+    const deviceId = crypto.randomUUID();
+    const ip = "203.0.113.79";
+
+    const reqRes = await api("/auth/magic-link/request", {
+      method: "POST", headers: { "cf-connecting-ip": ip }, body: { email },
+    });
+    const verifyRes = await api("/auth/magic-link/verify", {
+      method: "POST", headers: { "cf-connecting-ip": ip, "x-device-id": deviceId }, body: { token: reqRes.json.devToken },
+    });
+    const userId: string = verifyRes.json.user.id;
+    const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
+
+    const profileId = crypto.randomUUID();
+    const incomeId = crypto.randomUUID();
+    const expenseId = crypto.randomUUID();
+    const capitalId = crypto.randomUUID();
+    const gstFreeId = crypto.randomUUID();
+    const t = Date.now();
+    const pushRes = await api("/sync/push", {
+      method: "POST", headers: authHeaders,
+      body: {
+        deviceId,
+        mutations: [
+          {
+            mutationId: crypto.randomUUID(), entityType: "profile", entityId: profileId,
+            op: "upsert", updatedAt: t,
+            payload: {
+              id: profileId, userId, type: "profile", name: "Acme Pty Ltd",
+              profileType: "business", gstRegistered: true,
+              accent1: "#000", accent2: "#111", accent3: "#222",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            mutationId: crypto.randomUUID(), entityType: "transaction", entityId: incomeId,
+            op: "upsert", updatedAt: t,
+            payload: {
+              id: incomeId, userId, profileId, type: "transaction", merchant: "Client Co",
+              catKey: "income", amountCents: 1100000, gstCents: 100000, gstFree: false, capital: false, gstSource: "derived",
+              currency: "AUD", txnDate: "2026-05-10", mode: "business",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            mutationId: crypto.randomUUID(), entityType: "transaction", entityId: expenseId,
+            op: "upsert", updatedAt: t,
+            payload: {
+              id: expenseId, userId, profileId, type: "transaction", merchant: "Officeworks",
+              catKey: "office", amountCents: -110000, gstCents: 10000, gstFree: false, capital: false, gstSource: "printed",
+              currency: "AUD", txnDate: "2026-05-12", mode: "business",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            // Capital purchase > $1,000 — MUST land in G10 (proves `capital` persists).
+            mutationId: crypto.randomUUID(), entityType: "transaction", entityId: capitalId,
+            op: "upsert", updatedAt: t,
+            payload: {
+              id: capitalId, userId, profileId, type: "transaction", merchant: "Dell",
+              catKey: "software", amountCents: -220000, gstCents: 20000, gstFree: false, capital: true, gstSource: "derived",
+              currency: "AUD", txnDate: "2026-05-14", mode: "business",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+          {
+            // GST-free purchase — MUST move into G14 (removed from G16), changing 1B
+            // (proves `gstFree` persists). With it: G17/G19 = 330,000 → 1B = 30,000.
+            // If `gstFree` were dropped (defaulted false) G19 = 363,000 → 1B = 33,000.
+            mutationId: crypto.randomUUID(), entityType: "transaction", entityId: gstFreeId,
+            op: "upsert", updatedAt: t,
+            payload: {
+              id: gstFreeId, userId, profileId, type: "transaction", merchant: "Woolworths",
+              catKey: "groceries", amountCents: -33000, gstCents: null, gstFree: true, capital: false, gstSource: null,
+              currency: "AUD", txnDate: "2026-05-16", mode: "business",
+              createdAt: t, updatedAt: t, deletedAt: null, rev: 0, lastEditedDeviceId: deviceId,
+            },
+          },
+        ],
+      },
+    });
+    expect(pushRes.status).toBe(200);
+
+    const exportRes = await api("/export", {
+      method: "POST", headers: authHeaders,
+      body: { profileId, format: "bas", from: "2026-04-01", to: "2026-06-30" },
+    });
+    expect(exportRes.status).toBe(200);
+    expect(exportRes.json.bas.g1).toBe(1100000);
+    expect(exportRes.json.bas.oneA).toBe(100000);
+    // 1B = 30,000 ONLY because the GST-free $330 purchase persisted into G14;
+    // a dropped gstFree column would yield 1B = 33,000 (G19 = 363,000).
+    expect(exportRes.json.bas.oneB).toBe(30000);
+    // net = 1A - 1B = 100,000 - 30,000 = 70,000.
+    expect(exportRes.json.bas.netGst).toBe(70000);
+    expect(exportRes.json.emailed).toBe(false);
+
+    const pdfPath = new URL(exportRes.json.pdfUrl).pathname;
+    const pdf = await fetch(`${baseUrl}${pdfPath}`);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toContain("application/pdf");
+    expect(new Uint8Array(await pdf.arrayBuffer())[0]).toBe(0x25); // %
+
+    const csvPath = new URL(exportRes.json.csvUrl).pathname;
+    const csv = await fetch(`${baseUrl}${csvPath}`);
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("content-type")).toContain("text/csv");
+    const csvText = await csv.text();
+    expect(csvText).toContain("bas_labels");
+    expect(csvText).toContain("# TOTALS");
+    // The capital purchase persisted -> the worksheet footer carries a non-zero G10.
+    expect(csvText).toContain("G10=2200.00");
+    // The capital row carries the G10 label; the GST-free row carries G11;G14.
+    expect(csvText.split("\n").find((l) => l.startsWith("2026-05-14"))).toContain("G10");
+    expect(csvText.split("\n").find((l) => l.startsWith("2026-05-16"))).toContain("G11;G14");
+  });
+
   it("rejects accountant format without toEmail (validation reachable over HTTP)", async () => {
     const email = `e2e-export-acct+${Date.now()}@example.com`;
     const deviceId = crypto.randomUUID();
