@@ -19,6 +19,10 @@ struct ExportSheet: View {
     let savedAccountantEmail: String?
     let onSaveAccountantEmail: (String) -> Void
     let onClose: () -> Void
+    /// When true (launched from BasView), the format is hard-pinned to `bas`: the
+    /// tiles are hidden and Generate calls exportBas (spec §4.7). Default false.
+    var basPinned: Bool = false
+    var paygInstalmentCents: Int = 0
 
     @Environment(\.accent) private var accent
 
@@ -35,9 +39,9 @@ struct ExportSheet: View {
             header
             ScrollView {
                 VStack(spacing: 14) {
-                    formatTiles
+                    if !basPinned { formatTiles }
                     detailCard
-                    if format == .accountant { emailField }
+                    if format == .accountant && !basPinned { emailField }
                     cta
                     statusLine
                 }
@@ -162,6 +166,16 @@ struct ExportSheet: View {
     private func generate() async {
         phase = .inProgress
         do {
+            if basPinned {
+                let result = try await api.exportBas(profileId: profileId, from: from, to: to,
+                                                     paygInstalmentCents: paygInstalmentCents, toEmail: nil)
+                if case let .basPack(url, _, _, _, _) = result {
+                    let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+                    shareURL = URL(string: full)
+                }
+                phase = .idle
+                return
+            }
             let result = try await api.export(profileId: profileId, format: format.rawValue,
                                                from: from, to: to,
                                                toEmail: format == .accountant ? email : nil)
@@ -175,6 +189,8 @@ struct ExportSheet: View {
                 onSaveAccountantEmail(email)
                 phase = .idle
                 onClose()
+            case .basPack:
+                phase = .idle   // unreachable via the non-pinned export()
             }
         } catch let e as APIError {
             phase = .error(e.message)

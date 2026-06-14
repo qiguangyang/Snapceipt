@@ -228,4 +228,24 @@ enum AccessibilityID {
     static let privacyScreen = "privacy.screen"
     static let privacyAppLockToggle = "privacy.applock.toggle"
     static let appLockUnlock = "applock.unlock"
+
+    // BAS (F8)
+    static let reportsBasCard = "reports.bas.card"
+    static let basScreen = "bas.screen"
+    static let basPeriodStepper = "bas.period.stepper"
+    static let basCopyG1 = "bas.copy.g1"
+    static let basCopy1A = "bas.copy.1a"
+    static let basCopy1B = "bas.copy.1b"
+    static let basReconcileRowPrefix = "bas.reconcile.row."          // + transaction.id / "income"/"estimated"/"printed"
+    static let basConfirmIncome = "bas.reconcile.confirmIncome"      // confirm-all-income quick-fix
+    static let basPaygField = "bas.payg.field"
+    static let basFullWorksheetToggle = "bas.fullWorksheet.toggle"
+    static let basMarkLodged = "bas.markLodged"
+    static let basExport = "bas.export"
+    // Transaction editor GST fields (F8)
+    static let txnGstFreeToggle = "txn.gstFree.toggle"
+    static let txnCapitalToggle = "txn.capital.toggle"
+    static let txnGstAmountField = "txn.gstAmount.field"
+    // Tax & GST ABN hint (F8)
+    static let taxAbnHint = "tax.abn.hint"
 }

@@ -102,6 +102,33 @@ describe("transactionEntity", () => {
     expect(r.success).toBe(true);
   });
 
+  it("accepts the BAS GST-treatment columns (gstFree/capital/gstSource)", () => {
+    const r = transactionEntity.safeParse(
+      env({
+        type: "transaction",
+        amountCents: -22000,
+        catKey: "office",
+        gstFree: false,
+        capital: true,
+        gstSource: "derived",
+      }),
+    );
+    expect(r.success).toBe(true);
+    if (r.success) {
+      // Typed-field assertion: passthrough keeps unknown extras as `unknown`,
+      // so these are `undefined` on the inferred type until the fields are added.
+      expect(r.data.capital).toBe(true);
+      expect(r.data.gstSource).toBe("derived");
+    }
+  });
+
+  it("accepts gstSource null and the flags omitted (back-compat)", () => {
+    const r = transactionEntity.safeParse(
+      env({ type: "transaction", amountCents: -3300, catKey: "groceries", gstSource: null }),
+    );
+    expect(r.success).toBe(true);
+  });
+
   it("rejects a non-integer amountCents (money must be cents)", () => {
     const r = transactionEntity.safeParse(env({ type: "transaction", amountCents: 12.5 }));
     expect(r.success).toBe(false);

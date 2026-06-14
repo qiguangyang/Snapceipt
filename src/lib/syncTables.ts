@@ -31,6 +31,9 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       isAi: "is_ai",
       note: "note",
       gstCents: "gst_cents",
+      gstFree: "gst_free",
+      capital: "capital",
+      gstSource: "gst_source",
       logbookLink: "logbook_link",
       mileageTripId: "mileage_trip_id",
       source: "source",
@@ -79,6 +82,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       defaultDeductiblePct: "default_deductible_pct",
       isIncome: "is_income",
       sortOrder: "sort_order",
+      gstFreeDefault: "gst_free_default",
     },
   },
   smartRule: {

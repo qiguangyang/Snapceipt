@@ -9,6 +9,7 @@ struct AppLaunch {
     let useStub: Bool
     let reset: Bool
     let seed: Bool
+    let basSeed: Bool
     let lockAvailable: Bool
     let tour: Bool
     let tourEmpty: Bool
@@ -42,6 +43,7 @@ struct AppLaunch {
         useStub = arguments.contains("-uiTestStub")
         reset = arguments.contains("-uiTestReset")
         seed = arguments.contains("-uiTestSeed")
+        basSeed = arguments.contains("-uiTestBasSeed")
         lockAvailable = arguments.contains("-uiTestLockAvailable")
         tour = arguments.contains("-uiTestTour")
         tourEmpty = arguments.contains("-uiTestTourEmpty")
@@ -195,6 +197,43 @@ struct AppLaunch {
         context.insert(Budget(userId: DevAccount.userId, profileId: p2.id, categoryId: nil,
                               label: "Personal cap", capCents: 300_00, alertThresholdPct: 90))
         try? context.save()
+    }
+
+    /// BAS fixture: a GST-registered Business profile p1 with the canonical scenario
+    /// (income left unconfirmed → headline "Estimated") + a NON-registered business p2
+    /// to verify the card is hidden. Under -uiTestBasSeed.
+    func applyBasSeedIfNeeded(authStore: AuthStore, context: ModelContext) {
+        guard basSeed else { return }
+        authStore.save(SessionResponse(
+            accessToken: "basseed-access", refreshToken: "basseed-refresh", expiresIn: 900,
+            user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
+        let p1 = Profile(userId: DevAccount.userId, name: "Studio North", type: "business",
+                         initials: "SN", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950",
+                         gstRegistered: true, sortOrder: 0, isDefault: true)
+        let p2 = Profile(userId: DevAccount.userId, name: "Side Hustle", type: "business",
+                         initials: "SH", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
+                         gstRegistered: false, sortOrder: 1, isDefault: false)
+        context.insert(p1); context.insert(p2)
+        let cal: Calendar = {
+            var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c
+        }()
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+        let iso: DateFormatter = {
+            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"; return f
+        }()
+        func day(_ d: Int) -> String { iso.string(from: cal.date(byAdding: .day, value: d, to: monthStart)!) }
+        // Income (unconfirmed → headline reads "Estimated" until reviewed).
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, catKey: "income",
+                                   amountCents: 1_100_000, txnDate: day(1), gstSource: "derived"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Officeworks",
+                                   catKey: "office", amountCents: -110_000, txnDate: day(2), gstSource: "derived"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Apple",
+                                   catKey: "software", amountCents: -220_000, txnDate: day(3),
+                                   capital: true, gstSource: "derived"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Woolworths",
+                                   catKey: "groceries", amountCents: -33_000, txnDate: day(4),
+                                   gstFree: true, gstSource: nil))
     }
 
     /// Tour-only fixture: a superset of the seed fixture, populated on BOTH

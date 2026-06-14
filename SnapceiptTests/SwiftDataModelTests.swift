@@ -144,4 +144,30 @@ struct SwiftDataModelTests {
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         #expect(container.schema.entities.isEmpty == false)
     }
+
+    @MainActor @Test func transactionAndCategoryCarryBasColumns() throws {
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let t = Transaction(userId: "u1", profileId: "p1", catKey: "groceries",
+                            amountCents: -33_000, txnDate: "2026-04-01",
+                            gstFree: true, capital: false, gstSource: nil)
+        ctx.insert(t)
+        let c = Snapceipt.Category(userId: "u1", profileId: "p1", key: "groceries", label: "Groceries",
+                         icon: "tag", tint: "#C99A22", soft: "#F6EECE", gstFreeDefault: true)
+        ctx.insert(c)
+        try ctx.save()
+        let tx = try ctx.fetch(FetchDescriptor<Transaction>()).first!
+        #expect(tx.gstFree == true)
+        #expect(tx.capital == false)
+        #expect(tx.gstSource == nil)
+        let cat = try ctx.fetch(FetchDescriptor<Snapceipt.Category>()).first!
+        #expect(cat.gstFreeDefault == true)
+        // Defaults: a txn/category built WITHOUT the new params defaults to false/nil.
+        let t2 = Transaction(userId: "u1", profileId: "p1", catKey: "fuel",
+                             amountCents: -80_00, txnDate: "2026-04-02")
+        #expect(t2.gstFree == false && t2.capital == false && t2.gstSource == nil)
+        let c2 = Snapceipt.Category(userId: "u1", profileId: "p1", key: "fuel", label: "Fuel",
+                          icon: "tag", tint: "#2F6FB0", soft: "#E2ECF6")
+        #expect(c2.gstFreeDefault == false)
+    }
 }

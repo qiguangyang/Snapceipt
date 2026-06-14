@@ -9,6 +9,9 @@ import { buildExportCsv, type CsvTxnRow } from "../lib/csvExport";
 import { buildExportPdf, type PdfTxnRow } from "../lib/pdfExport";
 import { sendExportEmail } from "../lib/email";
 import { signDownloadToken, verifyDownloadToken, DOWNLOAD_TTL_SECONDS } from "../lib/exportToken";
+import { basEngine, type BasTxn } from "../lib/basEngine";
+import { buildBasPdf } from "../lib/pdfBas";
+import { buildBasCsv, type BasCsvTxnRow } from "../lib/csvBas";
 
 /**
  * POST /export        — Bearer (global auth) + rate tier "export" (app.ts).
@@ -62,8 +65,8 @@ exportRoutes.post("/", validate("json", exportRequestSchema), async (c) => {
 
   // Profile ownership (scoped to the authed user).
   const profile = await c.env.DB.prepare(
-    `SELECT id, name FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(body.profileId, userId).first<{ id: string; name: string }>();
+    `SELECT id, name, type, gst_registered, abn FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(body.profileId, userId).first<{ id: string; name: string; type: string; gst_registered: number; abn: string | null }>();
   if (!profile) throw new ApiError("FORBIDDEN", "Profile not found for this user");
 
   // Period transactions (deterministic: txn_date DESC, id ASC).
@@ -130,6 +133,94 @@ exportRoutes.post("/", validate("json", exportRequestSchema), async (c) => {
     await c.env.RECEIPTS.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
     const token = await signDownloadToken(c.env.JWT_SIGNING_KEY, key);
     return c.json({ url: `${origin}/export/dl/${token}`, expiresAt: nowMs() + DOWNLOAD_TTL_SECONDS * 1000 });
+  }
+
+  if (body.format === "bas") {
+    // Defence-in-depth gate (the UI never shows the entry for ineligible profiles).
+    // Shares the FORBIDDEN code with the ownership gate above; the message text is
+    // what distinguishes a BAS-eligibility rejection (asserted by the route tests).
+    if (profile.type !== "business" || profile.gst_registered !== 1) {
+      throw new ApiError("FORBIDDEN", "BAS export requires a GST-registered business profile");
+    }
+
+    // Re-query the slice including the BAS columns.
+    const { results: basTxns } = await c.env.DB.prepare(
+      `SELECT id, txn_date, merchant, cat_key, amount_cents, gst_cents, deductible_pct, payment_method, note, gst_free, capital, gst_source
+         FROM transactions
+        WHERE user_id = ? AND profile_id = ? AND txn_date >= ? AND txn_date <= ? AND deleted_at IS NULL
+        ORDER BY txn_date DESC, id ASC`,
+    ).bind(userId, body.profileId, body.from, body.to).all<BasCsvTxnRow>();
+
+    const bas = basEngine(
+      basTxns.map((r): BasTxn => ({ amountCents: r.amount_cents, gstFree: r.gst_free === 1, capital: r.capital === 1 })),
+      // Pass the REAL registration flag (contract-faithful): the engine's own
+      // !gstRegistered guard (forces 1A=0) stays the single enforcement point, so
+      // if the gate above is ever loosened the engine still won't fabricate 1A.
+      // The gate guarantees this is 1 here, so this is equivalently `true` today.
+      { gstRegistered: profile.gst_registered === 1, manual: { paygInstalmentCents: body.bas?.paygInstalmentCents ?? 0 } },
+    );
+
+    const pdf = await buildBasPdf({ profileName: profile.name, abn: profile.abn, periodLabel, bas });
+    const csv = await buildBasCsv({
+      profileName: profile.name,
+      periodLabel,
+      rows: basTxns,
+      bas,
+      receiptKeyByTxnId,
+      baseUrl: origin,
+      signDownload,
+    });
+
+    const pdfKey = `${userId}/exports/${exportId}.pdf`;
+    const csvKey = `${userId}/exports/${exportId}.csv`;
+    await c.env.RECEIPTS.put(pdfKey, pdf, { httpMetadata: { contentType: "application/pdf" } });
+    await c.env.RECEIPTS.put(csvKey, csv, { httpMetadata: { contentType: "text/csv" } });
+    const pdfToken = await signDownloadToken(c.env.JWT_SIGNING_KEY, pdfKey);
+    const csvToken = await signDownloadToken(c.env.JWT_SIGNING_KEY, csvKey);
+    const pdfUrl = `${origin}/export/dl/${pdfToken}`;
+    const csvUrl = `${origin}/export/dl/${csvToken}`;
+    const expiresAt = nowMs() + DOWNLOAD_TTL_SECONDS * 1000;
+    const basEcho = {
+      g1: bas.g1, oneA: bas.oneA, oneB: bas.oneB,
+      netGst: bas.netGstCents, payg: bas.paygCents, totalPayable: bas.totalPayableCents,
+    };
+
+    // No email requested → return the links.
+    if (!body.toEmail) {
+      return c.json({ pdfUrl, csvUrl, expiresAt, emailed: false, bas: basEcho });
+    }
+
+    // Email requested → reuse the export_accountant outbox kind, with the
+    // QUOTE-SEND graceful-degrade (try/catch): an absent/failing env.EMAIL
+    // degrades to emailed:false WITHOUT losing the links (unlike the accountant
+    // branch, which hard-fails).
+    const basOutboxId = uuidv7();
+    const basNow = nowMs();
+    await c.env.DB.prepare(
+      `INSERT INTO email_outbox (id, user_id, to_email, kind, subject, status, export_format, export_r2_key, created_at)
+       VALUES (?, ?, ?, 'export_accountant', ?, 'queued', 'pdf', ?, ?)`,
+    ).bind(basOutboxId, userId, body.toEmail, `Snapceipt BAS — ${profile.name}`, pdfKey, basNow).run();
+    const basUser = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
+      .bind(userId).first<{ email: string | null }>();
+    let emailed = false;
+    try {
+      await sendExportEmail(c.env, {
+        to: body.toEmail,
+        replyTo: basUser?.email ?? "noreply@snapceipt.cc",
+        profileName: profile.name,
+        periodLabel,
+        csv,
+        pdf,
+      });
+      await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)
+        .bind(nowMs(), basOutboxId).run();
+      emailed = true;
+    } catch (err) {
+      await c.env.DB.prepare(`UPDATE email_outbox SET status='failed', error=? WHERE id=?`)
+        .bind(String(err instanceof Error ? err.message : err), basOutboxId).run();
+      emailed = false;
+    }
+    return c.json({ pdfUrl, csvUrl, expiresAt, emailed, bas: basEcho });
   }
 
   // accountant: generate both, store the PDF, log the outbox row, send the email.

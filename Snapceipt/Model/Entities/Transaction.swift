@@ -22,6 +22,9 @@ final class Transaction: Syncable {
     var isAi: Bool
     var note: String?
     var gstCents: Int?
+    var gstFree: Bool                // per-txn GST-free classifier (G3/G14)
+    var capital: Bool                // per-expense capital flag (G10 vs G11)
+    var gstSource: String?           // "printed" | "derived" | "manual" | nil
     var logbookLink: String?         // "vehicle" | "wfh" | nil
     var mileageTripId: String?
     var source: String               // "manual" | "scan" | "email_in" | "import"
@@ -52,6 +55,9 @@ final class Transaction: Syncable {
         isAi: Bool = false,
         note: String? = nil,
         gstCents: Int? = nil,
+        gstFree: Bool = false,
+        capital: Bool = false,
+        gstSource: String? = nil,
         logbookLink: String? = nil,
         mileageTripId: String? = nil,
         source: String = "manual",
@@ -78,6 +84,9 @@ final class Transaction: Syncable {
         self.isAi = isAi
         self.note = note
         self.gstCents = gstCents
+        self.gstFree = gstFree
+        self.capital = capital
+        self.gstSource = gstSource
         self.logbookLink = logbookLink
         self.mileageTripId = mileageTripId
         self.source = source

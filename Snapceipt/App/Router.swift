@@ -23,6 +23,7 @@ enum Overlay: Equatable, Identifiable {
     case loyaltyAdd
     case loyaltyCard(id: String)
     case quotes
+    case bas
     case quoteEditor(id: String?)   // nil id = create a new quote
     case emailIn
     case emailInReview(id: String)
@@ -50,6 +51,7 @@ enum Overlay: Equatable, Identifiable {
         case .loyaltyAdd: return "loyaltyAdd"
         case .loyaltyCard(let id): return "loyaltyCard-\(id)"
         case .quotes: return "quotes"
+        case .bas: return "bas"
         case .quoteEditor(let id): return "quoteEditor-\(id ?? "new")"
         case .emailIn: return "emailIn"
         case .emailInReview(let id): return "emailInReview-\(id)"

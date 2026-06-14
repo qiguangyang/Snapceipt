@@ -10,6 +10,13 @@ enum ReceiptMapper {
         // total >= 0 always; expense negative, income positive.
         let signed = draft.categoryKey == CategoryKey.income.rawValue ? magnitude : -magnitude
 
+        // GST authority rule: gst-free ⇒ 0/nil; else honor the printed line as the
+        // manual/printed amount (provenance "printed" when a line was extracted).
+        let treatment: GstTreatment.Result = draft.gstFree
+            ? GstTreatment.applyGstFree(true, totalCents: magnitude)
+            : GstTreatment.Result(gstCents: draft.gst.map(cents),
+                                  gstSource: draft.gst != nil ? "printed" : nil)
+
         let txn = Transaction(
             userId: userId,
             profileId: profileId,
@@ -23,7 +30,10 @@ enum ReceiptMapper {
             deductiblePct: draft.deductible,
             paymentMethod: draft.paymentMethod,
             isAi: true,
-            gstCents: draft.gst.map(cents),
+            gstCents: treatment.gstCents,
+            gstFree: draft.gstFree,
+            capital: draft.capital,
+            gstSource: treatment.gstSource,
             source: "scan",
             extractionStatus: draft.extractionStatus
         )

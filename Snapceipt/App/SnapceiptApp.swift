@@ -47,6 +47,7 @@ struct SnapceiptApp: App {
         // (live journeys sign into a fresh account; a leftover profile would skip onboarding).
         launch.purgeLocalStoreIfNeeded(context: container.mainContext)
         launch.applySeedIfNeeded(authStore: auth, context: container.mainContext)
+        launch.applyBasSeedIfNeeded(authStore: auth, context: container.mainContext)
         launch.applyTourSeedIfNeeded(authStore: auth, context: container.mainContext)
         launch.applyTourEmptySeedIfNeeded(authStore: auth, context: container.mainContext)
         // Stub-bypassed under -uiTestStub (canEvaluate:{false}) so the lock gate

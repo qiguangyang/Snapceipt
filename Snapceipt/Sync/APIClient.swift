@@ -20,6 +20,10 @@ protocol APIClient {
     /// email the accountant pack. Returns the normalized `ExportResult`. (spec §4.2)
     func export(profileId: String, format: String, from: String, to: String,
                 toEmail: String?) async throws -> ExportResult
+    /// POST /export {format:"bas"} — render the BAS pack (PDF + CSV to R2, optional
+    /// accountant email) and return both links + the echoed cents summary. (spec §4.4)
+    func exportBas(profileId: String, from: String, to: String,
+                   paygInstalmentCents: Int, toEmail: String?) async throws -> ExportResult
     /// PUT /devices/me — upsert this device's apns token / quiet-hours / timezone /
     /// push_enabled. Keyed by the X-Device-Id header (attached by makeRequest). (§4.2)
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse
@@ -172,6 +176,16 @@ final class LiveAPIClient: APIClient {
             return .sent(status: status, outboxId: outboxId)
         }
         throw APIError.decoding
+    }
+
+    func exportBas(profileId: String, from: String, to: String,
+                   paygInstalmentCents: Int, toEmail: String?) async throws -> ExportResult {
+        let body = BasExportRequestBody(profileId: profileId, format: "bas", from: from, to: to,
+                                        bas: .init(paygInstalmentCents: paygInstalmentCents),
+                                        toEmail: toEmail)
+        let resp: BasExportResponse = try await send("POST", "/export", body: body, authenticated: true)
+        return .basPack(pdfUrl: resp.pdfUrl, csvUrl: resp.csvUrl, expiresAt: resp.expiresAt,
+                        emailed: resp.emailed, bas: resp.bas)
     }
 
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {

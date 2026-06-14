@@ -108,6 +108,8 @@ struct ShellView: View {
     /// Tracks whichever Reports period was active when the user tapped Export, so
     /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
     @State private var exportPeriod: Period = .month
+    /// When set, the next `.export` sheet renders as the BAS-pinned pack (spec §4.7).
+    @State private var basExportPinned = false
 
     var body: some View {
         let accent = profiles.accent
@@ -259,6 +261,19 @@ struct ShellView: View {
             }
         }
         .overlay {
+            if router.overlay == .bas {
+                BasView(context: profiles.context, api: captureAPI, userId: profiles.userId,
+                        profileId: profiles.activeProfileId,
+                        profileName: profiles.activeProfile?.name ?? "",
+                        gstRegistered: profiles.activeProfile?.gstRegistered ?? false,
+                        basPeriod: basPeriodForActive,
+                        startMonth: profiles.activeFinancialYearStartMonth(),
+                        onOpenExport: { basExportPinned = true; router.present(.export) },
+                        onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
             if case let .quoteEditor(id) = router.overlay {
                 QuoteEditorView(context: profiles.context, sync: sync, api: captureAPI,
                                 userId: profiles.userId, profileId: profiles.activeProfileId,
@@ -341,13 +356,36 @@ struct ShellView: View {
         .toastHost(toasts)
         .task {
             profiles.rescope(to: auth.session?.userId ?? "")
+            // One-time per-profile GST-default backfill (spec §1/§4.2): upgrading installs
+            // seeded their categories BEFORE `gstFreeDefault` existed, so groceries stayed
+            // taxable and over-claimed GST via ÷11. `backfillGstDefaults` flips groceries →
+            // gstFreeDefault and is idempotent (UserDefaults-guarded per profile), so running
+            // it on every launch/activation is safe. `CategorySeeder.ensure` is only called
+            // lazily from CategoriesViewModel.init, which is NOT a launch path — so this is the
+            // launch wire-in for the backfill alongside rescope.
+            backfillGstDefaultsForActive()
             await sync.sync()
+        }
+        // Re-run the (idempotent) backfill when the active profile changes, so switching to a
+        // not-yet-backfilled profile fixes its groceries GST default too.
+        .onChange(of: profiles.activeProfileId) { _, _ in
+            backfillGstDefaultsForActive()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await sync.sync() }
             }
         }
+    }
+
+    /// One-time GST-default backfill for the ACTIVE profile (spec §1/§4.2). Idempotent and
+    /// guarded by a per-profile UserDefaults flag inside `backfillGstDefaults`, so it is safe
+    /// to call on every launch and on every active-profile change. Skips when there is no
+    /// active profile yet (empty id during the rescope handoff).
+    private func backfillGstDefaultsForActive() {
+        let pid = profiles.activeProfileId
+        guard !pid.isEmpty else { return }
+        CategorySeeder.backfillGstDefaults(profileId: pid, context: profiles.context, sync: sync)
     }
 
     // MARK: - Tab content
@@ -366,9 +404,15 @@ struct ShellView: View {
                 profileId: profiles.activeProfileId,
                 profileName: profiles.activeProfile?.name ?? "",
                 startMonth: profiles.activeFinancialYearStartMonth(),
-                onOpenExport: { period in exportPeriod = period; router.present(.export) },
+                onOpenExport: { period in basExportPinned = false; exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
-                onOpenWFH: { router.present(.wfh) }
+                onOpenWFH: { router.present(.wfh) },
+                profileType: profiles.activeProfile?.type ?? "personal",
+                gstRegistered: profiles.activeProfile?.gstRegistered ?? false,
+                basDue: BasSchedule.nextDue(basPeriodForActive, on: Epoch.now()),
+                basNetCents: basNetCentsForActive,
+                basLodged: basLodgedForActive,
+                onOpenBas: { router.present(.bas) }
             )
             .environment(\.accent, accent)
         case .profile:
@@ -381,7 +425,7 @@ struct ShellView: View {
                 onOpenEmailIn: { router.present(.emailIn) },
                 onOpenTax: { router.present(.tax) },
                 onOpenCategories: { router.present(.categories) },
-                onOpenExport: { router.present(.export) },
+                onOpenExport: { basExportPinned = false; router.present(.export) },
                 onOpenPrivacy: { router.present(.privacy) },
                 onOpenAccount: { router.present(.account) },
                 onOpenProfileDetail: { router.present(.profileDetail(id: $0)) },
@@ -511,7 +555,7 @@ struct ShellView: View {
             get: {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
                      .emailIn, .emailInReview,
                      .tax, .categories, .ruleEditor, .profileDetail,
                      .account, .privacy, .changeEmail:
@@ -527,7 +571,7 @@ struct ShellView: View {
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
-                                               Overlay.quotes.id, Overlay.emailIn.id,
+                                               Overlay.quotes.id, Overlay.bas.id, Overlay.emailIn.id,
                                                Overlay.tax.id, Overlay.categories.id,
                                                Overlay.account.id, Overlay.privacy.id, Overlay.changeEmail.id]
                 if newValue == nil, let cur = router.overlay,
@@ -570,14 +614,23 @@ struct ShellView: View {
                 deductibleCents: exportWindow.deductibleCents,
                 savedAccountantEmail: exportWindow.savedAccountantEmail,
                 onSaveAccountantEmail: { saveAccountantEmail($0) },
-                onClose: { router.dismissOverlay() }
+                onClose: { basExportPinned = false; router.dismissOverlay() },
+                basPinned: basExportPinned,
+                paygInstalmentCents: basExportPinned
+                    ? BasLocalStore().paygInstalmentCents(
+                        profileId: profiles.activeProfileId,
+                        periodKey: BasPeriodKey.make(
+                            window: basWindowForActive,
+                            basPeriod: basPeriodForActive,
+                            startMonth: profiles.activeFinancialYearStartMonth()))
+                    : 0
             )
             .frame(maxHeight: .infinity, alignment: .bottom)
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .emailIn, .emailInReview,
              .tax, .categories, .ruleEditor, .profileDetail,
              .account, .privacy, .changeEmail:
@@ -626,11 +679,22 @@ struct ShellView: View {
     /// scoped to the active profile. `exportPeriod` is set when the user taps Export in
     /// ReportsView, so this window reflects whichever period was active (spec §2.8/§6).
     /// Receipts count = transactions in range; locally we show the in-range txn count.
+    ///
+    /// BAS-pinned exception (spec §4.7): when the sheet is the BAS pack (`basExportPinned`),
+    /// the window is pinned to `basWindowForActive` — the SAME window that keys the PAYG
+    /// instalment (~:600) and drives the on-screen Simpler-BAS spine — so the emitted
+    /// from/to can never drift from the spine for a quarterly profile (a `.month` default
+    /// here would otherwise POST a monthly range with the quarterly PAYG).
     private var exportWindow: (from: String, to: String, label: String,
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
         let now = Epoch.now()
-        let window = exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
+        let window = BasExportWindow.resolve(
+            pinned: basExportPinned,
+            basWindow: basWindowForActive,
+            defaultPeriod: exportPeriod,
+            now: now,
+            startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId
         let td = FetchDescriptor<Transaction>(
@@ -652,6 +716,46 @@ struct ShellView: View {
         let saved = (try? profiles.context.fetch(sd))?.first?.accountantEmail
         return (iso.string(from: window.start), iso.string(from: window.end.addingTimeInterval(-86_400)),
                 window.label, inRange.count, deductible, saved)
+    }
+
+    /// The active profile's BAS period (local pref; defaults quarterly).
+    private var basPeriodForActive: BasPeriod {
+        BasPeriod(rawValue: UserDefaults.standard
+            .string(forKey: "sc.tax.\(profiles.activeProfileId).basPeriod") ?? "") ?? .quarterly
+    }
+
+    /// The active profile's BAS window (current in-progress period).
+    private var basWindowForActive: Period.Window {
+        let p: Period = (basPeriodForActive == .quarterly) ? .quarter : .month
+        return p.window(now: Epoch.now(), startMonth: profiles.activeFinancialYearStartMonth())
+    }
+
+    /// Net GST cents for the Reports BAS card (one engine pass over the in-window txns).
+    private var basNetCentsForActive: Int {
+        guard profiles.activeProfile?.type == "business",
+              profiles.activeProfile?.gstRegistered == true else { return 0 }
+        let pid = profiles.activeProfileId
+        let rows = (try? profiles.context.fetch(FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }))) ?? []
+        let iso = ExportDateFormatter.shared
+        let w = basWindowForActive
+        let txns = rows.filter { iso.date(from: $0.txnDate).map { $0 >= w.start && $0 < w.end } ?? false }
+            .map { BasEngine.Txn(amountCents: $0.amountCents, gstFree: $0.gstFree,
+                                 capital: $0.capital, txnDate: $0.txnDate) }
+        let payg = BasLocalStore().paygInstalmentCents(
+            profileId: pid,
+            periodKey: BasPeriodKey.make(window: w, basPeriod: basPeriodForActive,
+                                         startMonth: profiles.activeFinancialYearStartMonth()))
+        return BasEngine.compute(txns: txns, gstRegistered: true,
+                                 manual: BasEngine.Manual(paygInstalmentCents: payg)).netGstCents
+    }
+
+    /// Whether the active profile's current BAS period has a lodged snapshot.
+    private var basLodgedForActive: Bool {
+        let w = basWindowForActive
+        let key = BasPeriodKey.make(window: w, basPeriod: basPeriodForActive,
+                                    startMonth: profiles.activeFinancialYearStartMonth())
+        return BasLocalStore().lodgedSnapshot(profileId: profiles.activeProfileId, periodKey: key) != nil
     }
 
     /// Persist the accountant email on the active profile's TaxSettings + enqueue sync.

@@ -77,10 +77,43 @@ struct ExportResponse: Decodable {
     let outboxId: String?
 }
 
+/// The cents summary echoed by the bas-format export so the caller can reconcile
+/// screen-vs-pack (spec §4.4).
+struct BasEcho: Decodable, Equatable {
+    let g1: Int
+    let oneA: Int
+    let oneB: Int
+    let netGst: Int
+    let payg: Int
+    let totalPayable: Int
+}
+
+/// Decoded POST /export {format:"bas"} response (a genuinely new shape — two links
+/// + an echoed summary, NOT the pdf/csv {url} or accountant {status} shape).
+struct BasExportResponse: Decodable {
+    let pdfUrl: String
+    let csvUrl: String
+    let expiresAt: Int
+    let emailed: Bool
+    let bas: BasEcho
+}
+
+/// POST /export body for the bas format: { profileId, format:"bas", from, to, bas:{paygInstalmentCents}, toEmail? }.
+struct BasExportRequestBody: Encodable {
+    let profileId: String
+    let format: String   // always "bas"
+    let from: String
+    let to: String
+    let bas: Payload
+    var toEmail: String?
+    struct Payload: Encodable { let paygInstalmentCents: Int }
+}
+
 /// The normalized export outcome the UI consumes.
 enum ExportResult: Equatable {
     case download(url: String, expiresAt: Int)
     case sent(status: String, outboxId: String)
+    case basPack(pdfUrl: String, csvUrl: String, expiresAt: Int, emailed: Bool, bas: BasEcho)
 }
 
 // MARK: - Auth responses
