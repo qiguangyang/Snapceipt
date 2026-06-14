@@ -104,5 +104,8 @@ app.route("/quotes", quotesRoutes);
 app.route("/profiles", inboxRoutes);
 // Protected: account ops (change email via code, delete account).
 app.route("/", accountRoutes);
+// Public unauthenticated webhook — IP-keyed via the default tier's fallback
+// (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
+app.use("/appstore/*", rateLimit("default"));
 app.route("/appstore", appstoreRoutes);
 app.route("/", miscRoutes);

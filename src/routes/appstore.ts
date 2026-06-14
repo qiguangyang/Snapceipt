@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { nowMs } from "../lib/time";
 import { validate } from "./auth";
-import { applyNotification, decodeSignedPayload } from "../lib/appStoreNotifications";
+import { applyNotification, decodeSignedPayload, NOOP } from "../lib/appStoreNotifications";
 
 /**
  * App Store Server Notifications V2 webhook. Public (Apple posts unauthenticated),
@@ -24,7 +24,13 @@ import { applyNotification, decodeSignedPayload } from "../lib/appStoreNotificat
  */
 export const appstoreRoutes = new Hono<AppEnv>();
 
-const notificationBody = z.object({ signedPayload: z.string().min(1) });
+// 16 KiB ceiling — a JWS with a real x5c cert chain is well under this; anything
+// larger is almost certainly malformed or an abuse attempt.
+const MAX_SIGNED_PAYLOAD_BYTES = 16_384;
+
+const notificationBody = z.object({
+  signedPayload: z.string().min(1).max(MAX_SIGNED_PAYLOAD_BYTES),
+});
 
 appstoreRoutes.post("/notifications", validate("json", notificationBody), async (c) => {
   const { signedPayload } = c.req.valid("json");
@@ -35,9 +41,29 @@ appstoreRoutes.post("/notifications", validate("json", notificationBody), async 
     return c.json({ ok: true, ignored: "undecodable" });
   }
 
-  const update = applyNotification(decoded);
-  const now = nowMs();
+  // Fix 4: reject notifications with no/empty originalTransactionId — these cannot
+  // be scoped to a user row and indicate a malformed or forged payload.
+  if (!decoded.originalTransactionId) {
+    return c.json({ ok: false, error: "VALIDATION_FAILED" }, 400);
+  }
 
+  const update = applyNotification(decoded);
+
+  // Fix 1: NOOP sentinel means the notification type carries no entitlement change
+  // (unknown / informational types). Preserve the row's last authoritative state.
+  if (update === NOOP) {
+    return c.json({ ok: true, ignored: "noop" });
+  }
+
+  const now = nowMs();
+  // signedDate is the top-level epoch-ms timestamp from the V2 responseBodyV2
+  // payload. Use it as the event time for the monotonic replay guard; fall back
+  // to now if the field is absent (should not happen for well-formed Apple payloads).
+  const eventAt = decoded.signedDateMs ?? now;
+
+  // Fix 2: monotonic guard — only apply if the incoming event is at least as new
+  // as the last applied event. A replayed stale notification (e.g. an EXPIRED that
+  // arrives after a DID_RENEW was processed) is silently no-oped.
   // Scope by Apple's stable originalTransactionId (tagged on the user row at first
   // purchase / link). No match -> no-op (still 200) so Apple does not retry.
   await c.env.DB.prepare(
@@ -45,10 +71,21 @@ appstoreRoutes.post("/notifications", validate("json", notificationBody), async 
         SET plan = ?,
             subscription_status = ?,
             subscription_expires_at = ?,
+            subscription_last_event_at = ?,
             updated_at = ?
-      WHERE original_transaction_id = ? AND deleted_at IS NULL`,
+      WHERE original_transaction_id = ?
+        AND deleted_at IS NULL
+        AND (subscription_last_event_at IS NULL OR ? >= subscription_last_event_at)`,
   )
-    .bind(update.plan, update.subscriptionStatus, update.subscriptionExpiresAt, now, decoded.originalTransactionId)
+    .bind(
+      update.plan,
+      update.subscriptionStatus,
+      update.subscriptionExpiresAt,
+      eventAt,
+      now,
+      decoded.originalTransactionId,
+      eventAt,
+    )
     .run();
 
   return c.json({ ok: true });

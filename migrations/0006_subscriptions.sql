@@ -8,3 +8,4 @@ ALTER TABLE users ADD COLUMN subscription_status TEXT;            -- 'active'|'e
 ALTER TABLE users ADD COLUMN subscription_expires_at INTEGER;     -- epoch ms; NULL when never subscribed
 ALTER TABLE users ADD COLUMN original_transaction_id TEXT;        -- Apple originalTransactionId (stable per subscriber)
 CREATE INDEX ix_users_orig_txn ON users(original_transaction_id) WHERE original_transaction_id IS NOT NULL;
+ALTER TABLE users ADD COLUMN subscription_last_event_at INTEGER;  -- epoch ms; monotonic guard for replay protection

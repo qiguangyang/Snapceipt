@@ -14,6 +14,8 @@ function jws(payload: unknown): string {
 /**
  * Build a `signedPayload` whose decoded data carries the given notification type,
  * productId, originalTransactionId and expiry — the exact shape our webhook reads.
+ * `signedDateMs` is the top-level responseBodyV2 timestamp (epoch ms); defaults to
+ * Date.now() when not supplied (simulates a real Apple notification).
  */
 export function makeSignedNotification(opts: {
   notificationType: string;
@@ -21,9 +23,12 @@ export function makeSignedNotification(opts: {
   productId?: string;
   originalTransactionId: string;
   expiresDateMs?: number;
+  /** Top-level signedDate (epoch ms). Defaults to Date.now(). */
+  signedDateMs?: number;
 }): string {
   const productId = opts.productId ?? "app.snapceipt.pro.monthly";
   const expiresDateMs = opts.expiresDateMs ?? 9_999_999_999_000;
+  const signedDate = opts.signedDateMs ?? Date.now();
   const signedTransactionInfo = jws({
     productId,
     originalTransactionId: opts.originalTransactionId,
@@ -37,6 +42,7 @@ export function makeSignedNotification(opts: {
   return jws({
     notificationType: opts.notificationType,
     subtype: opts.subtype,
+    signedDate,
     data: { signedTransactionInfo, signedRenewalInfo },
   });
 }
