@@ -175,6 +175,10 @@ struct ExportSheet: View {
                 onSaveAccountantEmail(email)
                 phase = .idle
                 onClose()
+            case .basPack:
+                // Placeholder: the non-pinned export() never returns .basPack. The
+                // real BAS-pinned path is wired in Task 17.
+                phase = .idle
             }
         } catch let e as APIError {
             phase = .error(e.message)

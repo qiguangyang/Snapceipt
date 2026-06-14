@@ -82,6 +82,13 @@ final class StubAPIClient: APIClient {
         }
         return .download(url: "/export/dl/stub-token", expiresAt: 1_790_000_000_000)
     }
+    func exportBas(profileId: String, from: String, to: String,
+                   paygInstalmentCents: Int, toEmail: String?) async throws -> ExportResult {
+        .basPack(pdfUrl: "/export/dl/stub-bas-pdf", csvUrl: "/export/dl/stub-bas-csv",
+                 expiresAt: 1_790_000_000_000, emailed: toEmail != nil,
+                 bas: BasEcho(g1: 1_100_000, oneA: 100_000, oneB: 30_000,
+                              netGst: 70_000, payg: paygInstalmentCents, totalPayable: 70_000 + paygInstalmentCents))
+    }
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "stub-device")
     }

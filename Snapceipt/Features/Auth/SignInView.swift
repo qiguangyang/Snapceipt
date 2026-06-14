@@ -183,6 +183,12 @@ final class PreviewAPIClient: APIClient {
                 toEmail: String?) async throws -> ExportResult {
         .download(url: "/export/dl/preview-token", expiresAt: 1_790_000_000_000)
     }
+    func exportBas(profileId: String, from: String, to: String,
+                   paygInstalmentCents: Int, toEmail: String?) async throws -> ExportResult {
+        .basPack(pdfUrl: "/export/dl/preview-bas-pdf", csvUrl: "/export/dl/preview-bas-csv",
+                 expiresAt: 1_790_000_000_000, emailed: false,
+                 bas: BasEcho(g1: 0, oneA: 0, oneB: 0, netGst: 0, payg: 0, totalPayable: 0))
+    }
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "preview-device")
     }

@@ -32,6 +32,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var extractHandler: ((_ ocrText: String, _ source: String, _ capturedAt: String?) async throws -> ExtractionResponse)?
     var uploadImageHandler: ((_ jpeg: Data, _ transactionId: String?, _ width: Int, _ height: Int) async throws -> UploadedImage)?
     var exportHandler: ((_ profileId: String, _ format: String, _ from: String, _ to: String, _ toEmail: String?) async throws -> ExportResult)?
+    var exportBasHandler: ((_ profileId: String, _ from: String, _ to: String, _ paygInstalmentCents: Int, _ toEmail: String?) async throws -> ExportResult)?
     var updateDeviceHandler: ((UpdateDeviceBody) async throws -> UpdateDeviceResponse)?
     var sendQuoteHandler: ((String) async throws -> SendQuoteResponse)?
     var profileInboxHandler: ((String) async throws -> InboxAddressResponse)?
@@ -49,6 +50,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
     private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
+    private(set) var exportBasCalls: [(profileId: String, from: String, to: String, paygInstalmentCents: Int, toEmail: String?)] = []
     private(set) var updateDeviceCalls: [UpdateDeviceBody] = []
     private(set) var sendQuoteCalls: [String] = []
     private(set) var profileInboxCalls: [String] = []
@@ -128,6 +130,13 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         exportCalls.append((profileId, format, from, to, toEmail))
         guard let h = exportHandler else { throw MockAPIClientError.unscripted }
         return try await h(profileId, format, from, to, toEmail)
+    }
+
+    func exportBas(profileId: String, from: String, to: String,
+                   paygInstalmentCents: Int, toEmail: String?) async throws -> ExportResult {
+        exportBasCalls.append((profileId, from, to, paygInstalmentCents, toEmail))
+        guard let h = exportBasHandler else { throw MockAPIClientError.unscripted }
+        return try await h(profileId, from, to, paygInstalmentCents, toEmail)
     }
 
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
