@@ -29,7 +29,8 @@
     { "binding": "KV", "id": "3f5104b31d8c4589833a1ceec7fda212" }
   ],
   "r2_buckets": [
-    { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" }
+    { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" },
+    { "binding": "BACKUPS", "bucket_name": "snapceipt-backups" }
   ],
   // ai binding is intentionally omitted — see comment at top of file.
   "send_email": [

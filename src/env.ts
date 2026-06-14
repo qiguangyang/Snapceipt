@@ -10,6 +10,8 @@ export type Env = {
   DB: D1Database;
   /** R2 bucket for receipt images (unused this phase). */
   RECEIPTS: R2Bucket;
+  /** R2 bucket for hourly D1 SQL dumps (ops backup; never read at request time). */
+  BACKUPS: R2Bucket;
   /** Workers AI binding for email-in OCR (unused this phase). */
   AI: Ai;
   /** KV: rate-limit counters + magic-link/nonce/JWKS cache. */

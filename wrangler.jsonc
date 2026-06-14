@@ -20,7 +20,8 @@
     { "binding": "KV", "id": "3f5104b31d8c4589833a1ceec7fda212" }
   ],
   "r2_buckets": [
-    { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" }
+    { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" },
+    { "binding": "BACKUPS", "bucket_name": "snapceipt-backups" }
   ],
   // Inbound Email Routing (F6): provision a catch-all on the in.snapceipt.cc zone
   // in the Cloudflare dashboard, routing to this Worker's email() handler. No binding
