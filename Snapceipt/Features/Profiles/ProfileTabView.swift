@@ -165,7 +165,7 @@ struct ProfileTabView: View {
     /// Help & support — opens the external help site via the SwiftUI openURL action.
     private var helpRow: some View {
         Button {
-            if let url = URL(string: "https://snapceipt.cc/help") { openURL(url) }
+            if let url = URL(string: "https://snapceipt.cc/support") { openURL(url) }
         } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
