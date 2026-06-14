@@ -404,7 +404,7 @@ struct ShellView: View {
                 profileId: profiles.activeProfileId,
                 profileName: profiles.activeProfile?.name ?? "",
                 startMonth: profiles.activeFinancialYearStartMonth(),
-                onOpenExport: { period in exportPeriod = period; router.present(.export) },
+                onOpenExport: { period in basExportPinned = false; exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
                 onOpenWFH: { router.present(.wfh) },
                 profileType: profiles.activeProfile?.type ?? "personal",
@@ -425,7 +425,7 @@ struct ShellView: View {
                 onOpenEmailIn: { router.present(.emailIn) },
                 onOpenTax: { router.present(.tax) },
                 onOpenCategories: { router.present(.categories) },
-                onOpenExport: { router.present(.export) },
+                onOpenExport: { basExportPinned = false; router.present(.export) },
                 onOpenPrivacy: { router.present(.privacy) },
                 onOpenAccount: { router.present(.account) },
                 onOpenProfileDetail: { router.present(.profileDetail(id: $0)) },
@@ -689,9 +689,12 @@ struct ShellView: View {
                                receiptsCount: Int, deductibleCents: Int,
                                savedAccountantEmail: String?) {
         let now = Epoch.now()
-        let window = basExportPinned
-            ? basWindowForActive
-            : exportPeriod.window(now: now, startMonth: profiles.activeFinancialYearStartMonth())
+        let window = BasExportWindow.resolve(
+            pinned: basExportPinned,
+            basWindow: basWindowForActive,
+            defaultPeriod: exportPeriod,
+            now: now,
+            startMonth: profiles.activeFinancialYearStartMonth())
         let iso = ExportDateFormatter.shared
         let pid = profiles.activeProfileId
         let td = FetchDescriptor<Transaction>(
