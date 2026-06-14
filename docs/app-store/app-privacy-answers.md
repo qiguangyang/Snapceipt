@@ -8,9 +8,9 @@ change PrivacyInfo.xcprivacy, update this file in the same PR.
 - **Does this app collect data used to track the user?** NO.
   (PrivacyInfo: `NSPrivacyTracking = false`, `NSPrivacyTrackingDomains` empty.)
 - No data type below is used for tracking
-  (`NSPrivacyCollectedDataTypeTracking = false` on all 8).
+  (`NSPrivacyCollectedDataTypeTracking = false` on all 9).
 
-## Data collected (8 types)
+## Data collected (9 types)
 Every type: **Linked to the user = Yes** (`...Linked = true`),
 **Used for tracking = No**, **Purpose = App Functionality**
 (`...PurposeAppFunctionality`). Set these three the same for each row.
@@ -25,6 +25,7 @@ Every type: **Linked to the user = Yes** (`...Linked = true`),
 | Financial Info | Other Financial Info | Yes | No | App Functionality |
 | User Content | Photos or Videos | Yes | No | App Functionality |
 | User Content | Other User Content | Yes | No | App Functionality |
+| Diagnostics | Crash Data | Yes | No | App Functionality |
 
 ## NOT collected (answer "No"/leave unchecked)
 - Location (precise or coarse) — none.
@@ -32,9 +33,7 @@ Every type: **Linked to the user = Yes** (`...Linked = true`),
 - Browsing/Search History — none.
 - Health & Fitness — none.
 - Sensitive Info — none.
-- Diagnostics (Crash/Performance) — none. (No analytics or crash SDK ships;
-  re-check before submit — see open_questions. If one is added, add
-  "Diagnostics > Crash Data" here AND to PrivacyInfo.xcprivacy.)
+- Diagnostics > Performance Data — none (only Crash Data is collected, see above).
 
 ## Notes for the reviewer copy (matches privacy policy at snapceipt.cc/privacy)
 - Email/Name: account (Sign in with Apple or magic link).
@@ -43,5 +42,7 @@ Every type: **Linked to the user = Yes** (`...Linked = true`),
 - Other Financial Info: receipt/transaction amounts, GST, totals.
 - Photos or Videos: receipt photos captured/imported.
 - Other User Content: notes, quotes, logbook/budget entries.
+- Crash Data: first-party MetricKit MXCrashDiagnostic/MXHangDiagnostic posted to
+  our own backend (`/crash-reports`) for stability triage — no third-party SDK.
 - OCR sends only extracted receipt **text** to the processor — never name/email
   (matches privacy.html: "Only receipt text is sent for reading").
