@@ -40,6 +40,8 @@ struct AuthViewModelTests {
         }
         mock.authAppleHandler = { body in rec.appleBodies.append(body); return stub }
         mock.signOutHandler = { rec.signedOut = true }
+        mock.otpRequestHandler = { _ in }
+        mock.otpVerifyHandler = { _, _ in stub }
         return mock
     }
 
@@ -242,5 +244,63 @@ struct AuthViewModelTests {
         await vm.devSignIn()
         if case .error = vm.state {} else { Issue.record("expected .error, got \(vm.state)") }
         #expect(vm.pendingEmail == nil)   // RootView keeps showing SignInView
+    }
+
+    @Test("requestOTP moves to awaitingOTP and calls the API once")
+    func requestOTPMovesToAwaiting() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let vm = AuthViewModel(api: api, auth: makeStore())
+        await vm.requestOTP(email: "  Maya@Example.com ")
+        #expect(api.otpRequestedEmails == ["maya@example.com"])
+        #expect(vm.state == .awaitingOTP(email: "maya@example.com"))
+        #expect(vm.pendingEmail == "maya@example.com")
+    }
+
+    @Test("requestOTP with an invalid email errors without calling the API")
+    func requestOTPInvalidEmail() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let vm = AuthViewModel(api: api, auth: makeStore())
+        await vm.requestOTP(email: "nope")
+        #expect(api.otpRequestedEmails.isEmpty)
+        if case .error = vm.state {} else { Issue.record("expected .error") }
+    }
+
+    @Test("verifyOTP success → signedIn and persists the session")
+    func verifyOTPSuccess() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let store = makeStore()
+        let vm = AuthViewModel(api: api, auth: store)
+        await vm.requestOTP(email: "maya@example.com")
+        await vm.verifyOTP(code: "123456")
+        #expect(api.otpVerifiedCodes.map(\.code) == ["123456"])
+        #expect(vm.state == .signedIn)
+        #expect(store.session != nil)
+    }
+
+    @Test("verifyOTP with no pending email is a no-op")
+    func verifyOTPNoPending() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        let vm = AuthViewModel(api: api, auth: makeStore())
+        await vm.verifyOTP(code: "123456")
+        #expect(api.otpVerifiedCodes.isEmpty)
+    }
+
+    @Test("verifyOTP 400 → error state, no session saved")
+    func verifyOTPWrongCode() async {
+        let rec = Recorder()
+        let api = makeMock(rec: rec)
+        api.otpVerifyHandler = { _, _ in
+            throw APIError(code: "VALIDATION_FAILED", message: "Incorrect code", status: 400)
+        }
+        let store = makeStore()
+        let vm = AuthViewModel(api: api, auth: store)
+        await vm.requestOTP(email: "maya@example.com")
+        await vm.verifyOTP(code: "000000")
+        if case .error = vm.state {} else { Issue.record("expected .error") }
+        #expect(store.session == nil)
     }
 }
