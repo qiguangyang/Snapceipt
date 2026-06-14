@@ -1,9 +1,10 @@
 import SwiftUI
 import AVFoundation
 import UserNotifications
+import UIKit
 
 /// A primed system permission, with the rationale copy shown before the real prompt.
-enum PermissionKind {
+enum PermissionKind: Equatable {
     case camera, notifications
 
     var title: String {
@@ -46,8 +47,14 @@ struct LivePermissionRequester: PermissionRequesting {
         case .camera:
             _ = await AVCaptureDevice.requestAccess(for: .video)
         case .notifications:
-            _ = try? await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .badge, .sound])
+            let granted = (try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .badge, .sound])) ?? false
+            // Granting authorization is NOT enough to receive push: we must also
+            // register for a remote (APNs) token, which uploads via the delegate's
+            // didRegisterForRemoteNotificationsWithDeviceToken -> updateDevice path.
+            if granted {
+                await MainActor.run { UIApplication.shared.registerForRemoteNotifications() }
+            }
         }
     }
 }
