@@ -71,7 +71,7 @@ struct AppLaunch {
         // heals it for both the hermetic and live paths.
         UserDefaults.standard.removeObject(forKey: "sc.lock.enabled")
         // Clear the first-run completion flag so a -uiTestReset launch starts at onboarding.
-        UserDefaults.standard.removeObject(forKey: "sc.onboardingComplete")
+        OnboardingGate.reset()
     }
 
     /// Purges the on-disk SwiftData store under `-uiTestReset` so a live journey that

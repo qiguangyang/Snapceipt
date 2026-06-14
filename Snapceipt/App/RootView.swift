@@ -29,7 +29,7 @@ struct RootView: View {
         Group {
             switch authVM.state {
             case .signedIn:
-                if OnboardingGate.needsOnboarding(hasProfile: !profileRows.isEmpty) {
+                if OnboardingGate.needsOnboarding() {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.
@@ -82,7 +82,9 @@ struct RootView: View {
         }
         // Animate first-run AND auth-state transitions (not only `isEmpty`), so the
         // SignIn → Wait → Onboarding → Shell handoffs cross-fade rather than snap.
-        .animation(.easeInOut(duration: 0.28), value: OnboardingGate.needsOnboarding(hasProfile: !profileRows.isEmpty))
+        // `profileRows.count` is the animation driver: it re-invalidates this view when a
+        // profile is inserted mid-flow, letting needsOnboarding() re-evaluate after markComplete().
+        .animation(.easeInOut(duration: 0.28), value: profileRows.count)
         .animation(.easeInOut(duration: 0.28), value: authVM.state)
     }
 }

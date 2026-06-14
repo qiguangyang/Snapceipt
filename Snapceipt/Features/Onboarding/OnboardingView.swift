@@ -9,11 +9,16 @@ enum OnboardingGate {
 
     /// True while first-run priming should still show. Drives off the persisted
     /// completion flag (set when the notifications step finishes) so a profile inserted
-    /// mid-flow does not unmount onboarding. `hasProfile` is accepted for call-site
-    /// clarity / future reinstall handling; the flag is authoritative.
-    static func needsOnboarding(hasProfile: Bool, defaults: UserDefaults = .standard) -> Bool {
+    /// mid-flow does not unmount onboarding. The flag is the sole authority.
+    static func needsOnboarding(defaults: UserDefaults = .standard) -> Bool {
         if defaults.bool(forKey: key) { return false }
         return true
+    }
+
+    /// Clears the completion flag so the next launch re-enters onboarding.
+    /// Use this instead of referencing the raw key string from outside this type.
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 
     /// Mark first-run priming complete (called when the notifications step finishes).

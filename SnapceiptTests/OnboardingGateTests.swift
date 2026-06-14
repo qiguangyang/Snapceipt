@@ -14,20 +14,29 @@ struct OnboardingGateTests {
     @Test("needsOnboarding is true until the flag is set, regardless of profile count")
     func gateFlips() {
         let d = freshDefaults()
-        // No profile, never completed -> onboarding.
-        #expect(OnboardingGate.needsOnboarding(hasProfile: false, defaults: d) == true)
-        // Profile created mid-flow but flag not yet set -> STILL onboarding (priming reachable).
-        #expect(OnboardingGate.needsOnboarding(hasProfile: true, defaults: d) == true)
+        // New install, flag never set -> onboarding.
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == true)
+        // Profile inserted mid-flow but flag not yet set -> STILL onboarding (priming reachable).
+        // (hasProfile is no longer a parameter; the flag is the sole authority.)
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == true)
         // Flag set -> shell.
         OnboardingGate.markComplete(defaults: d)
-        #expect(OnboardingGate.needsOnboarding(hasProfile: true, defaults: d) == false)
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == false)
     }
 
     @Test("a returning user with the flag set never re-onboards")
     func returningUser() {
         let d = freshDefaults()
         OnboardingGate.markComplete(defaults: d)
-        #expect(OnboardingGate.needsOnboarding(hasProfile: true, defaults: d) == false)
-        #expect(OnboardingGate.needsOnboarding(hasProfile: false, defaults: d) == false)
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == false)
+    }
+
+    @Test("reset clears the completion flag so onboarding is required again")
+    func resetClearsFlag() {
+        let d = freshDefaults()
+        OnboardingGate.markComplete(defaults: d)
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == false)
+        OnboardingGate.reset(defaults: d)
+        #expect(OnboardingGate.needsOnboarding(defaults: d) == true)
     }
 }
