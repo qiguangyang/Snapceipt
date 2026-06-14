@@ -74,6 +74,11 @@ struct TaxSettingsView: View {
                         .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
                         .onChange(of: abnText) { _, v in vm.setAbn(v) }
                         .accessibilityIdentifier(AccessibilityID.taxAbnField)
+                    if ABNValidator.looksInvalid(abnText) {
+                        Text("This ABN doesn't look right — check the digits.")
+                            .font(.ui(12)).foregroundStyle(Palette.alert)
+                            .accessibilityIdentifier("tax.abn.hint")
+                    }
                 }
                 Toggle("Registered for GST", isOn: Binding(
                     get: { vm.gstRegistered },
