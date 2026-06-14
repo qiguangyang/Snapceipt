@@ -134,14 +134,25 @@ accountRoutes.delete("/account", async (c) => {
     PURGE_ORDER.map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
   );
 
-  // 2. Purge the user's R2 objects (paginated list -> delete).
-  let cursor: string | undefined;
-  for (;;) {
-    const listed = await c.env.RECEIPTS.list({ prefix: `u/${userId}/`, cursor, limit: 1000 });
-    const keys = listed.objects.map((o) => o.key);
-    if (keys.length > 0) await c.env.RECEIPTS.delete(keys);
-    if (!listed.truncated) break;
-    cursor = listed.cursor;
+  // 2. Purge the user's R2 objects across EVERY prefix the app writes to.
+  //   u/${userId}/...        — receipt images (images.ts) + inbound attachments (inbound.ts)
+  //   ${userId}/exports/...  — CSV/PDF/BAS export packs (export.ts)
+  //   ${userId}/quotes/...   — quote PDFs (quotes.ts)
+  // Missing any one leaves financial PII orphaned after account deletion.
+  const r2Prefixes = [
+    `u/${userId}/`,
+    `${userId}/exports/`,
+    `${userId}/quotes/`,
+  ];
+  for (const prefix of r2Prefixes) {
+    let cursor: string | undefined;
+    for (;;) {
+      const listed = await c.env.RECEIPTS.list({ prefix, cursor, limit: 1000 });
+      const keys = listed.objects.map((o) => o.key);
+      if (keys.length > 0) await c.env.RECEIPTS.delete(keys);
+      if (!listed.truncated) break;
+      cursor = listed.cursor;
+    }
   }
 
   return c.json({ ok: true });
