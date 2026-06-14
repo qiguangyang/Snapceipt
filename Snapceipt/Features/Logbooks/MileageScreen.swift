@@ -11,8 +11,10 @@ struct MileageScreen: View {
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: MileageViewModel?
     @State private var sheet: MileageSheet?
+    @State private var showPaywall = false
 
     private enum MileageSheet: Identifiable {
         case vehicle, logbook, trip, costs
@@ -54,8 +56,10 @@ struct MileageScreen: View {
                 vm = MileageViewModel(context: context, sync: sync, userId: userId,
                                       profileId: profileId, startMonth: startMonth)
             }
+            if !entitlement.isPro { showPaywall = true }
         }
         .sheet(item: $sheet) { which in sheetView(which) }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     // MARK: cards

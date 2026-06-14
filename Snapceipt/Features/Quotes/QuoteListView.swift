@@ -12,7 +12,9 @@ struct QuoteListView: View {
     let onEdit: (String?) -> Void   // nil = new quote
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: QuoteListViewModel?
+    @State private var showPaywall = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -49,7 +51,9 @@ struct QuoteListView: View {
         .transition(.opacity)
         .task {
             vm = QuoteListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            if !entitlement.isPro { showPaywall = true }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     @ViewBuilder private func rowBody(_ quote: Quote) -> some View {

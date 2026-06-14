@@ -11,8 +11,10 @@ struct WFHScreen: View {
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: WFHViewModel?
     @State private var showSheet = false
+    @State private var showPaywall = false
 
     private static let dow = ["M", "T", "W", "T", "F", "S", "S"]
     private var fyStartYear: Int { FinancialYear.of(Epoch.now(), startMonth: startMonth).startYear }
@@ -56,7 +58,9 @@ struct WFHScreen: View {
                 vm = WFHViewModel(context: context, sync: sync, userId: userId,
                                   profileId: profileId, rateCentsPerHour: rate(), startMonth: startMonth)
             }
+            if !entitlement.isPro { showPaywall = true }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(isPresented: $showSheet) {
             if let vm { LogHoursSheet(vm: vm) { showSheet = false } }
         }

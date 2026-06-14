@@ -6,9 +6,11 @@ import SwiftData
 struct EmailInView: View {
     @State private var vm: EmailInViewModel
     @State private var shareItem: String?
+    @State private var showPaywall = false
     let onClose: () -> Void
     let onReview: (String) -> Void
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
 
     init(context: ModelContext, sync: any SyncEnqueuing, api: any APIClient,
          userId: String, profileId: String,
@@ -39,7 +41,11 @@ struct EmailInView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
-        .task { await vm.loadAddress() }
+        .task {
+            await vm.loadAddress()
+            if !entitlement.isPro { showPaywall = true }
+        }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: shareBinding) { item in EmailInActivityView(text: item.text) }
     }
 

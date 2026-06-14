@@ -248,6 +248,11 @@ enum AccessibilityID {
     static let basFullWorksheetToggle = "bas.fullWorksheet.toggle"
     static let basMarkLodged = "bas.markLodged"
     static let basExport = "bas.export"
+    // Paywall (Workstream 6)
+    static let paywallTitle      = "paywall.title"
+    static let paywallBuyMonthly = "paywall.buy.monthly"
+    static let paywallBuyYearly  = "paywall.buy.yearly"
+    static let paywallRestore    = "paywall.restore"
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"
