@@ -201,6 +201,12 @@ private struct TransactionSyncMapper: SyncRowMapper {
         if let v = env.bool("isAi") { row.isAi = v }
         if let v = env.string("note") { row.note = v }
         if let v = env.int("gstCents") { row.gstCents = v }
+        if let v = env.bool("gstFree") { row.gstFree = v }
+        if let v = env.bool("capital") { row.capital = v }
+        // gstSource follows the nullable-string convention: a present non-null value
+        // overwrites; an absent/NULL key leaves the local value untouched (v1; see
+        // the task-header provenance-null note).
+        if let v = env.string("gstSource") { row.gstSource = v }
         if let v = env.string("logbookLink") { row.logbookLink = v }
         if let v = env.string("mileageTripId") { row.mileageTripId = v }
         if let v = env.string("source") { row.source = v }
@@ -222,6 +228,9 @@ private struct TransactionSyncMapper: SyncRowMapper {
         f["isAi"] = boolv(r.isAi)
         f["note"] = str(r.note)
         f["gstCents"] = num(r.gstCents)
+        f["gstFree"] = boolv(r.gstFree)
+        f["capital"] = boolv(r.capital)
+        f["gstSource"] = str(r.gstSource)
         f["logbookLink"] = str(r.logbookLink)
         f["mileageTripId"] = str(r.mileageTripId)
         f["source"] = .string(r.source)
@@ -342,6 +351,7 @@ private struct CategorySyncMapper: SyncRowMapper {
         if let v = env.int("defaultDeductiblePct") { row.defaultDeductiblePct = v }
         if let v = env.bool("isIncome") { row.isIncome = v }
         if let v = env.int("sortOrder") { row.sortOrder = v }
+        if let v = env.bool("gstFreeDefault") { row.gstFreeDefault = v }
     }
 
     func payload(_ r: Category) -> [String: JSONValue] {
@@ -354,6 +364,7 @@ private struct CategorySyncMapper: SyncRowMapper {
         f["defaultDeductiblePct"] = num(r.defaultDeductiblePct)
         f["isIncome"] = boolv(r.isIncome)
         f["sortOrder"] = num(r.sortOrder)
+        f["gstFreeDefault"] = boolv(r.gstFreeDefault)
         return f
     }
 }
