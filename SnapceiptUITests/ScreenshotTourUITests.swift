@@ -281,6 +281,22 @@ final class ScreenshotTourUITests: UITestCase {
         }
     }
 
+    // Area 14 — BAS. Uses the -uiTestBasSeed fixture (GST-registered business p1)
+    // so the gated card + BasView render. Shoots the card, the spine, and the
+    // post-lodge state.
+    @MainActor func test_area14_bas() {
+        launchBasSeed()
+        require(app.buttons[AccessibilityID.tabReports], "tab.reports")
+        app.buttons[AccessibilityID.tabReports].tap()
+        require(app.descendants(matching: .any)[AccessibilityID.reportsBasCard], "reports.bas.card")
+        shoot(app, "bas-card-needsreview")
+        app.descendants(matching: .any)[AccessibilityID.reportsBasCard].tap()
+        require(app.descendants(matching: .any)[AccessibilityID.basScreen], "bas.screen")
+        shoot(app, "bas-screen-estimated")
+        app.descendants(matching: .any)[AccessibilityID.basMarkLodged].tap()
+        shoot(app, "bas-screen-lodged")
+    }
+
     // ── Cross-cutting methods (spec §4/§5 categories not tied to one area) ──
 
     // EMPTY states: both profiles seeded with NO domain data, so every primary
