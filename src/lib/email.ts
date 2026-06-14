@@ -54,6 +54,28 @@ export async function sendEmailChangeCode(env: Env, msg: EmailChangeCode): Promi
   });
 }
 
+export interface SignInCode {
+  to: string;
+  code: string;
+}
+
+/**
+ * Send the 6-digit sign-in OTP (the cross-device fallback for the device-bound
+ * magic link). Same SendEmail builder path as sendMagicLinkEmail; spy-able via
+ * vi.spyOn(emailModule, "sendSignInCode"). Failures surface as a thrown error.
+ */
+export async function sendSignInCode(env: Env, msg: SignInCode): Promise<void> {
+  await env.EMAIL.send({
+    from: { name: "Snapceipt", email: MAGIC_LINK_SENDER },
+    to: msg.to,
+    subject: "Your Snapceipt sign-in code",
+    text:
+      `Your Snapceipt sign-in code is: ${msg.code}\n\n` +
+      `Enter it in the app to sign in. It expires in 10 minutes and can be used once. ` +
+      `If you didn't request this, ignore this email.`,
+  });
+}
+
 /** The accountant export email (CSV + PDF attachments). */
 export interface ExportEmail {
   to: string;
