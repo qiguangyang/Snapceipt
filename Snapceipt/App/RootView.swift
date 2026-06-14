@@ -511,7 +511,7 @@ struct ShellView: View {
             get: {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
                      .emailIn, .emailInReview,
                      .tax, .categories, .ruleEditor, .profileDetail,
                      .account, .privacy, .changeEmail:
@@ -577,7 +577,7 @@ struct ShellView: View {
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
-             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .quoteEditor,
+             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .emailIn, .emailInReview,
              .tax, .categories, .ruleEditor, .profileDetail,
              .account, .privacy, .changeEmail:
