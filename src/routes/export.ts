@@ -12,6 +12,7 @@ import { signDownloadToken, verifyDownloadToken, DOWNLOAD_TTL_SECONDS } from "..
 import { basEngine, type BasTxn } from "../lib/basEngine";
 import { buildBasPdf } from "../lib/pdfBas";
 import { buildBasCsv, type BasCsvTxnRow } from "../lib/csvBas";
+import { requireProPlan } from "../lib/plan";
 
 /**
  * POST /export        — Bearer (global auth) + rate tier "export" (app.ts).
@@ -142,6 +143,12 @@ exportRoutes.post("/", validate("json", exportRequestSchema), async (c) => {
     if (profile.type !== "business" || profile.gst_registered !== 1) {
       throw new ApiError("FORBIDDEN", "BAS export requires a GST-registered business profile");
     }
+
+    // Server-side Pro enforcement: the BAS pack is a Pro-only feature. The iOS
+    // paywall gates the UI; this guards against a modified client. Placed after the
+    // eligibility gate so a 403 here is unambiguously the Pro gate (its message
+    // differs — asserted by test/export-pro-gate.test.ts).
+    await requireProPlan(c);
 
     // Re-query the slice including the BAS columns.
     const { results: basTxns } = await c.env.DB.prepare(
