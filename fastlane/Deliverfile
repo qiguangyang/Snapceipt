@@ -1,0 +1,4 @@
+# Shared deliver config for the `release` lane and manual `fastlane deliver` runs.
+app_identifier("app.snapceipt.Snapceipt")
+# en-AU is the source locale (Australian app). Metadata + screenshots live under
+# fastlane/metadata and fastlane/screenshots.
