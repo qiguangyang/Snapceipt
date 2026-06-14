@@ -345,6 +345,72 @@ describe("POST /sync/push", () => {
     expect(row.rev).toBe(1);
   });
 
+  it("persists transaction gst_free/capital/gst_source to D1", async () => {
+    const txnId = uuidv7();
+    const m = txnMutation({ entityId: txnId });
+    m.payload.id = txnId;
+    m.payload.catKey = "office";
+    m.payload.amountCents = -22000;
+    m.payload.gstCents = 2000;
+    m.payload.gstFree = true;
+    m.payload.capital = true;
+    m.payload.gstSource = "derived";
+    const res = await push({ deviceId: DEVICE_ID, mutations: [m] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT gst_free, capital, gst_source FROM transactions WHERE id = ?`,
+    )
+      .bind(txnId)
+      .first<{ gst_free: number; capital: number; gst_source: string }>();
+    expect(row?.gst_free).toBe(1);
+    expect(row?.capital).toBe(1);
+    expect(row?.gst_source).toBe("derived");
+  });
+
+  it("persists category gst_free_default to D1", async () => {
+    const catId = uuidv7();
+    const t = 1_000;
+    const m = {
+      mutationId: uuidv7(),
+      entityType: "category",
+      entityId: catId,
+      op: "upsert" as const,
+      updatedAt: t,
+      payload: {
+        id: catId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "category",
+        key: "office",
+        label: "Office",
+        icon: "tray",
+        tint: "#a",
+        soft: "#b",
+        isIncome: false,
+        gstFreeDefault: true,
+        createdAt: t,
+        updatedAt: t,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+      } as Record<string, unknown>,
+    };
+    const res = await push({ deviceId: DEVICE_ID, mutations: [m] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT gst_free_default FROM categories WHERE id = ?`,
+    )
+      .bind(catId)
+      .first<{ gst_free_default: number }>();
+    expect(row?.gst_free_default).toBe(1);
+  });
+
   it("rejects an upsert that omits profileId for a NOT NULL profile_id table (no row, no 500)", async () => {
     const m = txnMutation();
     delete m.payload.profileId;
@@ -661,6 +727,17 @@ describe("syncable table map", () => {
     expect(meta.columns.vehicleId).toBe("vehicle_id");
     expect(meta.columns.odometerStartM).toBe("odometer_start_m");
     expect(meta.columns.odometerEndM).toBe("odometer_end_m");
+  });
+
+  it("maps the new transaction BAS columns", () => {
+    const cols = tableForEntityType("transaction")!.columns;
+    expect(cols.gstFree).toBe("gst_free");
+    expect(cols.capital).toBe("capital");
+    expect(cols.gstSource).toBe("gst_source");
+  });
+
+  it("maps the category gstFreeDefault column (spec §7 — category side has no Zod coverage)", () => {
+    expect(tableForEntityType("category")!.columns.gstFreeDefault).toBe("gst_free_default");
   });
 
   it("maps the vehicle + vehicleYear domain columns", () => {
