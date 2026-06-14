@@ -100,9 +100,10 @@ struct SignInView: View {
             .padding(.horizontal, 22)
             .padding(.bottom, 28)
 
-            Text("By continuing you agree to our Terms & Privacy Policy.")
+            Text("By continuing you agree to our [Terms](https://snapceipt.cc/terms) & [Privacy Policy](https://snapceipt.cc/privacy).")
                 .font(.ui(11.5))
                 .foregroundStyle(Palette.ink3)
+                .tint(accent.base)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 36)
                 .padding(.bottom, 18)
