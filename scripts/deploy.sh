@@ -23,6 +23,7 @@ set -euo pipefail
 ACCOUNT_ID="bb4412973b5e4f6d7a10a4e68b713177"   # techsiderau@gmail.com
 DB_NAME="snapceipt"
 R2_BUCKET="snapceipt-receipts"
+R2_BACKUPS_BUCKET="snapceipt-backups"
 EMAIL_DOMAIN="snapceipt.cc"
 CUSTOM_DOMAIN="api.snapceipt.cc"
 # Pin wrangler v4 for deploy WITHOUT changing the project's devDependency: the test
@@ -94,9 +95,11 @@ print(next((n["id"] for n in d if n.get("title") in ("KV", "snapceipt-api-KV")),
 [ -n "$KV_ID" ] || die "could not resolve KV namespace id (binding KV)"
 log "KV id: ${KV_ID}"
 
-# --- 3. provision R2 bucket --------------------------------------------------
+# --- 3. provision R2 buckets -------------------------------------------------
 log "R2: ensure bucket '${R2_BUCKET}'"
 $WRANGLER r2 bucket create "$R2_BUCKET" 2>/dev/null || warn "R2 bucket likely already exists — continuing"
+log "R2: ensure bucket '${R2_BACKUPS_BUCKET}'"
+$WRANGLER r2 bucket create "$R2_BACKUPS_BUCKET" 2>/dev/null || warn "R2 backups bucket likely already exists — continuing"
 
 # --- 4. patch wrangler.jsonc (real ids + account_id), abort if capture failed -
 log "patch wrangler.jsonc with real ids + account_id"

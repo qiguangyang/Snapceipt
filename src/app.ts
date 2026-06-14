@@ -111,6 +111,7 @@ app.route("/crash-reports", crashReportRoutes);
 // Protected: account ops (change email via code, delete account).
 app.route("/", accountRoutes);
 // Protected: POST /me/subscription — purchase link (StoreKit tx → backend).
+app.use("/me/*", rateLimit("account"));
 app.route("/me/subscription", subscriptionRoutes);
 // Public unauthenticated webhook — IP-keyed via the default tier's fallback
 // (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
