@@ -20,7 +20,10 @@ struct QuoteListView: View {
         ZStack(alignment: .bottom) {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                LbHeader(title: "Quotes", onClose: onClose, onAdd: { onEdit(nil) })
+                LbHeader(title: "Quotes", onClose: onClose, onAdd: {
+                    guard entitlement.isPro else { showPaywall = true; return }
+                    onEdit(nil)
+                })
                 if let vm {
                     if vm.quotes.isEmpty {
                         Spacer(); EmptyArt()
@@ -30,7 +33,10 @@ struct QuoteListView: View {
                     } else {
                         List {
                             ForEach(vm.quotes) { quote in
-                                Button { onEdit(quote.id) } label: { rowBody(quote) }
+                                Button {
+                                    guard entitlement.isPro else { showPaywall = true; return }
+                                    onEdit(quote.id)
+                                } label: { rowBody(quote) }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier(AccessibilityID.quoteRowPrefix + quote.id)
                                     .swipeActions {
@@ -44,7 +50,10 @@ struct QuoteListView: View {
                     }
                 } else { Color.clear }
             }
-            LbFloatingCTA(title: "New quote", a11yId: AccessibilityID.quotesAdd) { onEdit(nil) }
+            LbFloatingCTA(title: "New quote", a11yId: AccessibilityID.quotesAdd) {
+                guard entitlement.isPro else { showPaywall = true; return }
+                onEdit(nil)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.quotesScreen)

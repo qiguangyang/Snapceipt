@@ -115,7 +115,11 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try await h()
     }
 
-    func mePlan() async throws -> String { "free" }
+    var mePlanHandler: (() async throws -> String)?
+    func mePlan() async throws -> String {
+        if let h = mePlanHandler { return try await h() }
+        return "free"
+    }
     func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {}
 
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {

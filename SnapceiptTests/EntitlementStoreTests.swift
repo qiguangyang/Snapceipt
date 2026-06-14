@@ -37,4 +37,12 @@ struct EntitlementStoreTests {
         store.applyServerPlan("free")
         #expect(store.isPro == false)         // both sources free
     }
+
+    @Test("unknown server plan value keeps plan as free (fail-closed)")
+    func unknownServerPlanIsClosedFree() {
+        let store = EntitlementStore()
+        store.applyServerPlan("enterprise")
+        #expect(store.isPro == false)         // unrecognised value must not grant Pro
+        #expect(store.plan == "free")
+    }
 }

@@ -32,7 +32,10 @@ struct WFHScreen: View {
             Palette.cream.ignoresSafeArea()
             if let vm {
                 VStack(spacing: 0) {
-                    LbHeader(title: "Work from home", onClose: onClose, onAdd: { showSheet = true })
+                    LbHeader(title: "Work from home", onClose: onClose, onAdd: {
+                        guard entitlement.isPro else { showPaywall = true; return }
+                        showSheet = true
+                    })
                     ScrollView {
                         VStack(spacing: 0) {
                             hero(vm)
@@ -44,7 +47,10 @@ struct WFHScreen: View {
                         .padding(.horizontal, 18).padding(.bottom, 110)
                     }
                 }
-                LbFloatingCTA(title: "Log hours", a11yId: AccessibilityID.wfhLogHours) { showSheet = true }
+                LbFloatingCTA(title: "Log hours", a11yId: AccessibilityID.wfhLogHours) {
+                    guard entitlement.isPro else { showPaywall = true; return }
+                    showSheet = true
+                }
             } else {
                 Color.clear
             }

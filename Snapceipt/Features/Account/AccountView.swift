@@ -78,8 +78,14 @@ struct AccountView: View {
                             .font(.ui(13, .semibold)).foregroundStyle(accent.base)
                             .buttonStyle(.plain)
                     } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Palette.income)
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Palette.income)
+                            Link("Manage subscription",
+                                 destination: URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
+                                .font(.ui(13, .semibold))
+                                .foregroundStyle(accent.base)
+                        }
                     }
                 }
             }

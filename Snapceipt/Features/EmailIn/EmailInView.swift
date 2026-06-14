@@ -72,12 +72,15 @@ struct EmailInView: View {
                 }
                 HStack(spacing: 10) {
                     actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         if let a = vm.address?.address { UIPasteboard.general.string = a }
                     }
                     actionChip("Share", "square.and.arrow.up", id: nil) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         shareItem = vm.address?.address
                     }
                     actionChip("Rotate", "arrow.triangle.2.circlepath", id: AccessibilityID.emailInRotate) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         Task { await vm.rotate() }
                     }
                 }
@@ -97,7 +100,10 @@ struct EmailInView: View {
     }
 
     private func row(_ txn: Transaction) -> some View {
-        Button { onReview(txn.id) } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            onReview(txn.id)
+        } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
                     IconCircle(name: txn.extractionStatus == "failed" ? "info" : "receipt",

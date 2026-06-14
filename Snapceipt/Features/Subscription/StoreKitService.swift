@@ -75,14 +75,17 @@ final class StoreKitService {
             let result = try await product.purchase()
             switch result {
             case .success(let verification):
-                if case .verified(let skTxn) = verification {
-                    await skTxn.finish()
-                    let origId = String(skTxn.originalID)
-                    let expires = skTxn.expirationDate.map { Int($0.timeIntervalSince1970 * 1000) }
-                    let pid = skTxn.productID
-                    notifyVerified(origId: origId, expires: expires, productId: pid)
-                    await refreshEntitlements()
+                guard case .verified(let skTxn) = verification else {
+                    // The transaction came back unverified (tampered or JWS failure).
+                    // Do NOT report success — the paywall must not dismiss.
+                    return .failed
                 }
+                await skTxn.finish()
+                let origId = String(skTxn.originalID)
+                let expires = skTxn.expirationDate.map { Int($0.timeIntervalSince1970 * 1000) }
+                let pid = skTxn.productID
+                notifyVerified(origId: origId, expires: expires, productId: pid)
+                await refreshEntitlements()
                 return .success
             case .pending:
                 return .pending
