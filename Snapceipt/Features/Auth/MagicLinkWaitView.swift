@@ -17,6 +17,7 @@ struct MagicLinkWaitView: View {
     /// `.requestingLink → .awaitingLink` view recreation RootView performs, and a fresh
     /// send's `.task(id:)` cancellation supersedes the prior timer (no stale truncation).
     @State private var confirmedCount = 0
+    @State private var showingCodeEntry = false
 
     /// True while the confirmation window for the latest successful send is open.
     private var justSent: Bool { confirmedCount > 0 && confirmedCount == vm.linkSentCount }
@@ -73,6 +74,12 @@ struct MagicLinkWaitView: View {
                         .foregroundStyle(Palette.ink2)
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
+                Button { showingCodeEntry = true } label: {
+                    Text("Enter a code instead")
+                        .font(.ui(15, .semibold))
+                        .foregroundStyle(accent.base)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
             }
             .padding(.horizontal, 22)
             .padding(.bottom, 28)
@@ -87,6 +94,11 @@ struct MagicLinkWaitView: View {
             withAnimation { confirmedCount = vm.linkSentCount }
             try? await Task.sleep(for: Self.confirmationDuration)
             withAnimation { confirmedCount = 0 }
+        }
+        .sheet(isPresented: $showingCodeEntry) {
+            OTPEntryView()
+                .environment(vm)
+                .environment(\.accent, accent)
         }
     }
 
