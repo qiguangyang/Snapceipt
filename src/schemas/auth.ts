@@ -17,6 +17,9 @@ export type AppleBody = z.infer<typeof appleBody>;
  *  `.trim()` tolerates trailing whitespace; the route lowercases for storage. */
 export const magicLinkRequestBody = z.object({
   email: z.string().trim().email(),
+  /** Optional install hint; the X-Device-Id header takes precedence. Used to
+   *  device-bind the minted token so an intercepted link is unusable elsewhere. */
+  deviceId: z.string().min(1).max(64).optional(),
 });
 
 export type MagicLinkRequestBody = z.infer<typeof magicLinkRequestBody>;

@@ -87,16 +87,20 @@ authRoutes.post(
   "/magic-link/request",
   validate("json", magicLinkRequestBody),
   async (c) => {
-    const { email } = c.req.valid("json");
+    const { email, deviceId } = c.req.valid("json");
     const normalized = normalizeEmail(email);
 
     const token = newMagicToken();
     const hash = await sha256Hex(token);
 
-    // Store only the hash; metadata carries the email for verify-time lookup.
+    // Device hint for binding: header wins, body is the fallback. Absent => no binding
+    // (verify stays backward-compatible for already-minted tokens).
+    const deviceHint = c.req.header("X-Device-Id") || deviceId || undefined;
+
+    // Store only the hash; metadata carries the email + (optional) requesting device.
     await c.env.KV.put(`ml:${hash}`, "1", {
       expirationTtl: MAGIC_LINK_TTL_SECONDS,
-      metadata: { email: normalized, createdAt: nowMs() },
+      metadata: { email: normalized, createdAt: nowMs(), ...(deviceHint ? { deviceId: deviceHint } : {}) },
     });
 
     const link = `${MAGIC_LINK_BASE_URL}?token=${token}`;

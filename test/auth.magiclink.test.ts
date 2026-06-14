@@ -80,6 +80,52 @@ describe("POST /auth/magic-link/request", () => {
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION_FAILED");
   });
+
+  it("stores the X-Device-Id header in the KV metadata as deviceId", async () => {
+    const spy = installEmailSpy();
+    const res = await SELF.fetch("https://x/auth/magic-link/request", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-device-id": "01890000-0000-7000-8000-00000000d111",
+      },
+      body: JSON.stringify({ email: "dev-hint@example.com" }),
+    });
+    expect(res.status).toBe(202);
+    const hash = await sha256Hex(spy.lastToken());
+    const stored = await env.KV.getWithMetadata(`ml:${hash}`);
+    expect(stored.metadata).toMatchObject({
+      email: "dev-hint@example.com",
+      deviceId: "01890000-0000-7000-8000-00000000d111",
+    });
+  });
+
+  it("falls back to the body deviceId when no X-Device-Id header is present", async () => {
+    const spy = installEmailSpy();
+    const res = await SELF.fetch("https://x/auth/magic-link/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "body-hint@example.com", deviceId: "01890000-0000-7000-8000-00000000d222" }),
+    });
+    expect(res.status).toBe(202);
+    const hash = await sha256Hex(spy.lastToken());
+    const stored = await env.KV.getWithMetadata(`ml:${hash}`);
+    expect(stored.metadata).toMatchObject({ deviceId: "01890000-0000-7000-8000-00000000d222" });
+  });
+
+  it("omits deviceId from metadata when neither header nor body supplies one (backward-compatible)", async () => {
+    const spy = installEmailSpy();
+    const res = await SELF.fetch("https://x/auth/magic-link/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "no-hint@example.com" }),
+    });
+    expect(res.status).toBe(202);
+    const hash = await sha256Hex(spy.lastToken());
+    const stored = await env.KV.getWithMetadata<{ email: string; deviceId?: string }>(`ml:${hash}`);
+    expect(stored.metadata?.deviceId).toBeUndefined();
+    expect(stored.metadata).toMatchObject({ email: "no-hint@example.com" });
+  });
 });
 
 describe("POST /auth/magic-link/verify", () => {
