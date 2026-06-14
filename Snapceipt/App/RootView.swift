@@ -108,6 +108,8 @@ struct ShellView: View {
     /// Tracks whichever Reports period was active when the user tapped Export, so
     /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
     @State private var exportPeriod: Period = .month
+    /// When set, the next `.export` sheet renders as the BAS-pinned pack (spec §4.7).
+    @State private var basExportPinned = false
 
     var body: some View {
         let accent = profiles.accent
@@ -255,6 +257,19 @@ struct ShellView: View {
                               profileId: profiles.activeProfileId,
                               onClose: { router.dismissOverlay() },
                               onEdit: { router.openQuote($0) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if router.overlay == .bas {
+                BasView(context: profiles.context, api: captureAPI, userId: profiles.userId,
+                        profileId: profiles.activeProfileId,
+                        profileName: profiles.activeProfile?.name ?? "",
+                        gstRegistered: profiles.activeProfile?.gstRegistered ?? false,
+                        basPeriod: basPeriodForActive,
+                        startMonth: profiles.activeFinancialYearStartMonth(),
+                        onOpenExport: { basExportPinned = true; router.present(.export) },
+                        onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -527,7 +542,7 @@ struct ShellView: View {
                                                Overlay.budgets.id, Overlay.alerts.id,
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
-                                               Overlay.quotes.id, Overlay.emailIn.id,
+                                               Overlay.quotes.id, Overlay.bas.id, Overlay.emailIn.id,
                                                Overlay.tax.id, Overlay.categories.id,
                                                Overlay.account.id, Overlay.privacy.id, Overlay.changeEmail.id]
                 if newValue == nil, let cur = router.overlay,
@@ -570,7 +585,16 @@ struct ShellView: View {
                 deductibleCents: exportWindow.deductibleCents,
                 savedAccountantEmail: exportWindow.savedAccountantEmail,
                 onSaveAccountantEmail: { saveAccountantEmail($0) },
-                onClose: { router.dismissOverlay() }
+                onClose: { basExportPinned = false; router.dismissOverlay() },
+                basPinned: basExportPinned,
+                paygInstalmentCents: basExportPinned
+                    ? BasLocalStore().paygInstalmentCents(
+                        profileId: profiles.activeProfileId,
+                        periodKey: BasPeriodKey.make(
+                            window: basWindowForActive,
+                            basPeriod: basPeriodForActive,
+                            startMonth: profiles.activeFinancialYearStartMonth()))
+                    : 0
             )
             .frame(maxHeight: .infinity, alignment: .bottom)
             .background(Palette.cream)
@@ -652,6 +676,18 @@ struct ShellView: View {
         let saved = (try? profiles.context.fetch(sd))?.first?.accountantEmail
         return (iso.string(from: window.start), iso.string(from: window.end.addingTimeInterval(-86_400)),
                 window.label, inRange.count, deductible, saved)
+    }
+
+    /// The active profile's BAS period (local pref; defaults quarterly).
+    private var basPeriodForActive: BasPeriod {
+        BasPeriod(rawValue: UserDefaults.standard
+            .string(forKey: "sc.tax.\(profiles.activeProfileId).basPeriod") ?? "") ?? .quarterly
+    }
+
+    /// The active profile's BAS window (current in-progress period).
+    private var basWindowForActive: Period.Window {
+        let p: Period = (basPeriodForActive == .quarterly) ? .quarter : .month
+        return p.window(now: Epoch.now(), startMonth: profiles.activeFinancialYearStartMonth())
     }
 
     /// Persist the accountant email on the active profile's TaxSettings + enqueue sync.
