@@ -383,7 +383,13 @@ struct ShellView: View {
                 startMonth: profiles.activeFinancialYearStartMonth(),
                 onOpenExport: { period in exportPeriod = period; router.present(.export) },
                 onOpenMileage: { router.present(.mileage) },
-                onOpenWFH: { router.present(.wfh) }
+                onOpenWFH: { router.present(.wfh) },
+                profileType: profiles.activeProfile?.type ?? "personal",
+                gstRegistered: profiles.activeProfile?.gstRegistered ?? false,
+                basDue: BasSchedule.nextDue(basPeriodForActive, on: Epoch.now()),
+                basNetCents: basNetCentsForActive,
+                basLodged: basLodgedForActive,
+                onOpenBas: { router.present(.bas) }
             )
             .environment(\.accent, accent)
         case .profile:
@@ -688,6 +694,34 @@ struct ShellView: View {
     private var basWindowForActive: Period.Window {
         let p: Period = (basPeriodForActive == .quarterly) ? .quarter : .month
         return p.window(now: Epoch.now(), startMonth: profiles.activeFinancialYearStartMonth())
+    }
+
+    /// Net GST cents for the Reports BAS card (one engine pass over the in-window txns).
+    private var basNetCentsForActive: Int {
+        guard profiles.activeProfile?.type == "business",
+              profiles.activeProfile?.gstRegistered == true else { return 0 }
+        let pid = profiles.activeProfileId
+        let rows = (try? profiles.context.fetch(FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }))) ?? []
+        let iso = ExportDateFormatter.shared
+        let w = basWindowForActive
+        let txns = rows.filter { iso.date(from: $0.txnDate).map { $0 >= w.start && $0 < w.end } ?? false }
+            .map { BasEngine.Txn(amountCents: $0.amountCents, gstFree: $0.gstFree,
+                                 capital: $0.capital, txnDate: $0.txnDate) }
+        let payg = BasLocalStore().paygInstalmentCents(
+            profileId: pid,
+            periodKey: BasPeriodKey.make(window: w, basPeriod: basPeriodForActive,
+                                         startMonth: profiles.activeFinancialYearStartMonth()))
+        return BasEngine.compute(txns: txns, gstRegistered: true,
+                                 manual: BasEngine.Manual(paygInstalmentCents: payg)).netGstCents
+    }
+
+    /// Whether the active profile's current BAS period has a lodged snapshot.
+    private var basLodgedForActive: Bool {
+        let w = basWindowForActive
+        let key = BasPeriodKey.make(window: w, basPeriod: basPeriodForActive,
+                                    startMonth: profiles.activeFinancialYearStartMonth())
+        return BasLocalStore().lodgedSnapshot(profileId: profiles.activeProfileId, periodKey: key) != nil
     }
 
     /// Persist the accountant email on the active profile's TaxSettings + enqueue sync.

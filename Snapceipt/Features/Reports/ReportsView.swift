@@ -13,6 +13,13 @@ struct ReportsView: View {
     let onOpenExport: (Period) -> Void
     let onOpenMileage: () -> Void
     let onOpenWFH: () -> Void
+    /// Business + gstRegistered identity (drives the BAS card gate, spec §4.8).
+    let profileType: String
+    let gstRegistered: Bool
+    let basDue: Date
+    let basNetCents: Int
+    let basLodged: Bool
+    let onOpenBas: () -> Void
 
     @Environment(\.accent) private var accent
     @State private var vm: ReportsViewModel?
@@ -24,6 +31,11 @@ struct ReportsView: View {
         SegmentOption(id: Period.fy.rawValue, label: "FY"),
     ]
 
+    /// The BAS card is reachable ONLY for a GST-registered Business profile (spec §4.8).
+    static func showsBasCard(profileType: String, gstRegistered: Bool) -> Bool {
+        profileType == "business" && gstRegistered
+    }
+
     var body: some View {
         ZStack {
             Palette.cream.ignoresSafeArea()
@@ -31,6 +43,9 @@ struct ReportsView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         header
+                        if Self.showsBasCard(profileType: profileType, gstRegistered: gstRegistered) {
+                            basCard
+                        }
                         Segmented(options: periodOptions, selection: $periodSelection)
                             .accessibilityIdentifier(AccessibilityID.reportsPeriod)
                         netCard(vm)
@@ -76,6 +91,29 @@ struct ReportsView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.reportsExportPill)
         }
+    }
+
+    private var basCard: some View {
+        Button { onOpenBas() } label: {
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("BAS · this quarter").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+                        Spacer()
+                        Text(basLodged ? "Lodged" : "Review").font(.ui(12.5, .semibold)).foregroundStyle(accent.base)
+                    }
+                    Text(basNetCents < 0 ? "ATO owes you \(fmt(-basNetCents))" : "\(fmt(basNetCents)) to pay")
+                        .font(.display(24)).foregroundStyle(Palette.ink).monospacedDigit()
+                    HStack {
+                        Text("Due \(fmtBasDue(basDue))").font(.ui(13)).foregroundStyle(Palette.ink2)
+                        Spacer()
+                        Text("Review ›").font(.ui(13, .semibold)).foregroundStyle(accent.base)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.reportsBasCard)
     }
 
     private func netCard(_ vm: ReportsViewModel) -> some View {
