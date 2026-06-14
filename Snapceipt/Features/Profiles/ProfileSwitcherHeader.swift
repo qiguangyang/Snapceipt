@@ -1,18 +1,18 @@
 import SwiftUI
 import SwiftData
 
-/// Home header: gradient avatar + "ACTIVE PROFILE" + name + (chevron when
-/// multiple profiles). Tapping opens the picker via the supplied closure.
+/// Home header: gradient avatar + "ACTIVE PROFILE" + name + chevron.
+/// Tapping always opens the picker via the supplied closure — even with a
+/// single profile, so the user can switch or add another from one place.
 struct ProfileSwitcherHeader: View {
     let store: ProfilesStore
-    /// Invoked when the user taps to switch (only meaningful with >1 profile).
+    /// Invoked when the user taps the header to open the profile picker.
     var onTapSwitch: () -> Void
 
     private var profile: Profile? { store.activeProfile }
-    private var canSwitch: Bool { store.profiles.count > 1 }
 
     var body: some View {
-        Button(action: { if canSwitch { onTapSwitch() } }) {
+        Button(action: onTapSwitch) {
             HStack(spacing: 12) {
                 avatar
                 VStack(alignment: .leading, spacing: 2) {
@@ -25,7 +25,7 @@ struct ProfileSwitcherHeader: View {
                             .font(.display(19, .bold))
                             .tracking(-0.3)
                             .foregroundStyle(Palette.ink)
-                        if canSwitch { chevronPill }
+                        chevronPill
                     }
                 }
                 Spacer(minLength: 0)
@@ -33,7 +33,6 @@ struct ProfileSwitcherHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!canSwitch)
         .accessibilityIdentifier(AccessibilityID.profileSwitcher)
     }
 
