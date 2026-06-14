@@ -126,8 +126,12 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
     for (const d of devices) {
       if (inQuietHours(d, nowMs)) continue;
       try {
-        await apns.sendPush(env, d.apns_token, payload);
-        pushed++;
+        const result = await apns.sendPush(env, d.apns_token, payload);
+        // Stub (no APNS_KEY) or any non-2xx is NOT a real delivery: do not count it,
+        // so the budget stays re-armed for the next hourly run. Only a live 200 counts.
+        if (result.stub === false && result.status === 200) {
+          pushed++;
+        }
       } catch (err) {
         console.warn(`[budgetAlert] sendPush failed for token ${d.apns_token}:`, err);
       }
