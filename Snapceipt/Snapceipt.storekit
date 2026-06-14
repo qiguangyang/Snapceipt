@@ -1,0 +1,71 @@
+{
+  "identifier" : "SNAPCEIPT_STOREKIT_V1",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_AU",
+    "_storefront" : "AUS",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "SNAPCEIPT_PRO_GROUP",
+      "localizations" : [],
+      "name" : "Snapceipt Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "PRO_MONTHLY",
+          "introductoryOffer" : {
+            "internalID" : "INTRO_MONTHLY",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "BAS export, quotes, logbooks and email-in.",
+              "displayName" : "Snapceipt Pro (Monthly)",
+              "locale" : "en_AU"
+            }
+          ],
+          "productID" : "app.snapceipt.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "SNAPCEIPT_PRO_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "79.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "PRO_YEARLY",
+          "introductoryOffer" : {
+            "internalID" : "INTRO_YEARLY",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Everything in Pro, billed yearly — save 34%.",
+              "displayName" : "Snapceipt Pro (Yearly)",
+              "locale" : "en_AU"
+            }
+          ],
+          "productID" : "app.snapceipt.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Pro Yearly",
+          "subscriptionGroupID" : "SNAPCEIPT_PRO_GROUP",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : { "major" : 4, "minor" : 0 }
+}
