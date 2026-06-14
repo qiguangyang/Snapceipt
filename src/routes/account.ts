@@ -139,6 +139,9 @@ accountRoutes.delete("/account", async (c) => {
   //   ${userId}/exports/...  — CSV/PDF/BAS export packs (export.ts)
   //   ${userId}/quotes/...   — quote PDFs (quotes.ts)
   // Missing any one leaves financial PII orphaned after account deletion.
+  // MAINTENANCE CONTRACT: this is the ONLY place R2 is purged on account delete.
+  // If a new route ever calls RECEIPTS.put() under a new prefix, add it here —
+  // otherwise deleted accounts silently leave orphaned PII in R2.
   const r2Prefixes = [
     `u/${userId}/`,
     `${userId}/exports/`,

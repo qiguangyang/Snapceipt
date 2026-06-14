@@ -36,7 +36,7 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   const lineItemId = uuidv7();
   const imageId = uuidv7();
   const quoteId = uuidv7();
-  const exportId = uuidv7();
+  const exportId = uuidv7(); // R2 export key only — no D1 exports table backs this
   const qliId = uuidv7();
   const vehicleId = uuidv7();
   const vehicleYearId = uuidv7();
