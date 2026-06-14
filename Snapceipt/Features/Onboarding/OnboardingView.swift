@@ -1,6 +1,27 @@
 import SwiftUI
 import SwiftData
 
+/// First-run completion flag. Onboarding is driven off THIS, not "has a profile":
+/// `FirstProfileForm` inserts the profile mid-flow, so gating on profile-existence
+/// would unmount onboarding before the camera/notifications priming steps run.
+enum OnboardingGate {
+    private static let key = "sc.onboardingComplete"
+
+    /// True while first-run priming should still show. Drives off the persisted
+    /// completion flag (set when the notifications step finishes) so a profile inserted
+    /// mid-flow does not unmount onboarding. `hasProfile` is accepted for call-site
+    /// clarity / future reinstall handling; the flag is authoritative.
+    static func needsOnboarding(hasProfile: Bool, defaults: UserDefaults = .standard) -> Bool {
+        if defaults.bool(forKey: key) { return false }
+        return true
+    }
+
+    /// Mark first-run priming complete (called when the notifications step finishes).
+    static func markComplete(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: key)
+    }
+}
+
 /// The three first-run steps after the very first sign-in.
 enum OnboardingStep { case profile, camera, notifications }
 
@@ -35,6 +56,7 @@ struct OnboardingView: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             case .notifications:
                 PermissionPrimingView(kind: .notifications, requester: requester) {
+                    OnboardingGate.markComplete()
                     onFinished()
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
