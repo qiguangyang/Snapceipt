@@ -55,6 +55,7 @@ struct AddProfileView: View {
             }
             .padding(18)
         }
+        .keyboardDismissButton() // hide-keyboard accessory for name + ABN fields
     }
 
     private var preview: some View {

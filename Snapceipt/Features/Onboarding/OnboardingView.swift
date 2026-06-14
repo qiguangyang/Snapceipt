@@ -171,6 +171,7 @@ private struct FirstProfileForm: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.accent, accent)
+        .keyboardDismissButton() // hide-keyboard accessory for the profile name field
     }
 
     private var trimmedName: String {

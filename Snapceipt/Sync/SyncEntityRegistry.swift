@@ -519,6 +519,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         if let v = env.string("clientName") { row.clientName = v }
         if let v = env.string("clientEmail") { row.clientEmail = v }
         if let v = env.bool("gstEnabled") { row.gstEnabled = v }
+        if let v = env.bool("gstInclusive") { row.gstInclusive = v }
         if let v = env.int("subtotalCents") { row.subtotalCents = v }
         if let v = env.int("gstCents") { row.gstCents = v }
         if let v = env.int("totalCents") { row.totalCents = v }
@@ -534,6 +535,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         f["clientName"] = str(r.clientName)
         f["clientEmail"] = str(r.clientEmail)
         f["gstEnabled"] = boolv(r.gstEnabled)
+        f["gstInclusive"] = boolv(r.gstInclusive)
         f["subtotalCents"] = num(r.subtotalCents)
         f["gstCents"] = num(r.gstCents)
         f["totalCents"] = num(r.totalCents)

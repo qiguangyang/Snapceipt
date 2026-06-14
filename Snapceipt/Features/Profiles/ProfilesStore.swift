@@ -4,11 +4,22 @@ import SwiftUI
 
 // MARK: - Sync seam
 
-/// One-method seam over `SyncEngine.enqueue` so view-models can enqueue a sync
-/// mutation while staying unit-testable (tests inject a `MockSyncEngine` spy).
-/// The signature mirrors `SyncEngine.enqueue` VERBATIM.
+/// Seam over `SyncEngine` so view-models can enqueue a sync mutation — and force
+/// an immediate outbox drain — while staying unit-testable (tests inject a
+/// `MockSyncEngine` spy). `enqueue` mirrors `SyncEngine.enqueue` VERBATIM.
 protocol SyncEnqueuing: AnyObject {
     func enqueue(op: String, entityType: EntityType, entity: any Syncable)
+
+    /// Drain the local outbox to the backend NOW, awaiting any in-flight sync
+    /// first. Action endpoints that require a just-edited entity to already exist
+    /// server-side (e.g. quote send) call this after `enqueue` so the upsert has
+    /// reached D1 before the action fires. Default no-op for non-engine conformers
+    /// (previews, test spies that don't model the network).
+    func flush() async
+}
+
+extension SyncEnqueuing {
+    func flush() async {}
 }
 
 extension SyncEngine: SyncEnqueuing {}

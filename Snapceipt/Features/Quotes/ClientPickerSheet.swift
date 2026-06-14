@@ -40,6 +40,7 @@ struct ClientPickerSheet: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Palette.cream)
+        .keyboardDismissButton() // hide-keyboard accessory for search + new-client fields
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.clientPickerScreen)
         .task {

@@ -66,6 +66,7 @@ struct ProfileDetailView: View {
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
+                    .keyboardDismissButton() // hide-keyboard accessory for name / ABN fields
                 } else {
                     Spacer()
                 }

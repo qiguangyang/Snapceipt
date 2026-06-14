@@ -72,6 +72,7 @@ struct AddLoyaltyView: View {
             .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 160)
         }
         .scrollDismissesKeyboard(.interactively)
+        .keyboardDismissButton() // hosts search + brand name + number fields
     }
 
     private var scanButton: some View {

@@ -269,6 +269,7 @@ private struct VehicleSheet: View {
                     .accessibilityIdentifier(AccessibilityID.vehicleSheetSave)
                 }
             }
+            .keyboardDismissButton()  // hide-keyboard accessory for the vehicle fields
         }
         .onAppear {
             make = vm.vehicle?.make ?? ""
@@ -359,6 +360,7 @@ private struct AddTripSheet: View {
                     .accessibilityIdentifier(AccessibilityID.tripSheetSave)
                 }
             }
+            .keyboardDismissButton()  // hide-keyboard accessory for the trip fields
         }
     }
 }
@@ -446,6 +448,7 @@ private struct RunningCostsSheet: View {
                     .accessibilityIdentifier(AccessibilityID.costsSheetSave)
                 }
             }
+            .keyboardDismissButton()  // hide-keyboard accessory for the running-cost fields
         }
         .onAppear {
             guard let vy = vm.vehicleYear(fyStartYear: fyStartYear) else { return }

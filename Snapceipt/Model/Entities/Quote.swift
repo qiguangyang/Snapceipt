@@ -12,6 +12,10 @@ final class Quote: Syncable {
     var clientName: String?
     var clientEmail: String?
     var gstEnabled: Bool
+    /// When true (and `gstEnabled`), entered line prices already include GST: the
+    /// grand total is the entered sum and GST is the embedded 1/11 portion. Default
+    /// false = GST added on top (exclusive). Mirrors D1 `quotes.gst_inclusive`.
+    var gstInclusive: Bool
     var subtotalCents: Int
     var gstCents: Int
     var totalCents: Int
@@ -36,6 +40,7 @@ final class Quote: Syncable {
         clientName: String? = nil,
         clientEmail: String? = nil,
         gstEnabled: Bool = true,
+        gstInclusive: Bool = false,
         subtotalCents: Int = 0,
         gstCents: Int = 0,
         totalCents: Int = 0,
@@ -56,6 +61,7 @@ final class Quote: Syncable {
         self.clientName = clientName
         self.clientEmail = clientEmail
         self.gstEnabled = gstEnabled
+        self.gstInclusive = gstInclusive
         self.subtotalCents = subtotalCents
         self.gstCents = gstCents
         self.totalCents = totalCents

@@ -8,9 +8,11 @@ import SwiftData
 final class MockSyncEngine: SyncEnqueuing {
     struct Call { let op: String; let entityType: EntityType; let entityId: String }
     var calls: [Call] = []
+    var flushCount = 0
     func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
         calls.append(Call(op: op, entityType: entityType, entityId: entity.id))
     }
+    func flush() async { flushCount += 1 }
 }
 
 @MainActor

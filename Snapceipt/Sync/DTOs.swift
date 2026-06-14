@@ -302,8 +302,17 @@ struct PullChange: Decodable {
     func int(_ key: String) -> Int? { raw[key]?.intValue }
     /// Typed accessor for an arbitrary domain column (double).
     func double(_ key: String) -> Double? { raw[key]?.doubleValue }
-    /// Typed accessor for an arbitrary domain column (bool).
-    func bool(_ key: String) -> Bool? { raw[key]?.boolValue }
+    /// Typed accessor for an arbitrary domain column (bool). Coerces a numeric 0/1
+    /// to false/true, because D1 stores booleans as INTEGER and the pull route
+    /// serializes them straight back as JSON numbers (so a bare `.boolValue` would
+    /// drop every pulled boolean flag — gstEnabled, gstInclusive, is_ai, …).
+    func bool(_ key: String) -> Bool? {
+        switch raw[key] {
+        case let .bool(b): return b
+        case let .number(n): return n != 0
+        default: return nil
+        }
+    }
 }
 
 // MARK: - JSON helpers

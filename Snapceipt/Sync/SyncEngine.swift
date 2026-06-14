@@ -249,6 +249,24 @@ final class SyncEngine {
         syncTask = nil
     }
 
+    /// Force the outbox up to the backend NOW and await it — used before an action
+    /// endpoint that needs a just-enqueued entity to already exist server-side
+    /// (quote send). First awaits any in-flight periodic sync so its batch lands (or
+    /// rolls back to pending), then drains a fresh push of whatever remains — which
+    /// includes the rows the caller just enqueued. Serialized via `syncTask` exactly
+    /// like `sync()`, so a concurrent `sync()`/`flush()` coordinates rather than
+    /// issuing a second concurrent push.
+    func flush() async {
+        if let inFlight = syncTask { await inFlight.value }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.push()
+        }
+        syncTask = task
+        await task.value
+        syncTask = nil
+    }
+
     // MARK: outbox queries
 
     /// Reset stranded "inflight" rows to "pending" (concrete-context #Predicate — safe).

@@ -17,6 +17,9 @@ final class QuoteEditorViewModel {
     private(set) var quoteId: String?
     var lineItems: [QuoteLineItem] = []
     var gstEnabled = true
+    /// When true (and `gstEnabled`), entered prices already include GST — see
+    /// `QuoteTotals.compute`. Only meaningful while `gstEnabled`.
+    var gstInclusive = false
     private(set) var clientName: String?
     private(set) var clientEmail: String?
 
@@ -42,7 +45,7 @@ final class QuoteEditorViewModel {
     var statusValue: QuoteStatus? { QuoteStatus(rawValue: status) }
 
     var totals: (subtotal: Int, gst: Int, total: Int) {
-        QuoteTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled)
+        QuoteTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled, gstInclusive: gstInclusive)
     }
 
     var canSend: Bool {
@@ -55,6 +58,7 @@ final class QuoteEditorViewModel {
         if let id, let q = fetchQuote(id) {
             quoteId = q.id
             gstEnabled = q.gstEnabled
+            gstInclusive = q.gstInclusive
             clientName = q.clientName
             clientEmail = q.clientEmail
             number = q.number
@@ -70,6 +74,7 @@ final class QuoteEditorViewModel {
         } else {
             quoteId = ID.uuidv7()
             gstEnabled = true
+            gstInclusive = false
             clientName = nil
             clientEmail = nil
             number = nil
@@ -110,6 +115,7 @@ final class QuoteEditorViewModel {
         quote.clientName = clientName
         quote.clientEmail = clientEmail
         quote.gstEnabled = gstEnabled
+        quote.gstInclusive = gstInclusive
         quote.subtotalCents = t.subtotal
         quote.gstCents = t.gst
         quote.totalCents = t.total
@@ -145,6 +151,11 @@ final class QuoteEditorViewModel {
         saveDraft()
         isSending = true
         defer { isSending = false }
+        // The send route loads the quote from D1 (it was only just enqueued locally
+        // by saveDraft). Push the outbox first so the quote + its line items exist
+        // server-side before we ask the backend to mint/number/PDF/email it — without
+        // this, a never-synced draft 404s as "Quote not found for this user".
+        await sync.flush()
         do {
             let r = try await api.sendQuote(qid)
             number = r.number
