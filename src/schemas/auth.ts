@@ -31,6 +31,21 @@ export const magicLinkVerifyBody = z.object({
 
 export type MagicLinkVerifyBody = z.infer<typeof magicLinkVerifyBody>;
 
+/** POST /auth/otp/request — 6-digit sign-in code fallback for cross-device. */
+export const otpRequestBody = z.object({
+  email: z.string().trim().email(),
+});
+
+export type OtpRequestBody = z.infer<typeof otpRequestBody>;
+
+/** POST /auth/otp/verify — { email, code } single-use 6-digit code. */
+export const otpVerifyBody = z.object({
+  email: z.string().trim().email(),
+  code: z.string().regex(/^\d{6}$/),
+});
+
+export type OtpVerifyBody = z.infer<typeof otpVerifyBody>;
+
 /** POST /auth/refresh — opaque refresh token, rotated on every use. */
 export const refreshBody = z.object({
   refreshToken: z.string().min(1),
