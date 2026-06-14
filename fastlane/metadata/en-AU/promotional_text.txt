@@ -1,0 +1,1 @@
+Snap a receipt and we read the merchant, total and GST for you. Built for Australian sole traders and small business — BAS-ready, no spreadsheets.

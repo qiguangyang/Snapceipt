@@ -1,0 +1,3 @@
+Snapceipt signs in with Sign in with Apple or an emailed magic link — no username/password. To review the full app without email, a demo account can be provisioned on request (contact support@snapceipt.cc). The app is Australian (AUD/GST); receipt OCR sends only extracted receipt text (never name/email) to our processor. Subscriptions are auto-renewing Apple In-App Purchases.
+
+EULA: https://snapceipt.cc/terms (set in ASC App Information -> License Agreement).
