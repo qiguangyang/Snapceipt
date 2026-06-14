@@ -29,6 +29,16 @@ struct SnapceiptApp: App {
     /// never block; in Release it uses the real `LAContext`-backed evaluator.
     @State private var appLock: AppLockController
 
+    /// StoreKit 2 service: loads products, drives purchase/restore, listens for
+    /// transaction updates. Injected into the environment so PaywallView can call it.
+    @State private var storekit: StoreKitService
+    /// Union of local StoreKit entitlement and backend plan. The UI reads this to
+    /// gate Pro features; injected into the environment.
+    @State private var entitlement: EntitlementStore
+    /// Retained here (not just in init's local scope) so the storekit/entitlement
+    /// callbacks can capture it with a strong reference.
+    private let api: APIClient
+
     /// UIKit app delegate bridging APNs token registration + notification taps. The
     /// Router/APIClient refs it routes through are injected from `init()` below.
     @UIApplicationDelegateAdaptor(NotificationDelegate.self) private var notificationDelegate
@@ -72,6 +82,22 @@ struct SnapceiptApp: App {
 
         let router = Router()
 
+        // Subscription stack: wire StoreKit → EntitlementStore callbacks before
+        // storing, so any launch-time transaction update is handled immediately.
+        let entitlement = EntitlementStore()
+        let storekit = StoreKitService()
+        storekit.onEntitlementChange = { entitled in entitlement.setLocalEntitled(entitled) }
+        storekit.onVerifiedTransaction = { origTxnId, expiresAtMs, productId in
+            // POST the purchase link to the backend (fire-and-forget; errors are benign
+            // — the ASSN webhook is authoritative).
+            Task { try? await api.recordPurchase(originalTransactionId: origTxnId,
+                                                  expiresAtMs: expiresAtMs,
+                                                  productId: productId) }
+        }
+        self.api = api
+        _storekit = State(initialValue: storekit)
+        _entitlement = State(initialValue: entitlement)
+
         _auth = State(initialValue: auth)
         _authVM = State(initialValue: AuthViewModel(api: api, auth: auth))
         _router = State(initialValue: router)
@@ -98,12 +124,21 @@ struct SnapceiptApp: App {
                 .environment(sync)
                 .environment(profiles)
                 .environment(appLock)
+                .environment(storekit)
+                .environment(entitlement)
                 .modelContainer(container)
                 .onOpenURL { url in
                     // Budget deep-link (snapceipt://budget/<id>) routes to the editor first.
                     if router.handleBudgetDeepLink(url) { return }
                     // Magic-link Universal Link / custom-scheme deep link.
                     Task { await authVM.handleDeepLink(url) }
+                }
+                .task {
+                    // Sync entitlements at launch: local StoreKit + backend plan.
+                    await storekit.refreshEntitlements()
+                    if let plan = try? await api.mePlan() {
+                        entitlement.applyServerPlan(plan)
+                    }
                 }
         }
     }

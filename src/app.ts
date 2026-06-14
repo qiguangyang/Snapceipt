@@ -16,6 +16,7 @@ import { quotesRoutes } from "./routes/quotes";
 import { inboxRoutes } from "./routes/inbox";
 import { accountRoutes } from "./routes/account";
 import { appstoreRoutes } from "./routes/appstore";
+import { subscriptionRoutes } from "./routes/subscription";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -104,6 +105,8 @@ app.route("/quotes", quotesRoutes);
 app.route("/profiles", inboxRoutes);
 // Protected: account ops (change email via code, delete account).
 app.route("/", accountRoutes);
+// Protected: POST /me/subscription — purchase link (StoreKit tx → backend).
+app.route("/me/subscription", subscriptionRoutes);
 // Public unauthenticated webhook — IP-keyed via the default tier's fallback
 // (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
 app.use("/appstore/*", rateLimit("default"));

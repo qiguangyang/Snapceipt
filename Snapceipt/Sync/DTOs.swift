@@ -154,6 +154,22 @@ struct MeResponse: Decodable {
     let devices: [DeviceDTO]
 }
 
+/// GET /auth/me -> { user: { …, plan }, … }. A narrow decode that keeps only the
+/// plan so EntitlementStore can sync the backend's cross-device truth without
+/// changing the existing SessionUser shape.
+struct MePlanResponse: Decodable {
+    struct PlanUser: Decodable { let plan: String }
+    let user: PlanUser
+}
+
+/// POST /me/subscription request body — links a verified Apple transaction to the
+/// user row so the webhook can later match by originalTransactionId.
+struct RecordPurchaseBody: Encodable {
+    let originalTransactionId: String
+    let expiresAtMs: Int?
+    let productId: String
+}
+
 /// A registered device row. `GET /auth/me` returns the full shape (§8.2); only `id`
 /// is contractually guaranteed, so the rest default to nil for source-compatibility.
 struct DeviceDTO: Decodable, Equatable {

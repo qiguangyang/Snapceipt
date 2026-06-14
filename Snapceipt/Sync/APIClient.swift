@@ -16,6 +16,16 @@ protocol APIClient {
     func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
     func me() async throws -> MeResponse
+    /// GET /auth/me, decoding only the plan ("free" | "pro").
+    func mePlan() async throws -> String
+    /// POST /me/subscription — link a verified Apple originalTransactionId to the
+    /// authed user row so the App Store Server Notifications webhook can match it.
+    /// NOTE: the server TRUSTS the client's claim at this point (no server-side
+    /// receipt verification). The backend writes the originalTransactionId and
+    /// optimistically flips plan to "pro". The webhook later provides authoritative
+    /// status. Full server-side receipt verification (App Store Server API) is a
+    /// flagged follow-up (see open_questions in the plan).
+    func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
@@ -117,6 +127,19 @@ final class LiveAPIClient: APIClient {
 
     func me() async throws -> MeResponse {
         try await send("GET", "/auth/me", body: NoBody(), authenticated: true)
+    }
+
+    func mePlan() async throws -> String {
+        let resp: MePlanResponse = try await send("GET", "/auth/me", body: NoBody(), authenticated: true)
+        return resp.user.plan
+    }
+
+    func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {
+        try await sendNoContent("POST", "/me/subscription",
+                                body: RecordPurchaseBody(originalTransactionId: originalTransactionId,
+                                                         expiresAtMs: expiresAtMs,
+                                                         productId: productId),
+                                authenticated: true)
     }
 
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
