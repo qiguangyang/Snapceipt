@@ -123,19 +123,58 @@ describe("POST /auth/otp/verify", () => {
     expect(device).not.toBeNull();
   });
 
-  it("rejects a wrong code with 400 VALIDATION_FAILED and keeps the code live until 5 attempts", async () => {
-    await requestCode("otp-wrong@example.com");
-    const res = await SELF.fetch("https://x/auth/otp/verify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "otp-wrong@example.com", code: "000000" }),
-    });
-    // 000000 *could* be the real code; guard against the 1-in-1e6 flake by re-checking the error code only.
-    expect([200, 400]).toContain(res.status);
-    if (res.status === 400) {
+  it("locks out after 5 wrong attempts: attempts 1–4 → 400/VALIDATION_FAILED, attempt 5 → 401/AUTH_INVALID_TOKEN", async () => {
+    const email = "otp-cap@example.com";
+    const realCode = await requestCode(email);
+    // Derive a guaranteed-wrong code: increment by 1 mod 1_000_000.
+    // This is never equal to realCode so the test is deterministic.
+    const wrongCode = ((parseInt(realCode, 10) + 1) % 1_000_000).toString().padStart(6, "0");
+
+    // The auth rate limiter allows 3/email/hr. Flush the per-email counter after the
+    // requestCode call so the 5 verify attempts start with a fresh window for this email.
+    // Key format: rl:auth-email:email:${email}:${hourBucket} (rateLimit.ts consume()).
+    const hourBucket = Math.floor(Date.now() / (60 * 60 * 1000));
+    const rlEmailKey = `rl:auth-email:email:${email}:${hourBucket}`;
+    const rlIpKey = `rl:auth-ip:ip:unknown:${hourBucket}`;
+    async function resetRateLimits() {
+      await env.KV.delete(rlEmailKey);
+      await env.KV.delete(rlIpKey);
+    }
+
+    // Attempts 1–4: wrong code → 400 VALIDATION_FAILED; code stays live.
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await resetRateLimits();
+      const res = await SELF.fetch("https://x/auth/otp/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, code: wrongCode }),
+      });
+      expect(res.status).toBe(400);
       const body = (await res.json()) as { error: { code: string } };
       expect(body.error.code).toBe("VALIDATION_FAILED");
     }
+
+    // Attempt 5 (at the cap): backend deletes the KV key → 401 AUTH_INVALID_TOKEN.
+    await resetRateLimits();
+    const capRes = await SELF.fetch("https://x/auth/otp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, code: wrongCode }),
+    });
+    expect(capRes.status).toBe(401);
+    const capBody = (await capRes.json()) as { error: { code: string } };
+    expect(capBody.error.code).toBe("AUTH_INVALID_TOKEN");
+
+    // Code is now consumed — even the real code yields 401.
+    await resetRateLimits();
+    const afterCapRes = await SELF.fetch("https://x/auth/otp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, code: realCode }),
+    });
+    expect(afterCapRes.status).toBe(401);
+    const afterCapBody = (await afterCapRes.json()) as { error: { code: string } };
+    expect(afterCapBody.error.code).toBe("AUTH_INVALID_TOKEN");
   });
 
   it("rejects with 401 AUTH_INVALID_TOKEN when no code was requested for that email", async () => {

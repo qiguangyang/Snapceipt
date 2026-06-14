@@ -61,6 +61,10 @@ struct OTPEntryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream.ignoresSafeArea())
         .keyboardDismissButton()
+        .task {
+            guard let email = vm.pendingEmail else { return }
+            await vm.requestOTP(email: email)
+        }
     }
 }
 
