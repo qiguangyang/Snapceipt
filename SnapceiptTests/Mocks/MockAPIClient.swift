@@ -115,6 +115,9 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try await h()
     }
 
+    func mePlan() async throws -> String { "free" }
+    func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {}
+
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
         pushCalls.append(mutations)
         guard let h = pushHandler else { return PushResponse(results: [], serverTime: 0) }
