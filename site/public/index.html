@@ -4,32 +4,203 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Snapceipt — snap receipts, sorted for tax</title>
-<style>
-  :root { --cream:#FBF6F0; --ink:#211C18; --ink2:#6B6258; --terra:#E8602C; --terra2:#C2461A; }
-  * { box-sizing:border-box; margin:0; }
-  body { background:var(--cream); color:var(--ink); font:18px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  main { max-width:640px; margin:0 auto; padding:96px 24px; }
-  h1 { font-size:40px; line-height:1.15; letter-spacing:-0.5px; }
-  h1 span { color:var(--terra); }
-  p.lede { margin-top:16px; color:var(--ink2); }
-  nav { margin-top:40px; display:flex; gap:24px; }
-  nav a { color:var(--terra2); font-weight:600; text-decoration:none; border-bottom:2px solid var(--terra2); padding-bottom:2px; }
-  footer { margin-top:96px; font-size:14px; color:var(--ink2); }
-</style>
+<meta name="description" content="Snap a receipt and Snapceipt reads the merchant, total, GST and category for you — instantly. Cloud-synced, private, made in Australia for sole traders & households.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://snapceipt.cc/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Snapceipt — snap receipts, sorted for tax">
+<meta property="og:description" content="Snap a receipt and Snapceipt reads the merchant, total, GST and category for you — instantly. Cloud-synced, private, made in Australia for sole traders & households.">
+<meta property="og:url" content="https://snapceipt.cc/">
+<meta property="og:image" content="https://snapceipt.cc/favicon.svg">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=Schibsted+Grotesk:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
-<main>
-  <h1>Snapceipt — <span>snap receipts</span>, sorted for tax.</h1>
-  <p class="lede">Capture a receipt with your camera and Snapceipt reads the merchant,
-  total, GST and category for you. Built for Australian sole traders and households.
-  Currently in private beta on TestFlight.</p>
-  <nav>
-    <a href="/privacy">Privacy policy</a>
-    <a href="/support">Support</a>
+<div class="wrap">
+
+  <nav id="nav" class="nav">
+    <a class="logo" href="/">Snap<b>ceipt</b></a>
+    <div class="links">
+      <a href="#demo">See it work</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a class="navbadge" href="https://apps.apple.com/au/app/id6778894594"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff" aria-hidden="true"><path d="M16.5 1.5c.1 1-.3 2-.9 2.7-.7.8-1.7 1.4-2.7 1.3-.1-1 .4-2 .9-2.6.7-.8 1.8-1.4 2.7-1.4zM20 17.4c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.7 3.1-1.4 0-1.7-.9-3.6-.9s-2.3.9-3.6.9c-1.5 0-2.7-1.6-3.6-2.9C1.1 17.6.9 13 2.5 10.6c1-1.6 2.6-2.5 4.1-2.5 1.5 0 2.5 1 3.8 1 1.2 0 2-1 3.8-1 1.3 0 2.7.7 3.7 2-3.2 1.8-2.7 6.4 0 7.3z"/></svg>Get the app</a>
+    </div>
   </nav>
-  <!-- App Store badge goes here at public launch (spec §4: link placeholder) -->
-  <p class="lede" style="margin-top:40px">Coming soon to the App&nbsp;Store.</p>
-  <footer>© 2026 Snapceipt</footer>
-</main>
+
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Made in Australia · for sole traders & households</div>
+      <h1>Every receipt, <em>sorted</em> for tax.</h1>
+      <p class="lede">Snap a receipt and Snapceipt reads the merchant, total, GST and category for you — instantly. Cloud-synced, private, and ready the moment tax time comes around.</p>
+      <div class="cta">
+        <a class="badge" href="https://apps.apple.com/au/app/id6778894594" aria-label="Download Snapceipt on the App Store"><img src="/assets/app-store-badge.svg" alt="Download on the App Store"></a>
+        <a class="ghost" href="#demo">Watch it work ↓</a>
+      </div>
+      <div class="tagline">Snap it. Sort it. Sorted.</div>
+    </div>
+    <div class="device"><div class="app">
+      <div class="h-head"><div class="h-hi">Good afternoon,</div><div class="h-name">Maya</div></div>
+      <div class="h-balance"><div class="l">This month · net</div><div class="v">$2,480.20</div><div class="sub">↑ 18 receipts captured</div></div>
+      <div class="h-sec">Recent</div>
+      <div class="h-row"><div class="h-ic">🛒</div><div><div class="m">Woolworths Metro</div><div class="d">Today · Groceries</div></div><div class="amt">$48.20</div></div>
+      <div class="h-row"><div class="h-ic">📎</div><div><div class="m">Officeworks</div><div class="d">12 Jun · Office</div></div><div class="amt">$129.00</div></div>
+      <div class="h-row"><div class="h-ic">⛽</div><div><div class="m">Caltex</div><div class="d">11 Jun · Fuel</div></div><div class="amt">$72.10</div></div>
+      <div class="tabbar"><span class="ti on"><span class="b"></span>Home</span><span class="ti"><span class="b"></span>Activity</span><span class="fab">＋</span><span class="ti"><span class="b"></span>Reports</span><span class="ti"><span class="b"></span>Profile</span></div>
+    </div></div>
+  </header>
+
+  <!-- ============ AUTO-PLAY DEMO ============ -->
+  <section class="demoSec" id="demo">
+    <div class="kicker">See it work</div>
+    <h2>From snap to sorted in seconds.</h2>
+    <p class="intro">Watch a receipt go from photo to fully categorised — GST and all — without a single keystroke.</p>
+    <div class="demoStage">
+      <div class="device" id="demoDevice" data-scene="0" aria-hidden="true"><div class="app"><div class="scenes">
+
+        <!-- scene 0: home -->
+        <div class="scene s0">
+          <div class="h-head"><div class="h-hi">Good afternoon,</div><div class="h-name">Maya</div></div>
+          <div class="h-balance"><div class="l">This month · net</div><div class="v">$2,432.00</div><div class="sub">Tap ＋ to add a receipt</div></div>
+          <div class="h-sec">Recent</div>
+          <div class="h-row"><div class="h-ic">📎</div><div><div class="m">Officeworks</div><div class="d">12 Jun · Office</div></div><div class="amt">$129.00</div></div>
+          <div class="h-row"><div class="h-ic">⛽</div><div><div class="m">Caltex</div><div class="d">11 Jun · Fuel</div></div><div class="amt">$72.10</div></div>
+          <div class="tabbar"><span class="ti on"><span class="b"></span>Home</span><span class="ti"><span class="b"></span>Activity</span><span class="fab">＋</span><span class="ti"><span class="b"></span>Reports</span><span class="ti"><span class="b"></span>Profile</span></div>
+          <div class="tapring"></div>
+        </div>
+
+        <!-- scene 1: camera scan -->
+        <div class="scene s1"><div class="cam">
+          <div class="receiptImg"><div class="ln t"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln s"></div></div>
+          <div class="scanline"></div>
+          <div class="camLabel">Reading receipt<span class="dots"></span></div>
+        </div></div>
+
+        <!-- scene 2: extracted -->
+        <div class="scene s2"><div class="ex">
+          <div class="top">Woolworths Metro</div><div class="topd">14 Jun 2026</div>
+          <div class="exField"><span class="k">Merchant</span><span class="v">Woolworths Metro <span class="chk">✓</span></span></div>
+          <div class="exField"><span class="k">Total</span><span class="v">$48.20 <span class="chk">✓</span></span></div>
+          <div class="exField"><span class="k">GST</span><span class="v">$3.11 <span class="chk">✓</span></span></div>
+          <div class="exField"><span class="k">Category</span><span class="v">Groceries <span class="chk">✓</span></span></div>
+          <div class="exField"><span class="k">Tax</span><span class="v"><span class="gstpill">GST read from receipt</span></span></div>
+        </div></div>
+
+        <!-- scene 3: saved -->
+        <div class="scene s3"><div class="ok">
+          <div class="okc">✓</div>
+          <h3>Sorted!</h3>
+          <p>Saved, categorised and synced.<br>Ready for BAS and tax time.</p>
+          <div class="okmini"><div class="h-ic">🛒</div><div><div class="m" style="font-size:14px;font-weight:600">Woolworths Metro</div><div class="d" style="font-size:11.5px;color:var(--ink3)">Groceries · GST $3.11</div></div><div class="amt" style="margin-left:auto;font-family:'Schibsted Grotesk';font-weight:700">$48.20</div></div>
+        </div></div>
+
+      </div></div></div>
+
+      <div class="demoSteps">
+        <div class="dStep" data-step="0"><div class="dn">1</div><div><h4>Snap</h4><p>Point your camera at any receipt — paper or digital.</p></div></div>
+        <div class="dStep" data-step="1"><div class="dn">2</div><div><h4>Snapceipt reads it</h4><p>Merchant, total, GST and category, pulled automatically.</p></div></div>
+        <div class="dStep" data-step="2"><div class="dn">3</div><div><h4>Sorted for tax</h4><p>Filed, synced and BAS-ready — no typing.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="features">
+    <div class="kicker">Features</div>
+    <h2>Less shoebox. More sorted.</h2>
+    <p class="intro">A complete receipt and expense companion built for the way Australians actually do tax.</p>
+    <div class="grid">
+      <div class="f"><div class="ic">📸</div><h3>Smart capture</h3><p>OCR and AI read each receipt in seconds. Tweak anything in a tap; it learns your habits.</p></div>
+      <div class="f"><div class="ic">🇦🇺</div><h3>Australian-accurate GST</h3><p>Correct GST, ABN and categories for AU tax — all in Australian dollars, by financial year.</p></div>
+      <div class="f"><div class="ic">📊</div><h3>Reports & insights</h3><p>See income vs expense, category breakdowns and tax-time totals at a glance.</p></div>
+      <div class="f"><div class="ic">🧾</div><h3>BAS-ready export</h3><p>GST-registered? Get a BAS-ready summary and a clean export to send to your accountant.</p></div>
+      <div class="f"><div class="ic">☁️</div><h3>Synced & offline</h3><p>Capture without signal; it syncs when you're back. Your receipts aren't trapped on one phone.</p></div>
+      <div class="f"><div class="ic">🔒</div><h3>Private by design</h3><p>No ads, no trackers, no selling your data. Sign in with Apple or a magic link.</p></div>
+    </div>
+    <p class="alsoline">Also included: <b>budgets & alerts</b> · <b>quotes & invoices</b> · <b>vehicle & WFH logbooks</b> · <b>email-in receipts</b> · <b>loyalty cards</b></p>
+  </section>
+
+  <!-- pricing teaser -->
+  <section class="sec" id="pricing">
+    <div class="kicker">Pricing</div>
+    <h2>Start free. Upgrade when tax gets real.</h2>
+    <p class="intro">Capture and sort receipts for free, forever. Go Pro when you need BAS, quotes and the full toolkit.</p>
+    <div class="ptease">
+      <div class="plan">
+        <div class="pname">Free</div>
+        <div class="price">$0</div>
+        <ul><li>Snap & auto-sort receipts</li><li>GST & category extraction</li><li>Basic reports</li><li>Cloud sync across devices</li></ul>
+      </div>
+      <div class="plan pro">
+        <div class="pname">Pro</div>
+        <div class="price">$9.99<small> /mo · or $79/yr</small></div>
+        <ul><li>Everything in Free</li><li>BAS-ready export</li><li>Quotes & invoices</li><li>Vehicle & WFH logbooks</li><li>Email-in receipts · unlimited</li></ul>
+      </div>
+    </div>
+    <div class="seePlans"><a class="ghost" href="/pricing">Compare plans in full →</a></div>
+  </section>
+
+  <section class="sec">
+    <div class="band">
+      <h2>Private by design. Australian by default.</h2>
+      <div class="bullets">
+        <span><b>🇦🇺 Made in Australia</b></span>
+        <span><b>Works offline</b></span>
+        <span><b>No ads, no tracking</b></span>
+        <span><b>Sign in with Apple</b></span>
+        <span><b>Your data stays yours</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="faq">
+    <div class="kicker">FAQ</div>
+    <h2>Good to know.</h2>
+    <div class="faqwrap">
+      <details open><summary>Which receipts can Snapceipt read?</summary><p>Paper or digital — snap it with your camera, import from Photos or Files, or forward an emailed receipt to your private Snapceipt inbox. It reads the merchant, date, total, GST and category automatically.</p></details>
+      <details><summary>Do I need to be GST-registered?</summary><p>No. Snapceipt works for any Australian sole trader or household. If you are GST-registered, Pro adds BAS-ready summaries and a quarterly export.</p></details>
+      <details><summary>Is my data private?</summary><p>Yes. No ads, no trackers, and we never sell your data. Receipts are processed only to extract their details, and you can delete your account and data any time from inside the app.</p></details>
+      <details><summary>Does it work offline?</summary><p>Yes. Capture receipts with no signal and they'll sync automatically once you're back online — your receipts are never stuck on a single device.</p></details>
+    </div>
+  </section>
+
+  <section class="final">
+    <h2>Snap it. Sort it. <em>Sorted.</em></h2>
+    <p class="sub">Stop typing receipts. Let Snapceipt do the sorting.</p>
+    <div class="cta">
+      <a class="badge" href="https://apps.apple.com/au/app/id6778894594" aria-label="Download Snapceipt on the App Store"><img src="/assets/app-store-badge.svg" alt="Download on the App Store"></a>
+    </div>
+  </section>
+
+</div>
+<footer class="footer"><div class="inner">
+  <a class="logo" style="font-size:18px" href="/">Snap<b>ceipt</b></a>
+  <a href="/pricing">Pricing</a><a href="/privacy">Privacy</a><a href="/support">Support</a>
+  <a href="mailto:support@snapceipt.cc">support@snapceipt.cc</a>
+  <span class="sp">© 2026 Snapceipt · Made in Australia 🇦🇺</span>
+</div></footer>
+<script>
+  var nav=document.getElementById('nav');
+  addEventListener('scroll',function(){ nav.classList.toggle('scrolled', scrollY>8); });
+  (function(){
+    var dev=document.getElementById('demoDevice'); if(!dev) return;
+    var steps=document.querySelectorAll('.dStep');
+    var sceneToStep=[0,0,1,2], durations=[2600,2200,2800,2400];
+    var scene=0,timer=null,running=false;
+    function render(){ dev.setAttribute('data-scene',scene); var st=sceneToStep[scene];
+      steps.forEach(function(s){ s.classList.toggle('on', +s.dataset.step===st); }); }
+    function tick(){ scene=(scene+1)%4; render(); timer=setTimeout(tick,durations[scene]); }
+    function start(){ if(running)return; running=true; render(); timer=setTimeout(tick,durations[scene]); }
+    function stop(){ running=false; clearTimeout(timer); }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ scene=2; render(); return; }
+    render();
+    if('IntersectionObserver' in window){
+      new IntersectionObserver(function(es){ es.forEach(function(e){ e.isIntersecting?start():stop(); }); },{threshold:.3}).observe(dev);
+    } else { start(); }
+  })();
+</script>
 </body>
 </html>
