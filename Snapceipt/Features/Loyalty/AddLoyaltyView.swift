@@ -3,7 +3,7 @@ import SwiftData
 
 /// Full-screen add-loyalty-card overlay. Scan CTA presents the live scanner (prefills
 /// number + format); a searchable brand grid (catalog + Custom) reveals the number
-/// field; Add-to-wallet is disabled until a brand is chosen. Save -> create + enqueue
+/// field; Add-to-wallet is disabled until a brand is chosen and a number entered. Save -> create + enqueue
 /// -> animated success -> onSaved (back to the wallet).
 struct AddLoyaltyView: View {
     let context: ModelContext

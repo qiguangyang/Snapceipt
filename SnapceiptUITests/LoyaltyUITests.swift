@@ -67,13 +67,18 @@ final class LoyaltyUITests: UITestCase {
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen].waitForExistence(timeout: 8),
                       "Did not return to wallet after save")
 
-        // Delete: the v1 wallet (§6) renders tappable tiles with NO swipe/long-press
-        // delete affordance, so there is no UI delete to drive here. Soft-delete +
-        // enqueue("delete") is fully covered by LoyaltyWalletViewModelTests.deleteSoft
-        // (unit). This UI test therefore proves the manual-add CRUD path end-to-end and
-        // confirms at least one card row still renders after the add.
-        let anyCard = app.descendants(matching: .any).matching(NSPredicate(
-            format: "identifier BEGINSWITH %@", AccessibilityID.loyaltyCardRowPrefix)).firstMatch
-        XCTAssertTrue(anyCard.waitForExistence(timeout: 5), "No loyalty card row after add")
+        // Delete: swipe a card row left to reveal the Delete action, tap it, and confirm
+        // the row count drops by one. The soft-delete + enqueue("delete") seam itself is
+        // unit-covered by LoyaltyWalletViewModelTests.deleteSoft.
+        let cardRows = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", AccessibilityID.loyaltyCardRowPrefix))
+        XCTAssertTrue(cardRows.firstMatch.waitForExistence(timeout: 5), "No loyalty card row after add")
+        let beforeCount = cardRows.count
+        cardRows.firstMatch.swipeLeft()
+        let deleteAction = app.buttons["Delete"].firstMatch
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 5), "Swipe Delete action did not appear")
+        deleteAction.tap()
+        expectation(for: NSPredicate(format: "count < %d", beforeCount), evaluatedWith: cardRows)
+        waitForExpectations(timeout: 5)
     }
 }

@@ -89,13 +89,31 @@ struct AddLoyaltyViewModelTests {
         #expect(v.brands.last?.key == "custom")
     }
 
-    @Test("not savable until a brand is selected")
+    @Test("not savable until a brand is selected and a number is entered")
     func canSave() throws {
         let (ctx, sync) = try makeFixture()
         let v = vm(ctx, sync)
         #expect(v.canSave == false)
         v.selectedBrand = LoyaltyBrand.catalog.first
+        #expect(v.canSave == false)             // brand chosen, number still empty
+        v.number = "   "
+        #expect(v.canSave == false)             // whitespace-only number is not enough
+        v.number = "9352999000000"
         #expect(v.canSave == true)
+    }
+
+    @Test("custom brand requires both a name and a number")
+    func canSaveCustom() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.selectedBrand = LoyaltyBrand.custom
+        #expect(v.canSave == false)
+        v.customName = "Local Cafe"
+        #expect(v.canSave == false)             // name only, number missing
+        v.number = "AB-2299"
+        #expect(v.canSave == true)
+        v.customName = "   "
+        #expect(v.canSave == false)             // name blanked again
     }
 
     @Test("save creates a card scoped to the active profile with brand fields + enqueues upsert")

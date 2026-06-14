@@ -36,9 +36,11 @@ final class AddLoyaltyViewModel {
         return brands.filter { $0.key == "custom" || $0.name.lowercased().contains(q) }
     }
 
-    /// Savable once a brand is chosen (Custom also requires a non-empty name).
+    /// Savable once a brand is chosen and a non-empty member number is entered
+    /// (Custom also requires a non-empty brand name).
     var canSave: Bool {
         guard let b = selectedBrand else { return false }
+        guard !number.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         if b.key == "custom" { return !customName.trimmingCharacters(in: .whitespaces).isEmpty }
         return true
     }

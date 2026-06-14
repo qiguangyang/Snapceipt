@@ -29,21 +29,34 @@ struct LoyaltyWalletView: View {
                             .padding(.top, 6)
                         Spacer()
                     } else {
-                        ScrollView {
+                        List {
                             Text("Tap a card to show its barcode at the checkout")
                                 .font(.ui(13)).foregroundStyle(Palette.ink2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 10)
-                            LazyVStack(spacing: 14) {
-                                ForEach(vm.cards) { card in
-                                    Button { onOpenCard(card.id) } label: { tile(card) }
-                                        .buttonStyle(.plain)
-                                        .accessibilityIdentifier(AccessibilityID.loyaltyCardRowPrefix + card.id)
-                                }
+                                .listRowInsets(EdgeInsets(top: 8, leading: 18, bottom: 4, trailing: 18))
+                                .listRowBackground(Palette.cream)
+                                .listRowSeparator(.hidden)
+                            // Swipe a row left to reveal Delete (soft-delete via the VM),
+                            // matching the Budgets/Quotes lists.
+                            ForEach(vm.cards) { card in
+                                Button { onOpenCard(card.id) } label: { tile(card) }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier(AccessibilityID.loyaltyCardRowPrefix + card.id)
+                                    .swipeActions {
+                                        Button(role: .destructive) { vm.delete(card) } label: { Text("Delete") }
+                                    }
                             }
-                            .padding(.horizontal, 18)
-                            .padding(.bottom, 110)
+                            .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
+                            .listRowBackground(Palette.cream)
+                            .listRowSeparator(.hidden)
+                            // Clear the bottom-pinned floating CTA so the last card scrolls free.
+                            Color.clear.frame(height: 100)
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Palette.cream)
+                                .listRowSeparator(.hidden)
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 } else { Color.clear }
             }
