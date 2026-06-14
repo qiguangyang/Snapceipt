@@ -10,10 +10,15 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 export const exportRequestSchema = z
   .object({
     profileId: z.string().min(1),
-    format: z.enum(["pdf", "csv", "accountant"]),
+    format: z.enum(["pdf", "csv", "accountant", "bas"]),
     from: isoDate,
     to: isoDate,
     toEmail: z.string().email().optional(),
+    // BAS pack manual params (spec §4.4). Only paygInstalmentCents is user-editable
+    // in v1; absent => 0 (the engine defaults the rest to 0).
+    bas: z
+      .object({ paygInstalmentCents: z.number().int().nonnegative().optional() })
+      .optional(),
   })
   .superRefine((val, ctx) => {
     if (val.format === "accountant" && !val.toEmail) {
