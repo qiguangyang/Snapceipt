@@ -28,11 +28,19 @@ export default defineWorkersConfig({
       workers: {
         // One reused runtime instead of one-per-suite (see fileParallelism note).
         singleWorker: true,
-        // Load main, compatibility_date/flags and bindings from wrangler.jsonc
-        // so tests use the same config as `wrangler dev`/`deploy`.
-        wrangler: { configPath: "./wrangler.jsonc" },
+        // Use wrangler.test.jsonc instead of wrangler.jsonc.  The test config is
+        // identical to the production config except the `ai` binding is omitted.
+        // wrangler v4 (used by @cloudflare/vitest-pool-workers 0.8.71) generates
+        // an external worker named __WRANGLER_EXTERNAL_AI_WORKER:snapceipt-api
+        // whose inline script imports `cloudflare-internal:ai-api` — a module
+        // absent from the workerd 1.20250906.0 binary bundled with the pool.
+        // That causes workerd to fail at startup.  Omitting the `ai` binding from
+        // the test config prevents the external worker from being generated.
+        // AI paths are all gated behind E2E_EMAIL_MODE and are not exercised in
+        // these unit tests; the production wrangler.jsonc is unchanged.
+        wrangler: { configPath: "./wrangler.test.jsonc" },
         miniflare: {
-          // Test-only extras layered on top of wrangler.jsonc bindings.
+          // Test-only extras layered on top of wrangler.test.jsonc bindings.
           compatibilityFlags: ["nodejs_compat"],
           bindings: {
             TEST_MIGRATIONS: migrations,
@@ -44,33 +52,6 @@ export default defineWorkersConfig({
           // .dev.vars isn't read in tests; inject the secrets/vars tests need.
           // (real secrets stay in .dev.vars locally / `wrangler secret` on deploy)
           // JWT_SIGNING_KEY/APPLE_BUNDLE_ID are exercised by later auth tests.
-          //
-          // The `ai` binding in wrangler.jsonc is compiled by wrangler into a
-          // wrapped binding backed by an *external* worker that the
-          // vitest-pool-workers runtime can't resolve offline
-          // (workers-sdk #6796 / #7434: `unstable_getMiniflareWorkerOptions`
-          // emits the wrapped `AI` binding without its external worker, so
-          // workerd fails to start with
-          // "wrapped binding module can't be resolved __WRANGLER_EXTERNAL_AI_WORKER").
-          // Override the AI wrapped binding with a local stub worker so the test
-          // runtime boots. AI is unused this phase; later AI tests can mock the
-          // model calls against this stub.
-          wrappedBindings: {
-            AI: { scriptName: "ai-mock" },
-          },
-          workers: [
-            {
-              name: "ai-mock",
-              modules: true,
-              script: `export default function () {
-                return {
-                  async run() {
-                    throw new Error("Workers AI is not available in the test runtime");
-                  },
-                };
-              }`,
-            },
-          ],
         },
       },
     },
