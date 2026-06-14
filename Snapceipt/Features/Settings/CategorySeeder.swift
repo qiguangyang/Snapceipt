@@ -35,6 +35,10 @@ enum CategorySeeder {
         .income:    SeedMeta(tintHex: "#1F9D6B", softHex: "#DEF3E9", defaultDeductiblePct: 0,   isIncome: true),
     ]
 
+    /// The only GST-free-by-default category (review §4.2): groceries. Everything
+    /// else (meals/fuel/software/office/home/health/travel/income) is taxable.
+    static let gstFreeDefaultByKey: [CategoryKey: Bool] = [.groceries: true]
+
     /// Insert the built-in `Category` rows for `profileId` that don't yet exist
     /// (live). Idempotent; enqueues an upsert only for the rows it inserts.
     static func ensure(profileId: String, userId: String,
@@ -60,12 +64,38 @@ enum CategorySeeder {
                 soft: seed?.softHex ?? "#FFFFFF",
                 defaultDeductiblePct: seed?.defaultDeductiblePct,
                 isIncome: seed?.isIncome ?? (key == .income),
-                sortOrder: sort)
+                sortOrder: sort,
+                gstFreeDefault: gstFreeDefaultByKey[key] ?? false)
             sort += 1
             context.insert(cat)
             sync.enqueue(op: "upsert", entityType: .category, entity: cat)
             inserted = true
         }
         if inserted { try? context.save() }
+    }
+
+    /// One-time per-profile backfill for installs that seeded categories BEFORE
+    /// gstFreeDefault existed (insert-only `ensure()` never revisits existing rows).
+    /// Sets gstFreeDefault on the known category rows to match the seed table
+    /// (only groceries → true), enqueues their upserts, and marks done. Idempotent.
+    static func backfillGstDefaults(profileId: String, context: ModelContext,
+                                    sync: any SyncEnqueuing, defaults: UserDefaults = .standard) {
+        let doneKey = "sc.bas.gstDefaultsBackfilled.\(profileId)"
+        if defaults.bool(forKey: doneKey) { return }
+        let pid = profileId
+        let rows = (try? context.fetch(FetchDescriptor<Category>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }))) ?? []
+        var changed = false
+        for row in rows {
+            let want = (CategoryKey(rawValue: row.key)).flatMap { gstFreeDefaultByKey[$0] } ?? false
+            if row.gstFreeDefault != want {
+                row.gstFreeDefault = want
+                row.updatedAt = Epoch.nowMs()
+                sync.enqueue(op: "upsert", entityType: .category, entity: row)
+                changed = true
+            }
+        }
+        if changed { try? context.save() }
+        defaults.set(true, forKey: doneKey)
     }
 }
