@@ -15,6 +15,7 @@ import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
 import { inboxRoutes } from "./routes/inbox";
 import { accountRoutes } from "./routes/account";
+import { appstoreRoutes } from "./routes/appstore";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -103,4 +104,5 @@ app.route("/quotes", quotesRoutes);
 app.route("/profiles", inboxRoutes);
 // Protected: account ops (change email via code, delete account).
 app.route("/", accountRoutes);
+app.route("/appstore", appstoreRoutes);
 app.route("/", miscRoutes);
