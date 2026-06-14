@@ -127,10 +127,17 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
       if (inQuietHours(d, nowMs)) continue;
       try {
         const result = await apns.sendPush(env, d.apns_token, payload);
-        // Stub (no APNS_KEY) or any non-2xx is NOT a real delivery: do not count it,
-        // so the budget stays re-armed for the next hourly run. Only a live 200 counts.
-        if (result.stub === false && result.status === 200) {
-          pushed++;
+        if (result.stub === false) {
+          if (result.status === 200) {
+            pushed++;
+          } else if (result.status === 410 || result.status === 400) {
+            // APNs reports the token is no longer valid (410 Unregistered / 400 BadDeviceToken):
+            // null it so future runs skip this device (devices WHERE apns_token IS NOT NULL).
+            await db
+              .prepare(`UPDATE devices SET apns_token = NULL, updated_at = ? WHERE apns_token = ?`)
+              .bind(nowMs, d.apns_token)
+              .run();
+          }
         }
       } catch (err) {
         console.warn(`[budgetAlert] sendPush failed for token ${d.apns_token}:`, err);

@@ -256,4 +256,21 @@ describe("budgetCronLogic", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(await alertSentAt("b503")).toBeNull(); // 503 is not a delivery -> re-arm next run
   });
+
+  it("prunes (nulls) the device token on a 410 Gone and does not stamp when no live delivery", async () => {
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 410 });
+    await addBudget("b410", { categoryId: null, capCents: 10000, thresholdPct: 90 });
+    await addTxn("t1", -9500, "2026-05-03", null);
+
+    await budgetCronLogic(env.DB, env, NOW);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    // The dead token is pruned so the next run skips it (devices WHERE apns_token IS NOT NULL).
+    const dev = await env.DB.prepare(`SELECT apns_token FROM devices WHERE id=?`)
+      .bind(D)
+      .first<{ apns_token: string | null }>();
+    expect(dev?.apns_token).toBeNull();
+    // 410 was the only device and it was not a delivery -> budget stays re-armed.
+    expect(await alertSentAt("b410")).toBeNull();
+  });
 });
