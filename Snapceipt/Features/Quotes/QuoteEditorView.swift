@@ -18,7 +18,6 @@ struct QuoteEditorView: View {
     @State private var showClientPicker = false
     @State private var sent = false
     @State private var shareURL: URL?
-    @FocusState private var keyboardFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -27,7 +26,9 @@ struct QuoteEditorView: View {
                 SheetHeader(title: quoteId == nil ? "New quote" : "Quote", onClose: onClose)
                 if let vm { content(vm) } else { Color.clear }
             }
-            if let vm { sendBar(vm) }
+            // Pin the send bar to the bottom (behind the keyboard) instead of letting
+            // it ride up and collide with the keyboard accessory bar while editing.
+            if let vm { sendBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
             if sent, let vm { successOverlay(vm) }
         }
         .accessibilityElement(children: .contain)
@@ -70,18 +71,9 @@ struct QuoteEditorView: View {
             }
             .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 120)
         }
-        // The number pad has no return/Done key, so give it a dismiss button.
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button { keyboardFocused = false } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(accent.base)
-                }
-                .accessibilityLabel("Hide keyboard")
-            }
-        }
+        // The number pad has no return key, and text fields share the same bar:
+        // a responder-chain dismiss button works for whichever field is focused.
+        .keyboardDismissButton()
     }
 
     private func numberBadge(_ vm: QuoteEditorViewModel) -> some View {
@@ -148,13 +140,11 @@ struct QuoteEditorView: View {
                     get: { String(line.quantity) },
                     set: { line.quantity = max(1, Int($0.filter(\.isNumber)) ?? 1) }))
                     .keyboardType(.numberPad)
-                    .focused($keyboardFocused)
                     .padding(10).frame(width: 70).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
                 TextField("Unit $", text: Binding(
                     get: { String(line.unitPriceCents / 100) },
                     set: { line.unitPriceCents = (Int($0.filter(\.isNumber)) ?? 0) * 100 }))
                     .keyboardType(.numberPad)
-                    .focused($keyboardFocused)
                     .padding(10).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
                 Text(fmt(line.lineTotalCents)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
                 Button { vm.removeLine(line) } label: {

@@ -173,6 +173,7 @@ private struct LogHoursSheet: View {
                 TextField("Note (optional)", text: $note)
             }
             .navigationTitle("Log hours")
+            .keyboardDismissButton() // hide-keyboard accessory for hours/note fields
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {

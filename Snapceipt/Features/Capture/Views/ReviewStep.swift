@@ -36,6 +36,8 @@ struct ReviewStep: View {
                 }
                 .padding(18)
             }
+            // Right-aligned "hide keyboard" accessory for the editable fields above.
+            .keyboardDismissButton()
         }
         .background(Palette.cream)
     }

@@ -35,6 +35,7 @@ struct ChangeEmailView: View {
                 } else { Color.clear }
             }
         }
+        .keyboardDismissButton() // hide-keyboard accessory for the email + code fields
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.changeEmailScreen)
         .transition(.opacity)

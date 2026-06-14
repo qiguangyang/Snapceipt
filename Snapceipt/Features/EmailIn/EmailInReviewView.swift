@@ -49,6 +49,7 @@ struct EmailInReviewView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
+        .keyboardDismissButton() // hide-keyboard accessory for merchant/amount/date fields
         .accessibilityIdentifier(AccessibilityID.emailInReviewScreen)
         .onAppear {
             guard !loaded, let t = txn else { return }

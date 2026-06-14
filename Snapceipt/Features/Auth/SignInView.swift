@@ -109,6 +109,7 @@ struct SignInView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream.ignoresSafeArea())
+        .keyboardDismissButton()   // dismiss the email keyboard
     }
 
     private var emailEntry: some View {

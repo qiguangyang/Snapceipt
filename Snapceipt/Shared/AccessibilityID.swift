@@ -13,6 +13,10 @@ enum AccessibilityID {
     static let onboardingCreate = "onboarding.create"
     static let shellTabBar = "shell.tabbar"
     static let shellHome = "shell.home"
+
+    /// The right-aligned "hide keyboard" button in the keyboard accessory bar
+    /// (shared via `.keyboardDismissButton()` on every input-bearing screen).
+    static let keyboardDismiss = "keyboard.dismiss"
     static let profileSwitcher = "profile.switcher"
     static let tabHome = "tab.home"
     static let tabActivity = "tab.activity"

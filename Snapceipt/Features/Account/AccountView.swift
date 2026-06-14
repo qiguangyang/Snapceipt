@@ -42,6 +42,7 @@ struct AccountView: View {
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
                     .task { await vm.loadDevices() }
+                    .keyboardDismissButton() // dismiss key for the DELETE confirm field
                 } else { Color.clear }
             }
         }

@@ -79,6 +79,7 @@ struct BudgetEditorView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.budgetEditorScreen)
         .transition(.opacity)
+        .keyboardDismissButton()   // Label + numberPad cap field -> "hide keyboard" accessory
         .onChange(of: scopeSelection) { _, v in scopeCategory = (v == "category"); applyDefaultLabel() }
         .onChange(of: catKey) { _, _ in applyDefaultLabel() }
         .task {

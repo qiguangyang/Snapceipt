@@ -46,6 +46,7 @@ struct BasView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.basScreen)
+        .keyboardDismissButton() // dismiss the numberPad on the PAYG (5A) field
         .transition(.opacity)
         .task {
             if vm == nil {

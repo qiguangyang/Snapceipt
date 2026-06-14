@@ -48,6 +48,8 @@ struct ExportSheet: View {
                 .padding(18)
             }
         }
+        // Add a "hide keyboard" accessory above the keyboard for the accountant email field.
+        .keyboardDismissButton()
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Palette.cream)
         .accessibilityElement(children: .contain)
