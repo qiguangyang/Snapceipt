@@ -9,6 +9,10 @@ protocol APIClient {
     /// includes only when E2E_TEST_MODE=1 (nil otherwise). Used by the dev sign-in button.
     func magicLinkRequestDev(email: String) async throws -> String?
     func magicLinkVerify(token: String) async throws -> SessionResponse
+    /// POST /auth/otp/request — request a 6-digit sign-in code (cross-device fallback).
+    func otpRequest(email: String) async throws
+    /// POST /auth/otp/verify — confirm the 6-digit code and start a session.
+    func otpVerify(email: String, code: String) async throws -> SessionResponse
     func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
     func me() async throws -> MeResponse
@@ -73,14 +77,15 @@ final class LiveAPIClient: APIClient {
 
     func magicLinkRequest(email: String) async throws {
         try await sendNoContent("POST", "/auth/magic-link/request",
-                                body: MagicLinkRequestBody(email: email), authenticated: false)
+                                body: MagicLinkRequestBody(email: email, deviceId: auth.deviceId),
+                                authenticated: false)
     }
 
     func magicLinkRequestDev(email: String) async throws -> String? {
         /// The 202 body only carries `devToken` when the backend runs with E2E_TEST_MODE=1.
         struct DevResp: Decodable { let devToken: String? }
         let data = try await perform("POST", "/auth/magic-link/request", query: [],
-                                     body: MagicLinkRequestBody(email: email),
+                                     body: MagicLinkRequestBody(email: email, deviceId: auth.deviceId),
                                      authenticated: false, allowRefresh: false)
         guard !data.isEmpty else { return nil }
         return (try? decoder.decode(DevResp.self, from: data))?.devToken
@@ -89,6 +94,16 @@ final class LiveAPIClient: APIClient {
     func magicLinkVerify(token: String) async throws -> SessionResponse {
         try await send("POST", "/auth/magic-link/verify",
                        body: MagicLinkVerifyBody(token: token), authenticated: false)
+    }
+
+    func otpRequest(email: String) async throws {
+        try await sendNoContent("POST", "/auth/otp/request",
+                                body: OTPRequestBody(email: email), authenticated: false)
+    }
+
+    func otpVerify(email: String, code: String) async throws -> SessionResponse {
+        try await send("POST", "/auth/otp/verify",
+                       body: OTPVerifyBody(email: email, code: code), authenticated: false)
     }
 
     func refresh(refreshToken: String) async throws -> SessionResponse {

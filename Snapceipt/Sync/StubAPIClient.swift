@@ -12,6 +12,8 @@ final class StubAPIClient: APIClient {
     func magicLinkRequest(email: String) async throws {}
     func magicLinkRequestDev(email: String) async throws -> String? { "stub-dev-token" }
     func magicLinkVerify(token: String) async throws -> SessionResponse { devSession() }
+    func otpRequest(email: String) async throws {}
+    func otpVerify(email: String, code: String) async throws -> SessionResponse { devSession() }
     func refresh(refreshToken: String) async throws -> SessionResponse { devSession() }
     func signOut() async throws {}
     func me() async throws -> MeResponse { MeResponse(user: devSession().user, devices: []) }

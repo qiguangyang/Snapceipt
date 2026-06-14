@@ -15,6 +15,10 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var magicLinkRequestHandler: ((String) async throws -> Void)?
     var magicLinkRequestDevHandler: ((String) async throws -> String?)?
     var magicLinkVerifyHandler: ((String) async throws -> SessionResponse)?
+    var otpRequestHandler: ((String) async throws -> Void)?
+    var otpVerifyHandler: ((_ email: String, _ code: String) async throws -> SessionResponse)?
+    private(set) var otpRequestedEmails: [String] = []
+    private(set) var otpVerifiedCodes: [(email: String, code: String)] = []
     var refreshHandler: ((String) async throws -> SessionResponse)?
     var signOutHandler: (() async throws -> Void)?
     var meHandler: (() async throws -> MeResponse)?
@@ -83,6 +87,18 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func magicLinkVerify(token: String) async throws -> SessionResponse {
         guard let h = magicLinkVerifyHandler else { throw MockAPIClientError.unscripted }
         return try await h(token)
+    }
+
+    func otpRequest(email: String) async throws {
+        otpRequestedEmails.append(email)
+        guard let h = otpRequestHandler else { throw MockAPIClientError.unscripted }
+        try await h(email)
+    }
+
+    func otpVerify(email: String, code: String) async throws -> SessionResponse {
+        otpVerifiedCodes.append((email, code))
+        guard let h = otpVerifyHandler else { throw MockAPIClientError.unscripted }
+        return try await h(email, code)
     }
 
     func refresh(refreshToken: String) async throws -> SessionResponse {

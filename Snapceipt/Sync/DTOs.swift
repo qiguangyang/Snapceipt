@@ -41,14 +41,28 @@ struct AppleAuthBody: Encodable {
     var email: String?
 }
 
-/// POST /auth/magic-link/request
+/// POST /auth/magic-link/request — carries the install deviceId so the backend
+/// device-binds the minted token (the X-Device-Id header is the binding source;
+/// this body field is a redundant hint for clients that can't set the header).
 struct MagicLinkRequestBody: Encodable {
     let email: String
+    let deviceId: String
 }
 
 /// POST /auth/magic-link/verify
 struct MagicLinkVerifyBody: Encodable {
     let token: String
+}
+
+/// POST /auth/otp/request — 6-digit sign-in code fallback.
+struct OTPRequestBody: Encodable {
+    let email: String
+}
+
+/// POST /auth/otp/verify — { email, code }.
+struct OTPVerifyBody: Encodable {
+    let email: String
+    let code: String
 }
 
 /// POST /auth/refresh

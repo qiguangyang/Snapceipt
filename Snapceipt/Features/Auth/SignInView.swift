@@ -156,6 +156,8 @@ final class PreviewAPIClient: APIClient {
     func magicLinkRequest(email: String) async throws {}
     func magicLinkRequestDev(email: String) async throws -> String? { nil }
     func magicLinkVerify(token: String) async throws -> SessionResponse { stub }
+    func otpRequest(email: String) async throws {}
+    func otpVerify(email: String, code: String) async throws -> SessionResponse { stub }
     func refresh(refreshToken: String) async throws -> SessionResponse { stub }
     func signOut() async throws {}
     func me() async throws -> MeResponse {
