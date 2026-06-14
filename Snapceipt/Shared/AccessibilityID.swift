@@ -197,6 +197,7 @@ enum AccessibilityID {
     static let profileAiAutoCategorise = "profile.row.aiAutoCategorise"  // inert visual toggle
     static let profileRowConnectedBanks = "profile.row.connectedBanks"   // Coming-soon placeholder
     static let profileRowHelp = "profile.row.help"                       // opens external URL
+    static let profileRowLegal = "profile.row.legal"                    // opens external Terms URL
     // Tax & GST
     static let taxScreen = "tax.screen"
     static let taxGstToggle = "tax.gst.toggle"
