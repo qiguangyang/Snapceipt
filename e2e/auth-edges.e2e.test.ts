@@ -159,6 +159,28 @@ describe("e2e (real HTTP): auth edges — bad magic-link (J04), refresh reuse (J
     expect(replay.status).toBeLessThan(500);
   });
 
+  it("J-OTP: cross-device OTP sign-in (devCode path) issues a session", async () => {
+    const email = `e2e+${Date.now()}-otp@example.com`;
+    const ip = "203.0.113.55";
+    const deviceId = crypto.randomUUID();
+    const reqRes = await api("/auth/otp/request", {
+      method: "POST", headers: { "cf-connecting-ip": ip }, body: { email },
+    });
+    expect(reqRes.status).toBe(202);
+    const code: string = reqRes.json.devCode;
+    expect(code).toMatch(/^\d{6}$/);
+
+    const verifyRes = await api("/auth/otp/verify", {
+      method: "POST", headers: { "cf-connecting-ip": ip, "x-device-id": deviceId },
+      body: { email, code },
+    });
+    expect(verifyRes.status).toBe(200);
+    expect(typeof verifyRes.json.accessToken).toBe("string");
+    expect(verifyRes.json.accessToken.split(".")).toHaveLength(3);
+    expect(verifyRes.json.user.email).toBe(email.toLowerCase());
+    expect(typeof verifyRes.json.refreshToken).toBe("string");
+  });
+
   it("J51: GET /auth/magic bridge forwards a valid token and 400s a bad one", async () => {
     const email = `e2e+${Date.now()}-j51@example.com`;
     const ip = "203.0.113.43";
