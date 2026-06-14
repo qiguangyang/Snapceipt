@@ -52,6 +52,10 @@ struct ExtractedReceipt: Decodable {
     // Review-editable extras (not on the wire).
     var paymentMethod: String? = nil
     var taxLabel: String? = nil
+    /// User-editable GST treatment (spec §4.6). Defaulted so existing init/decode
+    /// callers are unchanged; surfaced in ReviewStep.
+    var gstFree: Bool = false
+    var capital: Bool = false
     // Local extraction state ("done" | "pending" | "failed").
     var extractionStatus: String = "done"
 
@@ -87,11 +91,14 @@ struct ExtractedReceipt: Decodable {
          categoryKey: String, deductible: Int?, lineItems: [LineItemDraft],
          confidence: Double, needsReview: Bool,
          paymentMethod: String? = nil, taxLabel: String? = nil,
+         gstFree: Bool = false, capital: Bool = false,
          extractionStatus: String = "done") {
         self.merchant = merchant; self.date = date; self.total = total; self.gst = gst
         self.categoryKey = categoryKey; self.deductible = deductible
         self.lineItems = lineItems; self.confidence = confidence; self.needsReview = needsReview
         self.paymentMethod = paymentMethod; self.taxLabel = taxLabel
+        self.gstFree = gstFree
+        self.capital = capital
         self.extractionStatus = extractionStatus
     }
 }

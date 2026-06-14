@@ -46,6 +46,7 @@ final class PendingExtractionReconciler {
             let r = resp.receipt
             txn.catKey = r.categoryKey
             txn.gstCents = r.gst.map(ReceiptMapper.cents)
+            txn.gstSource = r.gst != nil ? "printed" : nil
             txn.deductiblePct = r.deductible
             txn.isAi = true
             txn.extractionStatus = "done"

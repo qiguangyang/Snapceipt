@@ -143,6 +143,34 @@ struct ReviewStep: View {
                     get: { draft.taxLabel ?? "" },
                     set: { draft.taxLabel = $0.isEmpty ? nil : $0 }))
             }
+            if mode == "business" {
+                Toggle("GST-free (no GST)", isOn: Binding(
+                    get: { draft.gstFree },
+                    set: { isFree in
+                        draft.gstFree = isFree
+                        // Authority rule: keep the displayed GST in sync immediately.
+                        let r = GstTreatment.applyGstFree(isFree, totalCents: Int((draft.total as NSDecimalNumber).doubleValue * 100))
+                        draft.gst = r.gstCents.map { Decimal($0) / 100 }
+                    }))
+                    .accessibilityIdentifier("txn.gstFree.toggle")
+
+                Toggle("Capital purchase (asset)", isOn: $draft.capital)
+                    .accessibilityIdentifier("txn.capital.toggle")
+
+                if !draft.gstFree {
+                    field("GST amount") {
+                        TextField("GST", text: Binding(
+                            get: { draft.gst.map { "\($0)" } ?? "" },
+                            set: { s in
+                                let cents = Int((Double(s) ?? 0) * 100)
+                                let r = GstTreatment.applyManualGst(cents)
+                                draft.gst = r.gstCents.map { Decimal($0) / 100 }
+                            }))
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("txn.gstAmount.field")
+                    }
+                }
+            }
             profileToggle
         }
         .padding(16)

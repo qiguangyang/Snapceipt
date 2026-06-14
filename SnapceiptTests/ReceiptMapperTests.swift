@@ -74,4 +74,45 @@ struct ReceiptMapperTests {
         #expect(items[1].priceCents == 2400)
         #expect(items[1].sortOrder == 1)
     }
+
+    @Test("a printed GST line sets gstSource = printed; no GST line leaves it nil")
+    func gstSourceFromCapture() {
+        let withGst = ExtractedReceipt(
+            merchant: "The Grounds", date: "2026-05-28", total: 42.50, gst: 3.86,
+            categoryKey: "meals", deductible: 50, lineItems: [], confidence: 0.9, needsReview: false)
+        let (t1, _) = ReceiptMapper.map(withGst, mode: "business", profileId: "p1", userId: "u1")
+        #expect(t1.gstSource == "printed")
+        #expect(t1.gstCents == 3_86)
+        #expect(t1.gstFree == false)
+        #expect(t1.capital == false)
+
+        let noGst = ExtractedReceipt(
+            merchant: "Cash sale", date: "2026-05-28", total: 10.00, gst: nil,
+            categoryKey: "office", deductible: 100, lineItems: [], confidence: 0.9, needsReview: false)
+        let (t2, _) = ReceiptMapper.map(noGst, mode: "business", profileId: "p1", userId: "u1")
+        #expect(t2.gstSource == nil)
+        #expect(t2.gstCents == nil)
+    }
+
+    @Test("a gst-free draft maps to gstFree=true, gstCents=0, gstSource=nil")
+    func gstFreeDraftMaps() {
+        var draft = ExtractedReceipt(
+            merchant: "Woolworths", date: "2026-05-28", total: 33.00, gst: 3.00,
+            categoryKey: "groceries", deductible: 100, lineItems: [], confidence: 0.9, needsReview: false)
+        draft.gstFree = true
+        let (t, _) = ReceiptMapper.map(draft, mode: "business", profileId: "p1", userId: "u1")
+        #expect(t.gstFree == true)
+        #expect(t.gstCents == 0)
+        #expect(t.gstSource == nil)
+    }
+
+    @Test("a capital draft maps capital=true through to the txn")
+    func capitalDraftMaps() {
+        var draft = ExtractedReceipt(
+            merchant: "Apple", date: "2026-05-28", total: 2200.00, gst: 200.00,
+            categoryKey: "software", deductible: 100, lineItems: [], confidence: 0.9, needsReview: false)
+        draft.capital = true
+        let (t, _) = ReceiptMapper.map(draft, mode: "business", profileId: "p1", userId: "u1")
+        #expect(t.capital == true)
+    }
 }
