@@ -150,14 +150,24 @@ authRoutes.post(
     const hash = await sha256Hex(token);
     const key = `ml:${hash}`;
 
-    const stored = await c.env.KV.getWithMetadata<{ email: string }>(key, "text");
+    const stored = await c.env.KV.getWithMetadata<{ email: string; deviceId?: string }>(key, "text");
     if (stored.value === null || !stored.metadata?.email) {
       // Unknown, already-consumed, or expired (KV TTL evicted it).
       throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired magic link");
     }
 
-    // Single-use: delete before issuing so a replay can't double-consume.
+    // Single-use: delete before issuing so a replay can't double-consume. This
+    // runs BEFORE the device-binding check, so a mismatched (intercepted) attempt
+    // still burns the token — the legitimate requester must re-request or use OTP.
     await c.env.KV.delete(key);
+
+    // Device binding (§21 same-device-only): when the token was minted with a
+    // requesting-device hint, the redeemer MUST present the same X-Device-Id.
+    // Tokens minted before this rollout carry no hint and stay redeemable anywhere.
+    const boundDevice = stored.metadata.deviceId;
+    if (boundDevice && c.req.header("X-Device-Id") !== boundDevice) {
+      throw new ApiError("AUTH_DEVICE_MISMATCH", "This sign-in link can only be used on the device that requested it");
+    }
 
     const email = normalizeEmail(stored.metadata.email);
     const now = nowMs();

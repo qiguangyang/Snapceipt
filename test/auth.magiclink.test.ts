@@ -241,6 +241,63 @@ describe("POST /auth/magic-link/verify", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  async function requestLinkFromDevice(email: string, deviceId: string): Promise<string> {
+    const spy = installEmailSpy();
+    const res = await SELF.fetch("https://x/auth/magic-link/request", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-device-id": deviceId },
+      body: JSON.stringify({ email }),
+    });
+    expect(res.status).toBe(202);
+    return spy.lastToken();
+  }
+
+  it("succeeds when the verifying X-Device-Id matches the requesting device", async () => {
+    const dev = "01890000-0000-7000-8000-00000000bind";
+    const token = await requestLinkFromDevice("bind-ok@example.com", dev);
+    const res = await SELF.fetch("https://x/auth/magic-link/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-device-id": dev },
+      body: JSON.stringify({ token }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { user: { email: string } };
+    expect(body.user.email).toBe("bind-ok@example.com");
+  });
+
+  it("rejects with 401 AUTH_DEVICE_MISMATCH when verified from a different device", async () => {
+    const token = await requestLinkFromDevice("bind-bad@example.com", "01890000-0000-7000-8000-0000000dev-a");
+    const res = await SELF.fetch("https://x/auth/magic-link/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-device-id": "01890000-0000-7000-8000-0000000dev-b" },
+      body: JSON.stringify({ token }),
+    });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("AUTH_DEVICE_MISMATCH");
+  });
+
+  it("consumes the token on a device-mismatch (a retry from the right device still 401s)", async () => {
+    const right = "01890000-0000-7000-8000-0000000right";
+    const token = await requestLinkFromDevice("bind-consume@example.com", right);
+    const wrong = await SELF.fetch("https://x/auth/magic-link/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-device-id": "01890000-0000-7000-8000-0000000wrong" },
+      body: JSON.stringify({ token }),
+    });
+    expect(wrong.status).toBe(401);
+    // The token was single-use deleted before the mismatch reject, so even the
+    // correct device now gets the generic invalid-token error.
+    const retry = await SELF.fetch("https://x/auth/magic-link/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-device-id": right },
+      body: JSON.stringify({ token }),
+    });
+    expect(retry.status).toBe(401);
+    const body = (await retry.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("AUTH_INVALID_TOKEN");
+  });
 });
 
 describe("GET /auth/magic (bridge)", () => {
