@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "note": "BAS golden vectors. Cents. Hand-derived per spec section 4.3. DO NOT regenerate.",
+  "scenarios": [
+    {
+      "name": "registered_mixed_capital_income",
+      "gstRegistered": true,
+      "manual": { "paygInstalmentCents": 0 },
+      "txns": [
+        { "amountCents": 1100000, "gstFree": false, "capital": false },
+        { "amountCents": -110000, "gstFree": false, "capital": false },
+        { "amountCents": -220000, "gstFree": false, "capital": true },
+        { "amountCents": -33000, "gstFree": true, "capital": false }
+      ],
+      "expected": {
+        "g1": 1100000, "g2": 0, "g3": 0, "g4": 0, "g5": 0, "g6": 1100000, "g7": 0, "g8": 1100000, "g9": 100000,
+        "g10": 220000, "g11": 143000, "g12": 363000, "g13": 0, "g14": 33000, "g15": 0, "g16": 33000, "g17": 330000, "g18": 0, "g19": 330000, "g20": 30000,
+        "oneA": 100000, "oneB": 30000, "eightA": 100000, "eightB": 30000,
+        "netGstCents": 70000, "paygCents": 0, "totalPayableCents": 70000
+      }
+    },
+    {
+      "name": "non_registered_forces_1A_zero",
+      "gstRegistered": false,
+      "manual": { "paygInstalmentCents": 0 },
+      "txns": [
+        { "amountCents": 1100000, "gstFree": false, "capital": false },
+        { "amountCents": -110000, "gstFree": false, "capital": false }
+      ],
+      "expected": {
+        "g1": 1100000, "g2": 0, "g3": 0, "g4": 0, "g5": 0, "g6": 1100000, "g7": 0, "g8": 1100000, "g9": 0,
+        "g10": 0, "g11": 110000, "g12": 110000, "g13": 0, "g14": 0, "g15": 0, "g16": 0, "g17": 110000, "g18": 0, "g19": 110000, "g20": 10000,
+        "oneA": 0, "oneB": 10000, "eightA": 0, "eightB": 10000,
+        "netGstCents": -10000, "paygCents": 0, "totalPayableCents": -10000
+      }
+    },
+    {
+      "name": "refund_1B_gt_1A",
+      "gstRegistered": true,
+      "manual": { "paygInstalmentCents": 0 },
+      "txns": [
+        { "amountCents": 110000, "gstFree": false, "capital": false },
+        { "amountCents": -330000, "gstFree": false, "capital": false }
+      ],
+      "expected": {
+        "g1": 110000, "g2": 0, "g3": 0, "g4": 0, "g5": 0, "g6": 110000, "g7": 0, "g8": 110000, "g9": 10000,
+        "g10": 0, "g11": 330000, "g12": 330000, "g13": 0, "g14": 0, "g15": 0, "g16": 0, "g17": 330000, "g18": 0, "g19": 330000, "g20": 30000,
+        "oneA": 10000, "oneB": 30000, "eightA": 10000, "eightB": 30000,
+        "netGstCents": -20000, "paygCents": 0, "totalPayableCents": -20000
+      }
+    },
+    {
+      "name": "empty_period_all_zero",
+      "gstRegistered": true,
+      "manual": { "paygInstalmentCents": 0 },
+      "txns": [],
+      "expected": {
+        "g1": 0, "g2": 0, "g3": 0, "g4": 0, "g5": 0, "g6": 0, "g7": 0, "g8": 0, "g9": 0,
+        "g10": 0, "g11": 0, "g12": 0, "g13": 0, "g14": 0, "g15": 0, "g16": 0, "g17": 0, "g18": 0, "g19": 0, "g20": 0,
+        "oneA": 0, "oneB": 0, "eightA": 0, "eightB": 0,
+        "netGstCents": 0, "paygCents": 0, "totalPayableCents": 0
+      }
+    },
+    {
+      "name": "monthly_window_with_payg",
+      "gstRegistered": true,
+      "manual": { "paygInstalmentCents": 50000 },
+      "txns": [
+        { "amountCents": 220000, "gstFree": false, "capital": false },
+        { "amountCents": -110000, "gstFree": false, "capital": false }
+      ],
+      "expected": {
+        "g1": 220000, "g2": 0, "g3": 0, "g4": 0, "g5": 0, "g6": 220000, "g7": 0, "g8": 220000, "g9": 20000,
+        "g10": 0, "g11": 110000, "g12": 110000, "g13": 0, "g14": 0, "g15": 0, "g16": 0, "g17": 110000, "g18": 0, "g19": 110000, "g20": 10000,
+        "oneA": 20000, "oneB": 10000, "eightA": 20000, "eightB": 10000,
+        "netGstCents": 10000, "paygCents": 50000, "totalPayableCents": 60000
+      }
+    }
+  ]
+}
