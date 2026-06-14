@@ -29,7 +29,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
  * requestId is echo-only (no server dedupe in v1).
  */
 export const extractRequestSchema = z.object({
-  ocrText: z.string().min(1, "ocrText is required"),
+  ocrText: z.string().min(1, "ocrText is required").max(20000, "ocrText too long"),
   source: z.enum(["scan", "email_in"]),
   defaultCurrency: z.string().length(3).default("AUD"),
   locale: z.string().min(2).default("en-AU"),
