@@ -13,7 +13,12 @@ export const crashReportSchema = z.object({
   osVersion: z.string().min(1),
   deviceModel: z.string().min(1),
   occurredAt: z.number().int().nonnegative(),
-  payload: z.record(z.string(), z.unknown()),
+  // Cap the raw diagnostic dictionary so an oversized payload is a clean 400 rather
+  // than a post-auth 500 on D1's ~1 MB row-value limit. 256 KB covers any real
+  // MXDiagnostic with headroom.
+  payload: z
+    .record(z.string(), z.unknown())
+    .refine((p) => JSON.stringify(p).length <= 256_000, { message: "payload too large" }),
 });
 
 export type CrashReport = z.infer<typeof crashReportSchema>;

@@ -19,5 +19,8 @@ describe("d1BackupLogic", () => {
     // The dump always contains the schema for our core tables.
     expect(text).toContain("CREATE TABLE");
     expect(text).toContain("users");
+    // The migrations bookkeeping table must never be in the dump (restoring it
+    // would corrupt D1's migration state).
+    expect(text).not.toContain("d1_migrations");
   });
 });

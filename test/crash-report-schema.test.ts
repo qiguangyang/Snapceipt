@@ -34,4 +34,12 @@ describe("crashReportSchema", () => {
       deviceModel: "iPhone16,2", occurredAt: 1,
     }).success).toBe(false);
   });
+
+  it("rejects an over-cap payload (>256KB)", () => {
+    expect(crashReportSchema.safeParse({
+      kind: "crash", appVersion: "0.1.0", osVersion: "iOS 18.5",
+      deviceModel: "iPhone16,2", occurredAt: 1,
+      payload: { blob: "a".repeat(300_000) },
+    }).success).toBe(false);
+  });
 });

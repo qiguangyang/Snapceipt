@@ -4,6 +4,10 @@
  * single dump query and stores it as a .sql object partitioned by UTC date. The
  * dump uses sqlite_master for DDL and per-table SELECTs for data so it round-trips
  * via `wrangler d1 execute --file`.
+ *
+ * SCALE NOTE: the whole dump is accumulated in memory (`parts`) before a single
+ * bucket.put. Fine at GA scale; if the DB grows large, switch to a streamed/chunked
+ * export (paginate per-table SELECTs + multipart R2 upload) to avoid Worker OOM.
  */
 
 /** R2 object key: d1/snapceipt/<YYYY-MM-DD>/<epoch-ms>.sql (UTC date partition). */
