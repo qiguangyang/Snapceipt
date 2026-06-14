@@ -77,7 +77,7 @@ struct TaxSettingsView: View {
                     if ABNValidator.looksInvalid(abnText) {
                         Text("This ABN doesn't look right — check the digits.")
                             .font(.ui(12)).foregroundStyle(Palette.alert)
-                            .accessibilityIdentifier("tax.abn.hint")
+                            .accessibilityIdentifier(AccessibilityID.taxAbnHint)
                     }
                 }
                 Toggle("Registered for GST", isOn: Binding(

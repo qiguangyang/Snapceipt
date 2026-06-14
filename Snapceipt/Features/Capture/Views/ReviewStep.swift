@@ -152,10 +152,10 @@ struct ReviewStep: View {
                         let r = GstTreatment.applyGstFree(isFree, totalCents: Int((draft.total as NSDecimalNumber).doubleValue * 100))
                         draft.gst = r.gstCents.map { Decimal($0) / 100 }
                     }))
-                    .accessibilityIdentifier("txn.gstFree.toggle")
+                    .accessibilityIdentifier(AccessibilityID.txnGstFreeToggle)
 
                 Toggle("Capital purchase (asset)", isOn: $draft.capital)
-                    .accessibilityIdentifier("txn.capital.toggle")
+                    .accessibilityIdentifier(AccessibilityID.txnCapitalToggle)
 
                 if !draft.gstFree {
                     field("GST amount") {
@@ -167,7 +167,7 @@ struct ReviewStep: View {
                                 draft.gst = r.gstCents.map { Decimal($0) / 100 }
                             }))
                             .keyboardType(.decimalPad)
-                            .accessibilityIdentifier("txn.gstAmount.field")
+                            .accessibilityIdentifier(AccessibilityID.txnGstAmountField)
                     }
                 }
             }
