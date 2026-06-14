@@ -51,6 +51,10 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: SnapceiptTests
+        excludes:
+          - "Fixtures"          # excluded from sources; re-added as a resource below
+      - path: SnapceiptTests/Fixtures
+        buildPhase: resources
     dependencies:
       - target: Snapceipt
     settings:
