@@ -31,6 +31,13 @@ class UITestCase: XCTestCase {
         app.launch()
     }
 
+    /// Launch directly into the BAS fixture: a GST-registered Business profile p1
+    /// active + a non-registered Business p2 — for BasUITests.
+    func launchBasSeed() {
+        app.launchArguments += ["-uiTestStub", "-uiTestBasSeed"]
+        app.launch()
+    }
+
     /// Launch directly into the RICH tour fixture (both profiles populated,
     /// clock pinned) — for ScreenshotTourUITests only.
     func launchTour() {
