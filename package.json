@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "node -e \"const v=require('child_process').execSync('npx wrangler --version').toString().match(/(\\\\d+)\\\\.\\\\d+\\\\.\\\\d+/);if(!v||+v[1]<4){console.error('wrangler v4+ required for deploy (found '+(v?v[0]:'none')+'): run npm i -D wrangler@4');process.exit(1)}\" && wrangler deploy",
+    "deploy": "node -e \"const v=require('child_process').execSync('wrangler --version').toString().match(/(\\\\d+)\\\\.\\\\d+\\\\.\\\\d+/);if(!v||+v[1]<4){console.error('wrangler v4+ required for deploy (found '+(v?v[0]:'none')+'): run npm i -D wrangler@4');process.exit(1)}\" && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
