@@ -17,6 +17,7 @@ final class Category: Syncable {
     var defaultDeductiblePct: Int?
     var isIncome: Bool
     var sortOrder: Int
+    var gstFreeDefault: Bool         // seeded default gstFree for new txns
 
     var createdAt: Int
     var updatedAt: Int
@@ -38,6 +39,7 @@ final class Category: Syncable {
         defaultDeductiblePct: Int? = nil,
         isIncome: Bool = false,
         sortOrder: Int = 0,
+        gstFreeDefault: Bool = false,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -55,6 +57,7 @@ final class Category: Syncable {
         self.defaultDeductiblePct = defaultDeductiblePct
         self.isIncome = isIncome
         self.sortOrder = sortOrder
+        self.gstFreeDefault = gstFreeDefault
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
