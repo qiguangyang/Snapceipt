@@ -14,6 +14,7 @@ const quote: QuotePdfData = {
   clientName: "Jane Roe",
   clientEmail: "jane@example.com",
   gstEnabled: true,
+  gstInclusive: false,
   subtotalCents: 105000,
   gstCents: 10500,
   totalCents: 115500,
@@ -39,6 +40,7 @@ describe("buildQuotePdf", () => {
         clientName: "Bob",
         clientEmail: null,
         gstEnabled: false,
+        gstInclusive: false,
         subtotalCents: 5000,
         gstCents: 0,
         totalCents: 5000,
@@ -51,6 +53,27 @@ describe("buildQuotePdf", () => {
     expect(bytes[0]).toBe(0x25);
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("renders a GST-inclusive quote (ex-GST subtotal + embedded GST)", async () => {
+    const bytes = await buildQuotePdf(
+      {
+        ...quote,
+        gstInclusive: true,
+        // 210.00 entered (incl GST): subtotal 190.91, gst 19.09, total 210.00.
+        subtotalCents: 19091,
+        gstCents: 1909,
+        totalCents: 21000,
+      },
+      [
+        { description: "Kills", quantity: 1, unitPriceCents: 16500 },
+        { description: "Soft", quantity: 1, unitPriceCents: 4500 },
+      ],
+      sender,
+    );
+    expect(bytes[0]).toBe(0x25);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
   });
 
   it("paginates a long line-item list", async () => {

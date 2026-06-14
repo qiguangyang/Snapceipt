@@ -161,6 +161,7 @@ enum AccessibilityID {
     static let quoteEditorAddLine = "quote.editor.addLine"
     static let quoteLineRowPrefix = "quote.line.row."    // + line.id
     static let quoteEditorGst = "quote.editor.gst"
+    static let quoteEditorGstInclusive = "quote.editor.gstInclusive"
     static let quoteEditorSend = "quote.editor.send"
     static let clientPickerScreen = "client.picker.screen"
     static let clientPickerAdd = "client.picker.add"

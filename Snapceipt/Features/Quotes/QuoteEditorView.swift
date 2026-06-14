@@ -152,23 +152,42 @@ struct QuoteEditorView: View {
     }
 
     private func gstRow(_ vm: QuoteEditorViewModel) -> some View {
-        Toggle(isOn: Binding(get: { vm.gstEnabled }, set: { vm.gstEnabled = $0 })) {
-            Text("Add GST (10%)").font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
+        VStack(spacing: 0) {
+            Toggle(isOn: Binding(get: { vm.gstEnabled },
+                                 set: { on in withAnimation(.easeInOut(duration: 0.2)) { vm.gstEnabled = on } })) {
+                Text("Add GST (10%)").font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
+            }
+            .tint(accent.base)
+            .accessibilityIdentifier(AccessibilityID.quoteEditorGst)
+
+            // GST-inclusive mode only makes sense once GST is on.
+            if vm.gstEnabled {
+                Divider().overlay(Palette.line2).padding(.vertical, 12)
+                Toggle(isOn: Binding(get: { vm.gstInclusive }, set: { vm.gstInclusive = $0 })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("GST inclusive").font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
+                        Text("Line prices already include GST").font(.ui(11.5)).foregroundStyle(Palette.ink3)
+                    }
+                }
+                .tint(accent.base)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorGstInclusive)
+            }
         }
-        .tint(accent.base)
         .padding(12)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityIdentifier(AccessibilityID.quoteEditorGst)
     }
 
     private func totalsCard(_ vm: QuoteEditorViewModel) -> some View {
         let t = vm.totals
+        // Inclusive mode relabels the ledger: the subtotal is the ex-GST base and the
+        // GST line is the embedded portion (total is unchanged from the entered sum).
+        let inclusive = vm.gstEnabled && vm.gstInclusive
         return VStack(spacing: 8) {
-            totalRow("Subtotal", fmt(t.subtotal), bold: false)
+            totalRow(inclusive ? "Subtotal (ex GST)" : "Subtotal", fmt(t.subtotal), bold: false)
             // Hairline between each ledger line (design ref: screens.md §9 totals card).
             Divider().overlay(Palette.line2)
             if vm.gstEnabled {
-                totalRow("GST (10%)", fmt(t.gst), bold: false)
+                totalRow(inclusive ? "GST (10%) included" : "GST (10%)", fmt(t.gst), bold: false)
                 Divider().overlay(Palette.line2)
             }
             totalRow("Total", fmt(t.total), bold: true)

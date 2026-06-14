@@ -43,6 +43,40 @@ struct QuoteEditorViewModelTests {
         #expect(v.totals.total == 220_00)
     }
 
+    @Test("GST inclusive: total stays the entered sum; gst is the embedded portion")
+    func gstInclusiveTotals() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 165_00
+        v.addLine(); v.lineItems[1].unitPriceCents = 45_00
+        v.gstInclusive = true
+        #expect(v.totals.total == 210_00)     // unchanged from entered 165+45
+        #expect(v.totals.gst == 19_09)        // round(210/11)
+        #expect(v.totals.subtotal == 190_91)  // ex-GST base
+    }
+
+    @Test("saveDraft persists gstInclusive and reload restores it")
+    func gstInclusiveRoundTrips() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.setClient(name: "Acme", email: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 110_00
+        v.gstInclusive = true
+        v.saveDraft()
+        let id = v.quoteId!
+        let stored = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id }))[0]
+        #expect(stored.gstInclusive == true)
+        #expect(stored.totalCents == 110_00)  // inclusive: total == entered sum
+        #expect(stored.gstCents == 10_00)
+        #expect(stored.subtotalCents == 100_00)
+
+        let v2 = vm(ctx, sync)
+        v2.load(id: id)
+        #expect(v2.gstInclusive == true)
+    }
+
     @Test("toggling GST off zeroes gst in totals")
     func gstOff() throws {
         let (ctx, sync) = try makeFixture()
@@ -142,6 +176,29 @@ struct QuoteEditorViewModelTests {
         #expect(q.number == "SN-0042")
         #expect(q.status == "sent")
         #expect(q.totalCents == 55_00)
+    }
+
+    @Test("send flushes the outbox BEFORE calling sendQuote (the quote must exist server-side)")
+    func sendFlushesBeforeSending() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        // Capture how many flushes had completed at the moment sendQuote is invoked —
+        // proves the outbox was drained (flushCount == 1) before the send call fires.
+        var flushCountAtSend = -1
+        mock.sendQuoteHandler = { _ in
+            flushCountAtSend = sync.flushCount
+            return SendQuoteResponse(number: "SN-0001", sentAt: 1, status: "sent",
+                                     subtotalCents: 10_00, gstCents: 1_00, totalCents: 11_00,
+                                     pdfUrl: "/quotes/dl/tok", expiresAt: 1, emailed: false)
+        }
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        v.addLine(); v.lineItems[0].unitPriceCents = 10_00
+        let ok = await v.send(api: mock)
+        #expect(ok == true)
+        #expect(flushCountAtSend == 1)   // flush ran, and completed, before sendQuote
+        #expect(sync.flushCount == 1)
     }
 
     @Test("send returns false + sets errorMessage when the API throws; status stays draft")

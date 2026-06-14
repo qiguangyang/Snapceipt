@@ -47,7 +47,7 @@ async function seedAuthed() {
 }
 
 /** Seed a business profile + a draft quote + 2 line items. */
-async function seedQuote(userId: string, opts: { clientEmail?: string | null } = {}) {
+async function seedQuote(userId: string, opts: { clientEmail?: string | null; gstInclusive?: boolean } = {}) {
   const profileId = uuidv7();
   const quoteId = uuidv7();
   const now = nowMs();
@@ -56,9 +56,11 @@ async function seedQuote(userId: string, opts: { clientEmail?: string | null } =
      VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'#0E7C72','#DCF0ED','#0A5950',?,?)`,
   ).bind(profileId, userId, now, now).run();
   await env.DB.prepare(
-    `INSERT INTO quotes (id,user_id,profile_id,client_name,client_email,gst_enabled,status,valid_until,created_at,updated_at)
-     VALUES (?,?,?,'Jane Roe',?,1,'draft','2026-06-15',?,?)`,
-  ).bind(quoteId, userId, profileId, opts.clientEmail === undefined ? "jane@example.com" : opts.clientEmail, now, now).run();
+    `INSERT INTO quotes (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,status,valid_until,created_at,updated_at)
+     VALUES (?,?,?,'Jane Roe',?,1,?,'draft','2026-06-15',?,?)`,
+  ).bind(quoteId, userId, profileId,
+    opts.clientEmail === undefined ? "jane@example.com" : opts.clientEmail,
+    opts.gstInclusive ? 1 : 0, now, now).run();
   await env.DB.prepare(
     `INSERT INTO quote_line_items (id,user_id,quote_id,description,quantity,unit_price_cents,sort_order,created_at,updated_at)
      VALUES (?,?,?,'Site inspection',1,25000,0,?,?)`,
@@ -125,6 +127,31 @@ describe("POST /quotes/:id/send", () => {
     expect(outbox.status).toBe("sent");
     expect(outbox.to_email).toBe("jane@example.com");
     expect(outbox.export_format).toBe("pdf");
+  });
+
+  it("recomputes GST-INCLUSIVE totals when the quote is gst_inclusive (total == entered sum)", async () => {
+    vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
+    const { userId, accessToken } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId, { gstInclusive: true });
+
+    const res = await send(quoteId, accessToken);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+
+    // Entered (GST-inclusive): 25000 + 80000 = 105000. The total stays the entered
+    // sum; GST is the embedded portion = round(105000 * 0.1/1.1) = 9545; ex-GST
+    // subtotal = 95455.
+    expect(body.totalCents).toBe(105000);
+    expect(body.gstCents).toBe(9545);
+    expect(body.subtotalCents).toBe(95455);
+
+    // Persisted with the inclusive totals.
+    const row = await env.DB.prepare(
+      `SELECT subtotal_cents, gst_cents, total_cents FROM quotes WHERE id=?`,
+    ).bind(quoteId).first<any>();
+    expect(row.subtotal_cents).toBe(95455);
+    expect(row.gst_cents).toBe(9545);
+    expect(row.total_cents).toBe(105000);
   });
 
   it("is IDEMPOTENT: a re-send keeps the existing number (no new mint)", async () => {

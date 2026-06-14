@@ -25,6 +25,7 @@ interface QuoteRow {
   client_name: string | null;
   client_email: string | null;
   gst_enabled: number;
+  gst_inclusive: number;
   valid_until: string | null;
 }
 
@@ -45,7 +46,7 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 1. Load the quote (scoped to the authed user).
   const quote = await c.env.DB.prepare(
-    `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, valid_until
+    `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, valid_until
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<QuoteRow>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
@@ -78,9 +79,11 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 3. Recompute totals authoritatively.
   const gstEnabled = quote.gst_enabled === 1;
+  const gstInclusive = quote.gst_inclusive === 1;
   const totals = recomputeTotals(
     lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
     gstEnabled,
+    gstInclusive,
   );
 
   // 4. Mint SN-#### only on the first send; a re-send keeps the existing number.
@@ -105,6 +108,7 @@ quotesRoutes.post("/:id/send", async (c) => {
       clientName: quote.client_name,
       clientEmail: quote.client_email,
       gstEnabled,
+      gstInclusive,
       subtotalCents: totals.subtotalCents,
       gstCents: totals.gstCents,
       totalCents: totals.totalCents,

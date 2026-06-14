@@ -27,6 +27,9 @@ export interface QuotePdfData {
   clientName: string | null;
   clientEmail: string | null;
   gstEnabled: boolean;
+  /** When true (and gstEnabled), prices include GST: subtotal is ex-GST, GST is the
+   *  embedded portion, and the total equals the entered sum. */
+  gstInclusive: boolean;
   subtotalCents: number;
   gstCents: number;
   totalCents: number;
@@ -98,10 +101,16 @@ export async function buildQuotePdf(
   }
   y -= LINE / 2;
 
-  // Totals.
-  draw(`Subtotal: ${dollars(quote.subtotalCents)}`, font, 12);
-  if (quote.gstEnabled) draw(`GST (10%): ${dollars(quote.gstCents)}`, font, 12);
+  // Totals. Inclusive mode relabels the ledger: the subtotal is the ex-GST base and
+  // the GST line is the embedded portion (the total equals the entered, GST-inclusive
+  // sum). The subtotal/gst/total amounts are already recomputed for the mode.
+  const inclusive = quote.gstEnabled && quote.gstInclusive;
+  draw(`${inclusive ? "Subtotal (ex GST)" : "Subtotal"}: ${dollars(quote.subtotalCents)}`, font, 12);
+  if (quote.gstEnabled) {
+    draw(`GST (10%)${inclusive ? " included" : ""}: ${dollars(quote.gstCents)}`, font, 12);
+  }
   draw(`Total: ${dollars(quote.totalCents)}`, bold, 14);
+  if (inclusive) draw("Prices include GST.", font, 9);
   y -= LINE / 2;
 
   // Footer.
