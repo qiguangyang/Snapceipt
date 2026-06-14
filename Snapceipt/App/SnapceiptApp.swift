@@ -28,6 +28,11 @@ struct SnapceiptApp: App {
     /// (`makeAppLock` injects `canEvaluate: { false }`) so seeded UI-test launches
     /// never block; in Release it uses the real `LAContext`-backed evaluator.
     @State private var appLock: AppLockController
+    /// MetricKit crash/hang reporter — registered with MXMetricManager at launch so
+    /// diagnostics from the previous run POST to /crash-reports. Held to keep the
+    /// subscriber alive. Wired only on the live network boundary (Release), not the
+    /// UI-test stub.
+    @State private var crashReporter: CrashReporter?
 
     /// StoreKit 2 service: loads products, drives purchase/restore, listens for
     /// transaction updates. Injected into the environment so PaywallView can call it.
@@ -106,6 +111,11 @@ struct SnapceiptApp: App {
         _sync = State(initialValue: sync)
         _profiles = State(initialValue: profiles)
         _appLock = State(initialValue: appLock)
+#if DEBUG
+        _crashReporter = State(initialValue: nil)
+#else
+        _crashReporter = State(initialValue: CrashReporter(api: api))
+#endif
 
         // Inject the SAME Router + APIClient instances into the APNs delegate (UIKit
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.

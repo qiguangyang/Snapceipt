@@ -117,5 +117,6 @@ final class StubAPIClient: APIClient {
     }
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {}
 }
 #endif

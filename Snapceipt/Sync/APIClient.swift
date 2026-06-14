@@ -56,6 +56,9 @@ protocol APIClient {
     func revokeDevice(id: String) async throws
     /// DELETE /account — immediate hard purge of the user's data. (§8.3)
     func deleteAccount() async throws
+    /// POST /crash-reports — upload one MetricKit diagnostic (crash/hang). Best-effort;
+    /// callers ignore failures (diagnostics are not critical-path). (ops)
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -259,6 +262,10 @@ final class LiveAPIClient: APIClient {
         try await sendNoContent("DELETE", "/account", body: NoBody(), authenticated: true)
     }
 
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {
+        try await sendNoContent("POST", "/crash-reports", body: body, authenticated: true)
+    }
+
     // MARK: - Request plumbing
 
     /// Send a request and decode a JSON body into `T`.
@@ -450,5 +457,34 @@ private actor RefreshCoordinator {
         let result = await task.value
         inFlight = nil
         return result
+    }
+}
+
+/// POST /crash-reports request body — a MetricKit diagnostic reduced to the
+/// server envelope. `payload` is the raw MXDiagnostic dictionary as JSON.
+struct DiagnosticReportBody: Encodable {
+    let kind: String            // "crash" | "hang"
+    let appVersion: String
+    let osVersion: String
+    let deviceModel: String
+    let occurredAt: Int         // epoch ms
+    let payload: [String: AnyCodable]
+}
+
+/// Minimal type-erased JSON value so an arbitrary MXDiagnostic dictionary encodes.
+struct AnyCodable: Encodable {
+    let value: Any
+    init(_ value: Any) { self.value = value }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch value {
+        case let v as Bool: try c.encode(v)
+        case let v as Int: try c.encode(v)
+        case let v as Double: try c.encode(v)
+        case let v as String: try c.encode(v)
+        case let v as [Any]: try c.encode(v.map(AnyCodable.init))
+        case let v as [String: Any]: try c.encode(v.mapValues(AnyCodable.init))
+        default: try c.encodeNil()
+        }
     }
 }

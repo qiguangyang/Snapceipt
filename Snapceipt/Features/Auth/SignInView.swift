@@ -219,6 +219,7 @@ final class PreviewAPIClient: APIClient {
     func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {}
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {}
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))
