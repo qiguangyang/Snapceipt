@@ -37,9 +37,12 @@ final class StoreKitService {
     /// the EntitlementStore can sync to the backend. Injected by the app shell.
     var onEntitlementChange: (@MainActor (Bool) -> Void)?
 
-    /// Called when a transaction is verified — provides (originalTransactionId, expiresAtMs, productId)
-    /// so the app shell can POST to /me/subscription to link the purchase to the user row.
-    var onVerifiedTransaction: (@MainActor (String, Int?, String) -> Void)?
+    /// Called when a transaction is verified — provides the StoreKit 2 signed
+    /// transaction JWS (`Transaction.jwsRepresentation`) so the app shell can POST
+    /// it to /me/subscription, where the backend VERIFIES Apple's signature/cert
+    /// chain and derives originalTransactionId/expiry/productId from the verified
+    /// payload (never from client-asserted fields).
+    var onVerifiedTransaction: (@MainActor (String) -> Void)?
 
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
 
@@ -50,11 +53,10 @@ final class StoreKitService {
             for await update in SKTransaction.updates {
                 // Finish the verified transaction and notify the app shell.
                 if case .verified(let skTxn) = update {
+                    // jwsRepresentation lives on the signed VerificationResult envelope.
+                    let jws = update.jwsRepresentation
                     await skTxn.finish()
-                    let origId = String(skTxn.originalID)
-                    let expires = skTxn.expirationDate.map { Int($0.timeIntervalSince1970 * 1000) }
-                    let pid = skTxn.productID
-                    await self?.notifyVerified(origId: origId, expires: expires, productId: pid)
+                    await self?.notifyVerified(signedTransaction: jws)
                     await self?.refreshEntitlements()
                 }
             }
@@ -80,11 +82,10 @@ final class StoreKitService {
                     // Do NOT report success — the paywall must not dismiss.
                     return .failed
                 }
+                // jwsRepresentation lives on the signed VerificationResult envelope.
+                let jws = verification.jwsRepresentation
                 await skTxn.finish()
-                let origId = String(skTxn.originalID)
-                let expires = skTxn.expirationDate.map { Int($0.timeIntervalSince1970 * 1000) }
-                let pid = skTxn.productID
-                notifyVerified(origId: origId, expires: expires, productId: pid)
+                notifyVerified(signedTransaction: jws)
                 await refreshEntitlements()
                 return .success
             case .pending:
@@ -118,7 +119,7 @@ final class StoreKitService {
     }
 
     @MainActor
-    private func notifyVerified(origId: String, expires: Int?, productId: String) {
-        onVerifiedTransaction?(origId, expires, productId)
+    private func notifyVerified(signedTransaction: String) {
+        onVerifiedTransaction?(signedTransaction)
     }
 }

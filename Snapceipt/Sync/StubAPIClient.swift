@@ -18,7 +18,7 @@ final class StubAPIClient: APIClient {
     func signOut() async throws {}
     func me() async throws -> MeResponse { MeResponse(user: devSession().user, devices: []) }
     func mePlan() async throws -> String { "free" }
-    func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {}
+    func recordPurchase(signedTransaction: String) async throws {}
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
         // J23b/J23c seam: a deterministic 4xx contract rejection. 422 is in the
         // 400..<500 band and is not 401/408/429, so SyncEngine marks the batch

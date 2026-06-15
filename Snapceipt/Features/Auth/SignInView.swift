@@ -216,7 +216,7 @@ final class PreviewAPIClient: APIClient {
         AccountUser(id: "u", email: "new@example.com", displayName: "You", plan: "free")
     }
     func mePlan() async throws -> String { "free" }
-    func recordPurchase(originalTransactionId: String, expiresAtMs: Int?, productId: String) async throws {}
+    func recordPurchase(signedTransaction: String) async throws {}
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
     func reportDiagnostic(_ body: DiagnosticReportBody) async throws {}

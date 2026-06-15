@@ -162,12 +162,12 @@ struct MePlanResponse: Decodable {
     let user: PlanUser
 }
 
-/// POST /me/subscription request body — links a verified Apple transaction to the
-/// user row so the webhook can later match by originalTransactionId.
+/// POST /me/subscription request body — the StoreKit 2 signed transaction JWS
+/// (`Transaction.jwsRepresentation`). The backend VERIFIES Apple's signature/cert
+/// chain and derives originalTransactionId/expiry/productId from the verified
+/// payload, so the client no longer sends those fields (they could be forged).
 struct RecordPurchaseBody: Encodable {
-    let originalTransactionId: String
-    let expiresAtMs: Int?
-    let productId: String
+    let signedTransaction: String
 }
 
 /// A registered device row. `GET /auth/me` returns the full shape (§8.2); only `id`

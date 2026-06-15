@@ -92,12 +92,12 @@ struct SnapceiptApp: App {
         let entitlement = EntitlementStore()
         let storekit = StoreKitService()
         storekit.onEntitlementChange = { entitled in entitlement.setLocalEntitled(entitled) }
-        storekit.onVerifiedTransaction = { origTxnId, expiresAtMs, productId in
-            // POST the purchase link to the backend (fire-and-forget; errors are benign
-            // — the ASSN webhook is authoritative).
-            Task { try? await api.recordPurchase(originalTransactionId: origTxnId,
-                                                  expiresAtMs: expiresAtMs,
-                                                  productId: productId) }
+        storekit.onVerifiedTransaction = { signedTransaction in
+            // POST the signed StoreKit transaction JWS to the backend, which verifies
+            // Apple's signature/cert chain and derives the entitlement from the
+            // verified payload (fire-and-forget; errors are benign — the verified
+            // ASSN webhook is authoritative for lifecycle events).
+            Task { try? await api.recordPurchase(signedTransaction: signedTransaction) }
         }
         self.api = api
         _storekit = State(initialValue: storekit)
