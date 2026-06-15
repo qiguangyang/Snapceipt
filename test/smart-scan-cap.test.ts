@@ -91,7 +91,9 @@ describe("POST /extract — capped branch (free user at cap)", () => {
     expect(body.meta.capped).toBe(true);
     expect(body.meta.stub).toBe(false);
     expect(body.receipt.needsReview).toBe(true);
-    expect(body.receipt.confidence).toBe(0.3);
+    // confidence is now graded (0.30–0.75) from found signals, not a hardcoded value.
+    expect(body.receipt.confidence).toBeGreaterThanOrEqual(0.3);
+    expect(body.receipt.confidence).toBeLessThanOrEqual(0.75);
     expect(body.receipt.currencyCode).toBe("AUD");
 
     // smartScan metadata.
@@ -231,8 +233,9 @@ describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)",
       .first<{ count: number }>();
     expect(row!.count).toBe(3);
 
-    // Receipt came from heuristic fallback (needsReview + low confidence).
+    // Receipt came from heuristic fallback (needsReview true; graded confidence 0.30–0.75).
     expect(body.receipt.needsReview).toBe(true);
-    expect(body.receipt.confidence).toBeLessThanOrEqual(0.4);
+    expect(body.receipt.confidence).toBeGreaterThanOrEqual(0.3);
+    expect(body.receipt.confidence).toBeLessThanOrEqual(0.75);
   });
 });

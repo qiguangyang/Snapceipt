@@ -66,9 +66,8 @@ describe("heuristicExtract()", () => {
     expect(r.date).toBe("2026-01-02");
   });
 
-  it("always returns category 'office' and deductible 100 (the safe fallback)", () => {
+  it("returns deductible 100", () => {
     const r = heuristicExtract(SAMPLE, "2026-05-30");
-    expect(r.category).toBe("office");
     expect(r.deductible).toBe(100);
   });
 
@@ -93,6 +92,27 @@ describe("heuristicExtract()", () => {
     const r = heuristicExtract("SHOP\nTOTAL 100.00", "2026-05-30");
     expect(r.gst).toBe(9.09); // 100/11 = 9.0909 -> 9.09
   });
+
+  it("prefers an explicit TOTAL line over a larger CASH tendered line", () => {
+    const r = heuristicExtract("Cafe Norm\nFlat White 4.50\nTOTAL 4.50\nCASH 50.00\nCHANGE 45.50", "2026-06-15");
+    expect(r.total).toBe(4.5);
+  });
+
+  it("ignores tender lines when no explicit total is present", () => {
+    const r = heuristicExtract("Shop\nItem 9.00\nCASH 50.00\nCHANGE 41.00", "2026-06-15");
+    expect(r.total).toBe(9); // largest non-tender cents amount
+  });
+
+  it("infers category from the merchant", () => {
+    expect(heuristicExtract("WOOLWORTHS 123\nTOTAL 12.00", "2026-06-15").category).toBe("groceries");
+    expect(heuristicExtract("Shell Express\nTOTAL 80.00", "2026-06-15").category).toBe("fuel");
+  });
+
+  it("grades confidence: total line + printed gst + known merchant", () => {
+    const r = heuristicExtract("WOOLWORTHS\nTOTAL 11.00\nGST 1.00\non 15/06/2026", "2026-06-15");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(r.needsReview).toBe(true);
+  });
 });
 
 // Type guard: the shape the stub + fallback consume.
@@ -104,5 +124,7 @@ const _typecheck: HeuristicReceipt = {
   category: "office",
   deductible: 100,
   lineItems: [],
+  confidence: 0.3,
+  needsReview: true,
 };
 void _typecheck;

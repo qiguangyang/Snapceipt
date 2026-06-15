@@ -116,14 +116,20 @@ extractRoutes.post("/", validate("json", extractRequestSchema), async (c) => {
       }
     } else {
       // 3b. Cap exhausted: serve heuristic, do NOT call DeepSeek.
-      receipt = fallback({
-        ocrText: body.ocrText,
-        source: body.source,
-        defaultDate,
-      });
-      // Override confidence to 0.3 for the cap-fallback (lower than the normal
-      // fallback's 0.4 so the client can distinguish the two states if needed).
-      receipt = { ...receipt, confidence: 0.3, needsReview: true };
+      // Use the heuristic's own category/confidence/needsReview (graded 0.30–0.75).
+      const h = heuristicExtract(body.ocrText, defaultDate);
+      receipt = {
+        merchant: h.merchant,
+        date: h.date,
+        currencyCode: "AUD",
+        total: h.total,
+        gst: h.total === 0 ? null : h.gst,
+        category: h.category,
+        deductible: h.deductible,
+        lineItems: h.lineItems,
+        confidence: h.confidence,
+        needsReview: h.needsReview,
+      };
       model = c.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
       attempts = 0;
       stub = false;
