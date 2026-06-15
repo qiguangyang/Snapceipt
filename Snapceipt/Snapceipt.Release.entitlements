@@ -9,8 +9,8 @@
 	<!-- Release archives are signed directly with the match App Store profile
 	     (manual signing), which pins aps-environment to production — the file
 	     value must match or the archive fails validation. -->
-	<key>com.apple.developer.in-app-purchase</key>
-	<true/>
+	<!-- In-App Purchase (StoreKit 2 Pro tier) needs NO entitlement-file key —
+	     it fails App Store archive validation. Intentionally absent. -->
 	<key>aps-environment</key>
 	<string>production</string>
 </dict>

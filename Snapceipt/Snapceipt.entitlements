@@ -10,11 +10,10 @@
 	     aps-environment=development. Release uses Snapceipt.Release.entitlements
 	     (production) because manual signing with the match App Store profile
 	     validates this file's value against the profile. -->
-	<!-- In-App Purchase: StoreKit 2 subscriptions (Pro tier). The capability is
-	     enabled on the App ID; this boolean makes the request explicit so manual
-	     signing with the match profile validates it. -->
-	<key>com.apple.developer.in-app-purchase</key>
-	<true/>
+	<!-- In-App Purchase (StoreKit 2 Pro tier) needs NO entitlement-file key:
+	     the capability lives on the App ID, and StoreKit works without one.
+	     A com.apple.developer.in-app-purchase key fails App Store archive
+	     validation ("not a valid entitlement"), so it is intentionally absent. -->
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>
