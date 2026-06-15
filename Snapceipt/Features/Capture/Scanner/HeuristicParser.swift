@@ -9,6 +9,8 @@ struct ParsedReceipt {
     var tax: Decimal?
     var currencyCode: String = "AUD"
     var lineItems: [(name: String, price: Decimal)] = []
+    var category: CategoryKey = .office
+    var confidence: Double = 0.3
 }
 
 enum HeuristicParser {

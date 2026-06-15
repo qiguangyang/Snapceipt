@@ -43,4 +43,10 @@ struct HeuristicParserTests {
         let p = HeuristicParser.parse(lines(["SHOP", "TOTAL 5.00"]))
         #expect(p.currencyCode == "AUD")
     }
+
+    @Test func parsedReceiptCarriesCategoryAndConfidence() {
+        let r = HeuristicParser.parse(lines(["WOOLWORTHS METRO", "TOTAL 12.00"]))
+        // After Task 3: category defaults to .office (Task 5 will set .groceries), confidence in range.
+        #expect(r.confidence >= 0.3 && r.confidence <= 0.75)
+    }
 }
