@@ -95,12 +95,23 @@ enum HeuristicParser {
             result.tax = roundedGST(result.total); gstPrinted = false
         } else { gstPrinted = false }
 
-        // Category: set from heuristic (populated in Task 5; placeholder .office for Task 4).
-        result.category = .office
+        // Line items: non-merchant, non-tender lines that have a price and a name.
+        let priceTokenRe = #"(?:\$\s*)?\d{1,3}(?:[ ,]\d{3})*[.,]\d{2}\s*$"#
+        for line in texts {
+            if line == result.merchant { continue }
+            if line.range(of: tenderRe, options: .regularExpression) != nil { continue }
+            let letters = line.filter { $0.isLetter }.count
+            guard letters >= 2, let price = amounts(in: line).last else { continue }
+            let name = line.replacingOccurrences(of: priceTokenRe, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if name.isEmpty { continue }
+            result.lineItems.append((name: name, price: price))
+        }
 
-        // Line items: populated in Task 5.
+        // Category: inferred from merchant name and line text.
+        result.category = ReceiptCategoryHeuristic.infer(merchant: result.merchant, lineTexts: texts)
 
-        // Confidence: placeholder 0.3 for Task 4 (graded computation added in Task 6).
+        // Confidence: placeholder 0.3 for Task 5 (graded computation added in Task 6).
         result.confidence = 0.3
 
         return result

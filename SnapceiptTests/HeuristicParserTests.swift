@@ -65,4 +65,17 @@ struct HeuristicParserTests {
         let r = HeuristicParser.parse(lines(["Shop", "Item 4.50", "TOTAL 4.50", "CASH 50.00", "CHANGE 45.50"]))
         #expect(r.total == Decimal(string: "4.50"))
     }
+
+    @Test func extractsLineItemsAndCategory() {
+        let r = HeuristicParser.parse(lines(["The Coffee Club", "Flat White 4.50", "Muffin 5.50", "TOTAL 10.00"]))
+        #expect(r.category == .meals)
+        #expect(r.lineItems.count == 2)
+        #expect(r.lineItems.first?.name == "Flat White")
+        #expect(r.lineItems.first?.price == Decimal(string: "4.50"))
+    }
+
+    @Test func merchantSkipsHeaderNoise() {
+        let r = HeuristicParser.parse(lines(["TAX INVOICE", "Bob's Hardware", "TOTAL 5.00"]))
+        #expect(r.merchant == "Bob's Hardware")
+    }
 }
