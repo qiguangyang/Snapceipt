@@ -35,6 +35,6 @@
     // The iOS app's real bundle id — SIWA verifies identityToken.aud against this.
     // Tests pin their own value in vitest.config.ts; this var is prod-only.
     "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
-    "DEEPSEEK_MODEL": "deepseek-chat"
+    "DEEPSEEK_MODEL": "deepseek-v4-flash"
   }
 }
