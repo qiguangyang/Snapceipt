@@ -3,6 +3,18 @@ import type { Env } from "./env";
 import { budgetCronLogic } from "./cron/budgetAlert";
 import { d1BackupLogic } from "./cron/d1Backup";
 import { inboundEmailLogic } from "./email/inbound";
+import { currentPeriod, pruneOldUsage } from "./lib/smartScan";
+
+/**
+ * Prune smart_scan_usage rows older than ~2 months to avoid unbounded table growth.
+ * Uses lexicographic YYYY-MM comparison: cutoff = period of (now − 62 days).
+ * Keeps the current month and the previous month; deletes anything older.
+ */
+async function pruneSmartScanUsage(db: D1Database, now: number): Promise<void> {
+  const SIXTY_TWO_DAYS_MS = 62 * 24 * 60 * 60 * 1000;
+  const cutoff = currentPeriod(now - SIXTY_TWO_DAYS_MS);
+  await pruneOldUsage(db, cutoff);
+}
 
 /**
  * Hourly scheduled handler (wrangler.jsonc triggers.crons = "0 * * * *").
@@ -11,6 +23,7 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = (_event, env, ctx) => {
   const now = Date.now();
   ctx.waitUntil(budgetCronLogic(env.DB, env, now));
   ctx.waitUntil(d1BackupLogic(env.DB, env.BACKUPS, now));
+  ctx.waitUntil(pruneSmartScanUsage(env.DB, now));
 };
 
 /**
