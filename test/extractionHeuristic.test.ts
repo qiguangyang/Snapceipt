@@ -1,6 +1,7 @@
 // test/extractionHeuristic.test.ts
 import { describe, expect, it } from "vitest";
 import { heuristicExtract, type HeuristicReceipt } from "../src/lib/extractionHeuristic";
+import corpusRaw from "./fixtures/heuristic-receipts.json";
 
 const SAMPLE = [
   "THE GROUNDS",
@@ -66,9 +67,8 @@ describe("heuristicExtract()", () => {
     expect(r.date).toBe("2026-01-02");
   });
 
-  it("always returns category 'office' and deductible 100 (the safe fallback)", () => {
+  it("returns deductible 100", () => {
     const r = heuristicExtract(SAMPLE, "2026-05-30");
-    expect(r.category).toBe("office");
     expect(r.deductible).toBe(100);
   });
 
@@ -93,6 +93,52 @@ describe("heuristicExtract()", () => {
     const r = heuristicExtract("SHOP\nTOTAL 100.00", "2026-05-30");
     expect(r.gst).toBe(9.09); // 100/11 = 9.0909 -> 9.09
   });
+
+  it("prefers an explicit TOTAL line over a larger CASH tendered line", () => {
+    const r = heuristicExtract("Cafe Norm\nFlat White 4.50\nTOTAL 4.50\nCASH 50.00\nCHANGE 45.50", "2026-06-15");
+    expect(r.total).toBe(4.5);
+  });
+
+  it("ignores tender lines when no explicit total is present", () => {
+    const r = heuristicExtract("Shop\nItem 9.00\nCASH 50.00\nCHANGE 41.00", "2026-06-15");
+    expect(r.total).toBe(9); // largest non-tender cents amount
+  });
+
+  it("infers category from the merchant", () => {
+    expect(heuristicExtract("WOOLWORTHS 123\nTOTAL 12.00", "2026-06-15").category).toBe("groceries");
+    expect(heuristicExtract("Shell Express\nTOTAL 80.00", "2026-06-15").category).toBe("fuel");
+  });
+
+  it("grades confidence: total line + printed gst + known merchant", () => {
+    const r = heuristicExtract("WOOLWORTHS\nTOTAL 11.00\nGST 1.00\non 15/06/2026", "2026-06-15");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(r.needsReview).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared golden corpus: both Swift and TS parsers must satisfy these cases.
+// The corpus is the contract — if a case fails, fix the parser, not the corpus.
+// ---------------------------------------------------------------------------
+// Imported as a static module (JSON import) — the @cloudflare/vitest-pool-workers
+// runtime doesn't support node:fs readFileSync, but Vite's JSON plugin works fine.
+const corpus = corpusRaw as Array<{
+  name: string;
+  ocrText: string;
+  expect: { merchant: string; date: string | null; total: number; gst: number; category: string };
+}>;
+
+describe("shared heuristic corpus", () => {
+  for (const c of corpus) {
+    it(c.name, () => {
+      const r = heuristicExtract(c.ocrText, "2026-01-01");
+      expect(r.merchant).toBe(c.expect.merchant);
+      if (c.expect.date) expect(r.date).toBe(c.expect.date);
+      expect(r.total).toBe(c.expect.total);
+      expect(r.gst).toBe(c.expect.gst);
+      expect(r.category).toBe(c.expect.category);
+    });
+  }
 });
 
 // Type guard: the shape the stub + fallback consume.
@@ -104,5 +150,7 @@ const _typecheck: HeuristicReceipt = {
   category: "office",
   deductible: 100,
   lineItems: [],
+  confidence: 0.3,
+  needsReview: true,
 };
 void _typecheck;

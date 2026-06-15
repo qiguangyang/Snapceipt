@@ -177,7 +177,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
   };
 }
 
-/** The deterministic fallback at the end of the ladder: heuristic + needsReview + low confidence. */
+/** The deterministic fallback at the end of the ladder: heuristic + needsReview + graded confidence. */
 export function fallback(input: ExtractionInput): ExtractedReceipt {
   const h = heuristicExtract(input.ocrText, input.defaultDate);
   return {
@@ -189,8 +189,8 @@ export function fallback(input: ExtractionInput): ExtractedReceipt {
     category: h.category,
     deductible: h.deductible,
     lineItems: h.lineItems,
-    confidence: 0.4,
-    needsReview: true,
+    confidence: h.confidence,
+    needsReview: h.needsReview,
   };
 }
 

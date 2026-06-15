@@ -4,6 +4,8 @@
 // end of the DeepSeek retry ladder. Pure + dependency-free: same input ->
 // same output, so the stub seam is fully reproducible in tests.
 
+import { inferCategory } from "./receiptCategory";
+
 export interface HeuristicLineItem {
   name: string;
   price: number;
@@ -14,9 +16,11 @@ export interface HeuristicReceipt {
   date: string; // YYYY-MM-DD
   total: number; // dollars, >= 0
   gst: number; // dollars (printed line or round(total/11)); 0 when total == 0
-  category: "office"; // the safe-fallback category
+  category: string; // inferred from merchant/items; default "office"
   deductible: 100; // the safe-fallback deductible
   lineItems: HeuristicLineItem[];
+  confidence: number; // 0.30–0.75 graded from found signals
+  needsReview: boolean; // always true for heuristic results
 }
 
 /** Round to 2dp avoiding binary float drift (e.g. 9.0909 -> 9.09). */
@@ -76,6 +80,40 @@ function isSummaryLine(line: string): boolean {
   );
 }
 
+/**
+ * Tender/summary line matcher — broader than isSummaryLine; used for total
+ * fallback exclusion per the Unified TOTAL algorithm.
+ */
+const TENDER_RE = /\b(total|subtotal|sub\s+total|gst|tax|vat|change|cash|eftpos|balance|amount\s*due|tendered|rounding)\b/i;
+const TOTAL_WORD_RE = /\btotal\b/i;
+const SUBTOTAL_RE = /\bsub\s?total\b/i;
+
+/**
+ * Unified TOTAL algorithm:
+ * 1. Skip lines that parse as a date.
+ * 2. If any line has whole-word "total" (but not "subtotal"/"sub total"), take
+ *    the max cents-bearing amount on those lines.
+ * 3. Else: max cents-bearing amount among non-tender/summary lines.
+ * Returns the total (rounded, >= 0) and whether an explicit total line was used.
+ */
+function selectTotal(rawLines: string[]): { total: number; usedTotalLine: boolean } {
+  const nonDate = rawLines.filter((l) => parseDate(l) === null);
+
+  const pickMax = (lines: string[]): number =>
+    lines.reduce((mx, l) => {
+      const a = centsAmountIn(l);
+      return a !== null && a > mx ? a : mx;
+    }, 0);
+
+  const totalLines = nonDate.filter((l) => TOTAL_WORD_RE.test(l) && !SUBTOTAL_RE.test(l));
+  if (totalLines.length > 0) {
+    return { total: roundCents(Math.max(0, pickMax(totalLines))), usedTotalLine: true };
+  }
+
+  const nonTender = nonDate.filter((l) => !TENDER_RE.test(l));
+  return { total: roundCents(Math.max(0, pickMax(nonTender))), usedTotalLine: false };
+}
+
 export function heuristicExtract(ocrText: string, defaultDate: string): HeuristicReceipt {
   const rawLines = ocrText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
 
@@ -88,35 +126,32 @@ export function heuristicExtract(ocrText: string, defaultDate: string): Heuristi
     }
   }
 
-  // Total: the largest CENTS-BEARING dollar amount anywhere in the text (>= 0).
-  // Cents-only (centsAmountIn) + skipping any date line prevents a bare 4-digit
-  // year/ABN/postcode (e.g. 2026 on "28/05/2026", or an ABN) from being picked
-  // as the total when it happens to exceed the real grand total.
-  let total = 0;
-  for (const line of rawLines) {
-    if (parseDate(line) !== null) continue; // never read a total off a date line
-    const a = centsAmountIn(line);
-    if (a !== null && a > total) total = a;
-  }
-  total = roundCents(Math.max(0, total));
+  // Total: Unified TOTAL algorithm (prefer explicit whole-word TOTAL line;
+  // else max cents amount among non-tender lines; skip date lines throughout).
+  const { total, usedTotalLine } = selectTotal(rawLines);
 
   // Date: first parseable date, else the caller-provided default (capturedAt/today).
   let date = defaultDate;
+  let dateParsed = false;
   for (const line of rawLines) {
     const d = parseDate(line);
     if (d) {
       date = d;
+      dateParsed = true;
       break;
     }
   }
 
-  // GST: a printed GST/tax line wins; otherwise infer round(total/11).
+  // GST: a printed GST/tax line wins (word boundary so "Taxi" doesn't match);
+  // otherwise infer round(total/11).
   let gst: number | null = null;
+  let gstPrinted = false;
   for (const line of rawLines) {
     if (/\b(gst|tax)\b/i.test(line)) {
       const a = amountIn(line);
       if (a !== null) {
         gst = roundCents(a);
+        gstPrinted = true;
         break;
       }
     }
@@ -145,13 +180,31 @@ export function heuristicExtract(ocrText: string, defaultDate: string): Heuristi
     lineItems.push({ name, price: roundCents(price) });
   }
 
+  // Category: infer from merchant name then line item names.
+  const category = inferCategory(merchant, lineItems.map((li) => li.name));
+
+  // Graded confidence (0.30–0.75):
+  //   base 0.30
+  //   +0.20 if an explicit "total" line was used
+  //   +0.10 if a date was parsed from the text
+  //   +0.10 if GST came from a printed line
+  //   +0.05 if category != "office" (keyword match found)
+  let confidence = 0.30;
+  if (usedTotalLine) confidence += 0.20;
+  if (dateParsed) confidence += 0.10;
+  if (gstPrinted) confidence += 0.10;
+  if (category !== "office") confidence += 0.05;
+  confidence = Math.min(0.75, roundCents(confidence));
+
   return {
     merchant,
     date,
     total,
     gst,
-    category: "office",
+    category,
     deductible: 100,
     lineItems,
+    confidence,
+    needsReview: true,
   };
 }

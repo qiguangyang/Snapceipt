@@ -67,10 +67,17 @@ struct CaptureViewModelTests {
         return try! JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
     }
 
+    /// Wrap a plain rawText string into zero-box RecognizedLines (behaviour unchanged).
+    private func zeroLines(_ rawText: String) -> [RecognizedLine] {
+        rawText.split(separator: "\n").map {
+            RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
+        }
+    }
+
     @Test("onScanned -> scanning -> review with the extracted draft on success")
     func successPath() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }
-        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
         #expect(vm.stage == .review)
         #expect(vm.draft?.merchant == "Cafe")
         #expect(vm.draft?.extractionStatus == "done")
@@ -81,7 +88,7 @@ struct CaptureViewModelTests {
     func failurePathFallsBack() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
-        await vm.onScanned(image: image(), rawText: "WOOLWORTHS\nTOTAL 22.00")
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.draft?.needsReview == true)
@@ -91,7 +98,7 @@ struct CaptureViewModelTests {
     @Test("save inserts the txn + line items, enqueues each, creates a PendingReceipt, -> saved")
     func saveInsertsAndEnqueues() async throws {
         let (vm, _, sync, ctx) = try fixture { _, _, _ in self.okResponse() }
-        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
         vm.save()
         #expect(vm.stage == .saved)
         let txns = try ctx.fetch(FetchDescriptor<Transaction>())
@@ -114,7 +121,7 @@ struct CaptureViewModelTests {
     @Test("capped response sets smartScanCapped=true, smartScanCap, and smartScanUsed from meta.smartScan")
     func cappedResponseSetsSignal() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.cappedResponse() }
-        await vm.onScanned(image: image(), rawText: "KMART\nTOTAL 19.99")
+        await vm.onScanned(image: image(), lines: zeroLines("KMART\nTOTAL 19.99"))
         #expect(vm.stage == .review)
         #expect(vm.smartScanCapped == true)
         #expect(vm.smartScanCap == 10)
@@ -125,7 +132,7 @@ struct CaptureViewModelTests {
     @Test("normal (non-capped) response leaves smartScanCapped=false")
     func nonCappedResponseLeavesSignalFalse() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }
-        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
         #expect(vm.smartScanCapped == false)
         #expect(vm.smartScanCap == nil)
     }
@@ -134,7 +141,7 @@ struct CaptureViewModelTests {
     func offlineFailureResetsCappedSignal() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
-        await vm.onScanned(image: image(), rawText: "WOOLWORTHS\nTOTAL 22.00")
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
         #expect(vm.smartScanCapped == false)
         #expect(vm.smartScanCap == nil)
         #expect(vm.smartScanUsed == nil)
@@ -147,7 +154,7 @@ struct CaptureViewModelTests {
     @Test("save() captures the ACTIVE profile's mode as savedMode (not the default)")
     func savedModeFollowsActiveProfile() async throws {
         let (vm, _, _, _) = try fixture(activeType: "business") { _, _, _ in self.okResponse() }
-        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
         // The Review toggle seeds from the active profile's mode, pre-save.
         #expect(vm.activeMode == "business")
         vm.save()

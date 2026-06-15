@@ -150,10 +150,10 @@ extension ExtractedReceipt {
             date: iso,
             total: parsed.total,
             gst: parsed.tax,
-            categoryKey: "office",
+            categoryKey: parsed.category.rawValue,
             deductible: 100,
             lineItems: parsed.lineItems.map { LineItemDraft(name: $0.name, price: $0.price) },
-            confidence: 0.4,
+            confidence: parsed.confidence,
             needsReview: true,
             extractionStatus: "pending"
         )

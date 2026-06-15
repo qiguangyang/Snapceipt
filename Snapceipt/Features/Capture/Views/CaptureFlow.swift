@@ -19,8 +19,7 @@ struct CaptureFlow: View {
                     onScanned: { image in
                         Task {
                             let lines = (try? await OCR.recognize(in: image)) ?? []
-                            await vm.onScanned(image: image,
-                                               rawText: lines.map(\.text).joined(separator: "\n"))
+                            await vm.onScanned(image: image, lines: lines)
                         }
                     },
                     onClose: onClose)
