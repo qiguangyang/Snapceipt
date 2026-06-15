@@ -40,6 +40,9 @@ final class CaptureViewModel {
     /// Nil when the backend omits `smartScan` (stub/offline). Defaults to nil; set
     /// alongside `smartScanCapped` on the real path.
     private(set) var smartScanCap: Int? = nil
+    /// The number of smart scans used this month from `meta.smartScan.used`.
+    /// Nil on stub/offline paths. Reserved for future "X of Y" display in the nudge.
+    private(set) var smartScanUsed: Int? = nil
 
     /// The active profile's mode ("personal" | "business"), used to initialize the
     /// Review toggle so it opens on the actual save target. Defaults to personal when
@@ -84,14 +87,16 @@ final class CaptureViewModel {
             // Thread the cap signal onto the VM so ReviewStep can show the upgrade nudge.
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
+            smartScanUsed = resp.meta.smartScan?.used
         } catch {
             let parsed = HeuristicParser.parse(rawText.split(separator: "\n").map {
                 RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
             })
             draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "")
-            // Offline/transport failure — not a cap situation; reset both signals.
+            // Offline/transport failure — not a cap situation; reset all signals.
             smartScanCapped = false
             smartScanCap = nil
+            smartScanUsed = nil
         }
         stage = .review
     }

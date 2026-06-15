@@ -111,13 +111,14 @@ struct CaptureViewModelTests {
         #expect(pending[0].ocrText == "CAFE\nTOTAL 10.00")
     }
 
-    @Test("capped response sets smartScanCapped=true and smartScanCap from meta.smartScan.cap")
+    @Test("capped response sets smartScanCapped=true, smartScanCap, and smartScanUsed from meta.smartScan")
     func cappedResponseSetsSignal() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.cappedResponse() }
         await vm.onScanned(image: image(), rawText: "KMART\nTOTAL 19.99")
         #expect(vm.stage == .review)
         #expect(vm.smartScanCapped == true)
         #expect(vm.smartScanCap == 10)
+        #expect(vm.smartScanUsed == 10)
         #expect(vm.draft?.needsReview == true)
     }
 
@@ -129,13 +130,14 @@ struct CaptureViewModelTests {
         #expect(vm.smartScanCap == nil)
     }
 
-    @Test("extract failure (offline) resets smartScanCapped to false")
+    @Test("extract failure (offline) resets smartScanCapped, smartScanCap, and smartScanUsed to nil/false")
     func offlineFailureResetsCappedSignal() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
         await vm.onScanned(image: image(), rawText: "WOOLWORTHS\nTOTAL 22.00")
         #expect(vm.smartScanCapped == false)
         #expect(vm.smartScanCap == nil)
+        #expect(vm.smartScanUsed == nil)
     }
 
     /// Locks the Saved-summary save target (Finding 1) against the active profile, not

@@ -127,11 +127,12 @@ struct ReviewStep: View {
         )
     }
 
-    /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the cap
-    /// number from the response when available, falling back to "your" when absent.
+    /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the free-plan
+    /// cap (`vm.smartScanCap`, falling back to 10) as the user's allotment; the Pro
+    /// upsell number (500) is always a literal — never derived from the free cap.
     @ViewBuilder
     private var upgradeNudge: some View {
-        let capText = vm.smartScanCap.map { "\($0)" } ?? "your"
+        let freeCap = vm.smartScanCap ?? 10
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Icon(name: "sparkles", size: 18, color: accent.base)
@@ -139,7 +140,7 @@ struct ReviewStep: View {
                     .font(.ui(13.5, .bold)).foregroundStyle(accent.deep)
                 Spacer()
             }
-            Text("You've used \(capText) free smart scans this month. Upgrade to Pro for 500/mo + BAS, quotes & more.")
+            Text("You've used all \(freeCap) free smart scans this month. Upgrade to Pro for 500/mo + BAS export, quotes & logbooks.")
                 .font(.ui(13)).foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier(AccessibilityID.captureReviewUpgradeNudge)
