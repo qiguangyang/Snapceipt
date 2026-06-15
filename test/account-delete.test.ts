@@ -20,6 +20,7 @@ const PURGE_ORDER = [
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
   "profiles",
+  "smart_scan_usage",
   "users",
 ] as const;
 
@@ -85,6 +86,9 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   await env.DB.prepare(`INSERT INTO inbound_email_log (message_id, user_id, profile_id, transaction_id, status, received_at) VALUES (?, ?, ?, ?, 'created', ?)`).bind(messageId, userId, profileId, txnId, t).run();
   await env.DB.prepare(`INSERT INTO email_outbox (id, user_id, to_email, kind, status, attempts, created_at) VALUES (?, ?, 'x@e.com', 'magic_link', 'queued', 0, ?)`).bind(outboxId, userId, t).run();
   await env.DB.prepare(`INSERT INTO processed_mutations (mutation_id, user_id, device_id, entity_type, entity_id, op, status, result_json, created_at) VALUES (?, ?, ?, 'transaction', ?, 'upsert', 'applied', '{}', ?)`).bind(mutationId, userId, deviceId, txnId, t).run();
+
+  // smart_scan_usage: server-only cap table — must be purged on account delete.
+  await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 5, ?)`).bind(userId, t).run();
 
   const r2Key = `u/${userId}/x.jpg`;
   const exportKey = `${userId}/exports/${exportId}.pdf`;
