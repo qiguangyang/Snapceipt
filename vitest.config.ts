@@ -1,9 +1,18 @@
 import { defineWorkersConfig, readD1Migrations } from "@cloudflare/vitest-pool-workers/config";
 import path from "node:path";
+import { makeTestChain } from "./test/helpers/appleChain";
 
 // Read the migration SQL files on the Node side, then hand them to the worker
 // through a test-only binding the setup file consumes.
 const migrations = await readD1Migrations(path.join(__dirname, "migrations"));
+
+// Generate ONE Apple-JWS test cert chain (root -> intermediate -> leaf) on the
+// Node side, where @peculiar/x509 + reflect-metadata load freely. Its root PEM is
+// injected as APPLE_TRUST_ANCHOR_PEM (overriding the real AppleRootCA-G3 in tests)
+// and the full chain (incl. the leaf private key) is exposed via TEST_APPLE_CHAIN
+// so test helpers can sign verifiable payloads. NONE of this exists in production
+// — wrangler.jsonc declares neither binding.
+const appleChain = await makeTestChain();
 
 export default defineWorkersConfig({
   test: {
@@ -48,6 +57,12 @@ export default defineWorkersConfig({
             // .dev.vars locally / `wrangler secret` on deploy).
             JWT_SIGNING_KEY: "test-signing-key-0123456789-abcdefghijklmnop",
             APPLE_BUNDLE_ID: "com.snapceipt.app",
+            // Apple JWS test seam: pin the verifier to the test chain's root and
+            // expose the chain so helpers can sign verifiable StoreKit/notification
+            // payloads. Production keeps the embedded AppleRootCA-G3 (neither binding
+            // is declared in wrangler.jsonc).
+            APPLE_TRUST_ANCHOR_PEM: appleChain.rootCertPem,
+            TEST_APPLE_CHAIN: JSON.stringify(appleChain),
           },
           // .dev.vars isn't read in tests; inject the secrets/vars tests need.
           // (real secrets stay in .dev.vars locally / `wrangler secret` on deploy)

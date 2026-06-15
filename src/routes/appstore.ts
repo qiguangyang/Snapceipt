@@ -3,30 +3,30 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { nowMs } from "../lib/time";
 import { validate } from "./auth";
-import { applyNotification, decodeSignedPayload, NOOP } from "../lib/appStoreNotifications";
+import { applyNotification, verifyAppleNotification, NOOP } from "../lib/appStoreNotifications";
+import { AppleJwsError } from "../lib/appleJws";
 
 /**
  * App Store Server Notifications V2 webhook. Public (Apple posts unauthenticated),
  * mounted under /appstore which is added to PUBLIC_PATHS. Body is { signedPayload }
- * (a JWS). We decode it, compute the plan update via applyNotification, and flip the
- * user row keyed by originalTransactionId. ALWAYS 200 on a well-formed body (even
- * when no user matches) so Apple does not retry indefinitely; only a malformed body
- * (missing signedPayload) is 400.
+ * (a JWS). We VERIFY Apple's x5c cert chain (AppleRootCA-G3) on the outer payload
+ * AND the inner signedTransactionInfo, compute the plan update via applyNotification,
+ * and flip the user row keyed by originalTransactionId.
  *
- * Security posture: GA decodes but does NOT verify the JWS x5c cert chain. TLS
- * transport from Apple's documented IP ranges is trusted at the network layer.
- * Full x5c-chain pinning (Apple's AppleRootCA-G3) is a flagged follow-up in the
- * plan's open_questions. Forged notifications from a non-Apple source require network
- * access to reach the Worker (TLS + Cloudflare edge filtering), and the worst-case
- * from a forged SUBSCRIBED is a free user being upgraded to pro — the inverse (a
- * forged REVOKE downgrades a real subscriber) is a bigger risk; x5c pinning closes
- * that for GA+1.
+ * Security posture: a notification whose JWS signature / cert chain / trust anchor
+ * does NOT verify is rejected with 401 and the DB is never touched — a forged or
+ * tampered notification (e.g. a spoofed REVOKE downgrading a real subscriber, or a
+ * forged SUBSCRIBED upgrading a non-payer) cannot move plan state. On a VERIFIED
+ * payload we still ALWAYS 200 (even when no user matches) so Apple does not retry
+ * indefinitely.
  */
 export const appstoreRoutes = new Hono<AppEnv>();
 
-// 16 KiB ceiling — a JWS with a real x5c cert chain is well under this; anything
-// larger is almost certainly malformed or an abuse attempt.
-const MAX_SIGNED_PAYLOAD_BYTES = 16_384;
+// 32 KiB ceiling. A real V2 notification nests THREE Apple JWS (outer envelope +
+// inner signedTransactionInfo + signedRenewalInfo), each carrying a full x5c cert
+// chain, so the verified envelope runs noticeably larger than a bare token; 32 KiB
+// comfortably fits a genuine Apple payload while still rejecting abusive bodies.
+const MAX_SIGNED_PAYLOAD_BYTES = 32_768;
 
 const notificationBody = z.object({
   signedPayload: z.string().min(1).max(MAX_SIGNED_PAYLOAD_BYTES),
@@ -35,10 +35,17 @@ const notificationBody = z.object({
 appstoreRoutes.post("/notifications", validate("json", notificationBody), async (c) => {
   const { signedPayload } = c.req.valid("json");
 
-  const decoded = decodeSignedPayload(signedPayload);
-  if (!decoded) {
-    // Well-formed envelope but undecodable inner JWS — ack so Apple stops retrying.
-    return c.json({ ok: true, ignored: "undecodable" });
+  // VERIFY Apple's JWS x5c chain (outer notification + inner transaction) before
+  // trusting anything. Any failure → 401 and NO DB write. The trust anchor is the
+  // real AppleRootCA-G3 by default; tests inject their own via APPLE_TRUST_ANCHOR_PEM.
+  let decoded;
+  try {
+    decoded = await verifyAppleNotification(signedPayload, {
+      trustAnchorPEM: c.env.APPLE_TRUST_ANCHOR_PEM,
+    });
+  } catch (err) {
+    const reason = err instanceof AppleJwsError ? err.message : "unverifiable notification";
+    return c.json({ ok: false, error: "SIGNATURE_INVALID", reason }, 401);
   }
 
   // Fix 4: reject notifications with no/empty originalTransactionId — these cannot

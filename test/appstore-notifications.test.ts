@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { uuidv7 } from "../src/lib/ids";
 import { nowMs } from "../src/lib/time";
 import { makeSignedNotification } from "./helpers/appstore";
+import { makeTestChain } from "./helpers/appleChain";
 
 const ORIG_TXN = "1000000123456789";
 
@@ -31,7 +32,7 @@ beforeEach(async () => {
 describe("POST /appstore/notifications", () => {
   it("SUBSCRIBED flips the matching user to pro/active with expiry", async () => {
     const userId = await seedSubscriber("free");
-    const res = await post(makeSignedNotification({
+    const res = await post(await makeSignedNotification({
       notificationType: "SUBSCRIBED",
       originalTransactionId: ORIG_TXN,
       expiresDateMs: 9_999_999_999_000,
@@ -48,7 +49,7 @@ describe("POST /appstore/notifications", () => {
 
   it("EXPIRED reverts a pro user to free/expired", async () => {
     const userId = await seedSubscriber("pro");
-    const res = await post(makeSignedNotification({
+    const res = await post(await makeSignedNotification({
       notificationType: "EXPIRED",
       originalTransactionId: ORIG_TXN,
     }));
@@ -61,7 +62,7 @@ describe("POST /appstore/notifications", () => {
 
   it("REFUND reverts to free/revoked", async () => {
     const userId = await seedSubscriber("pro");
-    await post(makeSignedNotification({ notificationType: "REFUND", originalTransactionId: ORIG_TXN }));
+    await post(await makeSignedNotification({ notificationType: "REFUND", originalTransactionId: ORIG_TXN }));
     const row = await env.DB.prepare("SELECT plan, subscription_status FROM users WHERE id = ?")
       .bind(userId).first<{ plan: string; subscription_status: string }>();
     expect(row?.plan).toBe("free");
@@ -69,7 +70,7 @@ describe("POST /appstore/notifications", () => {
   });
 
   it("acks (200) when no user matches the originalTransactionId (idempotent)", async () => {
-    const res = await post(makeSignedNotification({
+    const res = await post(await makeSignedNotification({
       notificationType: "SUBSCRIBED",
       originalTransactionId: "9999999999",
     }));
@@ -90,7 +91,7 @@ describe("POST /appstore/notifications", () => {
   // Fix 1: NOOP types — webhook acks but does NOT update the row.
   it("CONSUMPTION_REQUEST is acked (200) but does not change user plan", async () => {
     const userId = await seedSubscriber("pro");
-    const res = await post(makeSignedNotification({
+    const res = await post(await makeSignedNotification({
       notificationType: "CONSUMPTION_REQUEST",
       originalTransactionId: ORIG_TXN,
     }));
@@ -110,7 +111,7 @@ describe("POST /appstore/notifications", () => {
     const olderTs = newerTs - 60_000; // 1 minute earlier
 
     // 1. Apply a fresh DID_RENEW (newer).
-    const renewRes = await post(makeSignedNotification({
+    const renewRes = await post(await makeSignedNotification({
       notificationType: "DID_RENEW",
       originalTransactionId: ORIG_TXN,
       expiresDateMs: 9_999_999_999_000,
@@ -124,7 +125,7 @@ describe("POST /appstore/notifications", () => {
     expect(afterRenew?.plan).toBe("pro");
 
     // 2. Replay an older EXPIRED (stale) — must be ignored by the monotonic guard.
-    const expiredRes = await post(makeSignedNotification({
+    const expiredRes = await post(await makeSignedNotification({
       notificationType: "EXPIRED",
       originalTransactionId: ORIG_TXN,
       signedDateMs: olderTs,
@@ -144,7 +145,7 @@ describe("POST /appstore/notifications", () => {
     const ts = Date.now();
 
     // Apply EXPIRED at ts.
-    await post(makeSignedNotification({
+    await post(await makeSignedNotification({
       notificationType: "EXPIRED",
       originalTransactionId: ORIG_TXN,
       signedDateMs: ts,
@@ -154,7 +155,7 @@ describe("POST /appstore/notifications", () => {
     expect(afterExpiry?.plan).toBe("free");
 
     // Replay SUBSCRIBED at same ts — should apply (>= guard).
-    await post(makeSignedNotification({
+    await post(await makeSignedNotification({
       notificationType: "SUBSCRIBED",
       originalTransactionId: ORIG_TXN,
       signedDateMs: ts,
@@ -164,9 +165,9 @@ describe("POST /appstore/notifications", () => {
     expect(afterResub?.plan).toBe("pro");
   });
 
-  // Fix 3: body-size cap (signedPayload > 16 KiB → 400 VALIDATION_FAILED).
-  it("rejects an oversized signedPayload (> 16384 chars) with 400 VALIDATION_FAILED", async () => {
-    const oversize = "x".repeat(16_385);
+  // Fix 3: body-size cap (signedPayload > 32 KiB → 400 VALIDATION_FAILED).
+  it("rejects an oversized signedPayload (> 32768 chars) with 400 VALIDATION_FAILED", async () => {
+    const oversize = "x".repeat(32_769);
     const res = await SELF.fetch("https://api.test/appstore/notifications", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -177,29 +178,55 @@ describe("POST /appstore/notifications", () => {
     expect(body.error.code).toBe("VALIDATION_FAILED");
   });
 
-  // Fix 4: missing/empty originalTransactionId → 400.
-  it("rejects a notification with no originalTransactionId (400)", async () => {
-    // Build a JWS with an empty originalTransactionId in the transaction info.
-    function b64urlJson(value: unknown): string {
-      const json = JSON.stringify(value);
-      return btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    }
-    function jws(payload: unknown): string {
-      const header = b64urlJson({ alg: "ES256", x5c: ["TEST"] });
-      return `${header}.${b64urlJson(payload)}.SIG`;
-    }
-    const signedTransactionInfo = jws({
-      productId: "app.snapceipt.pro.monthly",
-      originalTransactionId: "", // empty — should be rejected
-      expiresDate: 9_999_999_999_000,
-    });
-    const payload = jws({
+  // Fix 4: missing/empty originalTransactionId → 400 (after the payload VERIFIES).
+  it("rejects a (verified) notification with an empty originalTransactionId (400)", async () => {
+    // Signed by the TRUSTED test chain so it passes JWS verification, but carries
+    // an empty originalTransactionId → hits the empty-otid guard, not signature.
+    const res = await post(await makeSignedNotification({
       notificationType: "SUBSCRIBED",
-      signedDate: Date.now(),
-      data: { signedTransactionInfo },
-    });
-
-    const res = await post(payload);
+      originalTransactionId: "",
+    }));
     expect(res.status).toBe(400);
+  });
+
+  // SECURITY: a notification signed by an UNTRUSTED chain (root != pinned anchor)
+  // is rejected (401) and the DB is NEVER touched — no plan flip.
+  it("rejects an UNTRUSTED-chain notification (401) and does not write the DB", async () => {
+    const userId = await seedSubscriber("free");
+    const untrusted = await makeTestChain(); // fresh root, not the pinned anchor
+    const res = await post(await makeSignedNotification({
+      notificationType: "SUBSCRIBED",
+      originalTransactionId: ORIG_TXN,
+      expiresDateMs: 9_999_999_999_000,
+      chain: untrusted,
+    }));
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("SIGNATURE_INVALID");
+
+    // The seeded user must still be free — the forged REVOKE/SUBSCRIBED was ignored.
+    const row = await env.DB.prepare("SELECT plan, subscription_status FROM users WHERE id = ?")
+      .bind(userId).first<{ plan: string; subscription_status: string | null }>();
+    expect(row?.plan).toBe("free");
+  });
+
+  // SECURITY: a TAMPERED payload (body mutated after signing) fails verification → 401, no write.
+  it("rejects a TAMPERED notification (401) and does not write the DB", async () => {
+    const userId = await seedSubscriber("free");
+    const good = await makeSignedNotification({
+      notificationType: "SUBSCRIBED",
+      originalTransactionId: ORIG_TXN,
+    });
+    // Mutate the outer payload segment, keep header + signature.
+    const [h, , s] = good.split(".");
+    const evilPayload = btoa(JSON.stringify({ notificationType: "SUBSCRIBED", signedDate: Date.now(), data: {} }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const tampered = `${h}.${evilPayload}.${s}`;
+
+    const res = await post(tampered);
+    expect(res.status).toBe(401);
+    const row = await env.DB.prepare("SELECT plan FROM users WHERE id = ?")
+      .bind(userId).first<{ plan: string }>();
+    expect(row?.plan).toBe("free");
   });
 });

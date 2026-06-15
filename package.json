@@ -16,11 +16,13 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
+    "@peculiar/x509": "^2.0.0",
     "hono": "^4.12.23",
     "jose": "^5.10.0",
     "mimetext": "^3.0.28",
     "pdf-lib": "^1.17.1",
     "postal-mime": "^2.4.3",
+    "reflect-metadata": "^0.2.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {

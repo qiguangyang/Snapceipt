@@ -30,6 +30,14 @@ export type Env = {
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
   /**
+   * TEST-ONLY trust-anchor override for Apple JWS x5c verification. When unset
+   * (production), the verifier pins the real AppleRootCA-G3 embedded in
+   * src/lib/appleJws.ts. The test harness injects a self-generated root PEM here
+   * so it can sign payloads with a test chain. MUST be undefined in production —
+   * never declared in wrangler.jsonc.
+   */
+  APPLE_TRUST_ANCHOR_PEM?: string;
+  /**
    * APNs auth-key (.p8 PKCS8 PEM). When undefined/empty, sendPush runs in STUB
    * mode: it logs and returns { stub: true } with no network call. Set via
    * `wrangler secret put APNS_KEY` once the key is provisioned.
