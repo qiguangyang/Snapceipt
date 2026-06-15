@@ -9,6 +9,14 @@ struct ExtractionResponse: Decodable {
     let meta: ExtractionMeta
 }
 
+/// Smart-scan usage counters echoed by the real `/extract` path.
+/// Absent on stub/offline paths — always decode with `decodeIfPresent`.
+struct SmartScanMeta: Decodable, Equatable {
+    let used: Int
+    let cap: Int
+    let plan: String
+}
+
 /// `/extract` `meta` block.
 struct ExtractionMeta: Decodable {
     let model: String
@@ -16,6 +24,28 @@ struct ExtractionMeta: Decodable {
     let latencyMs: Int
     let attempts: Int
     let stub: Bool
+    /// `true` when the monthly smart-scan cap was hit and a heuristic result
+    /// was served instead of the LLM. Defaults to `false` when absent (stub /
+    /// offline responses omit this field).
+    let capped: Bool
+    /// Usage counters for the smart-scan cap. Present on the real path;
+    /// absent on stub/offline paths.
+    let smartScan: SmartScanMeta?
+
+    private enum CodingKeys: String, CodingKey {
+        case model, source, latencyMs, attempts, stub, capped, smartScan
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        model = try c.decode(String.self, forKey: .model)
+        source = try c.decode(String.self, forKey: .source)
+        latencyMs = try c.decode(Int.self, forKey: .latencyMs)
+        attempts = try c.decode(Int.self, forKey: .attempts)
+        stub = try c.decode(Bool.self, forKey: .stub)
+        capped = try c.decodeIfPresent(Bool.self, forKey: .capped) ?? false
+        smartScan = try c.decodeIfPresent(SmartScanMeta.self, forKey: .smartScan)
+    }
 }
 
 /// Decoded `/images` response (§9). `imageKey` is the full R2 key; `getUrl` is

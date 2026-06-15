@@ -56,7 +56,7 @@ export interface ExtractedReceipt {
 
 export interface DeepseekResult {
   receipt: ExtractedReceipt;
-  meta: { model: string; attempts: number; stub: false };
+  meta: { model: string; attempts: number; stub: false; usedLlm: boolean };
 }
 
 function clamp01(n: number): number {
@@ -178,7 +178,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 }
 
 /** The deterministic fallback at the end of the ladder: heuristic + needsReview + low confidence. */
-function fallback(input: ExtractionInput): ExtractedReceipt {
+export function fallback(input: ExtractionInput): ExtractedReceipt {
   const h = heuristicExtract(input.ocrText, input.defaultDate);
   return {
     merchant: h.merchant,
@@ -202,7 +202,9 @@ function fallback(input: ExtractionInput): ExtractedReceipt {
  * the deterministic heuristic fallback (needsReview:true).
  */
 export async function runDeepseekExtraction(env: Env, input: ExtractionInput): Promise<DeepseekResult> {
-  const model = env.DEEPSEEK_MODEL ?? "deepseek-chat";
+  // deepseek-chat deprecates 2026-07-24; default is now deepseek-v4-flash.
+  // deepseek-v4-flash pricing: $0.14/M in (cache miss), $0.0028/M in (cache hit), $0.28/M out.
+  const model = env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
   const userPrompt = `Extract the receipt as json. OCR text:\n${input.ocrText}`;
 
   let attempts = 0;
@@ -232,10 +234,12 @@ export async function runDeepseekExtraction(env: Env, input: ExtractionInput): P
       lastRaw = content;
       const parsed = tryParseReceipt(content);
       if (parsed) {
-        return { receipt: finalize(input, parsed), meta: { model, attempts, stub: false } };
+        return { receipt: finalize(input, parsed), meta: { model, attempts, stub: false, usedLlm: true } };
       }
     }
   }
 
-  return { receipt: fallback(input), meta: { model, attempts, stub: false } };
+  // All attempts exhausted — fell back to heuristic. usedLlm:false so the caller
+  // does NOT burn a smart-scan slot (DeepSeek outage should not penalise the user).
+  return { receipt: fallback(input), meta: { model, attempts, stub: false, usedLlm: false } };
 }

@@ -30,6 +30,8 @@ const PURGE_ORDER = [
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
   "profiles",
+  "smart_scan_usage",
+  "crash_reports",
   "users",
 ] as const;
 

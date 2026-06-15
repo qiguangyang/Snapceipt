@@ -99,6 +99,35 @@ describe("runDeepseekExtraction()", () => {
     expect(out.receipt.total).toBe(33.0); // largest amount from OCR
   });
 
+  it("sets usedLlm:true when the LLM produced a parseable answer", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse(VALID_CONTENT));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
+
+    expect(out.meta.usedLlm).toBe(true);
+  });
+
+  it("sets usedLlm:false when all attempts exhausted and fell back to heuristic", async () => {
+    // All attempts fail with non-parseable content — simulates DeepSeek outage.
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse("not json"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
+
+    expect(out.meta.usedLlm).toBe(false);
+    expect(out.receipt.needsReview).toBe(true);
+  });
+
+  it("sets usedLlm:false when fetch always rejects (network/timeout outage)", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network error"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
+
+    expect(out.meta.usedLlm).toBe(false);
+  });
+
   it("infers AU GST = round(total/11) when the model returns gst:null and total>0", async () => {
     const noGst = JSON.stringify({
       merchant: "Cafe", date: "2026-05-28", currencyCode: "AUD",

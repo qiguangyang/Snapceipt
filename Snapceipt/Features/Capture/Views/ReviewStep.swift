@@ -6,15 +6,21 @@ import SwiftUI
 /// read-only line-items list, disabled mileage/bank chips, and the Save button.
 struct ReviewStep: View {
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @Binding var draft: ExtractedReceipt
     // Presentation-only in v1: re-skins the toggle live but is NOT the save target.
     // `CaptureViewModel.save()` always persists under `profiles.activeProfile` (the
     // txn `mode`/`profileId` come from the active profile, per the scope-by-active-
     // profileId rule). See the toggle comment below.
     @Binding var mode: String                 // "personal" | "business"
+    /// The view model, read-only here — ReviewStep only reads `smartScanCapped` /
+    /// `smartScanCap`; it never mutates the VM directly.
+    let vm: CaptureViewModel
     let onSave: () -> Void
     /// Dismisses the whole capture overlay (the only cancel affordance on Review).
     let onClose: () -> Void
+
+    @State private var showPaywall = false
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -28,7 +34,13 @@ struct ReviewStep: View {
             ScrollView {
                 VStack(spacing: 16) {
                     totalCard
-                    aiBanner
+                    // Upgrade nudge takes priority when capped + free; otherwise
+                    // the standard AI banner (which may still say "Review needed").
+                    if vm.smartScanCapped && !entitlement.isPro {
+                        upgradeNudge
+                    } else {
+                        aiBanner
+                    }
                     fieldsCard
                     lineItemsCard
                     disabledChips
@@ -40,6 +52,7 @@ struct ReviewStep: View {
             .keyboardDismissButton()
         }
         .background(Palette.cream)
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     /// Top bar: a close button (the only cancel affordance on Review) + the
@@ -105,6 +118,42 @@ struct ReviewStep: View {
             Text(body).font(.ui(13)).foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier(AccessibilityID.captureReviewBanner)
+        }
+        .padding(14)
+        .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
+                .stroke(accent.base.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the free-plan
+    /// cap (`vm.smartScanCap`, falling back to 10) as the user's allotment; the Pro
+    /// upsell number (500) is always a literal — never derived from the free cap.
+    @ViewBuilder
+    private var upgradeNudge: some View {
+        let freeCap = vm.smartScanCap ?? 10
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Icon(name: "sparkles", size: 18, color: accent.base)
+                Text("Smart-scan limit reached")
+                    .font(.ui(13.5, .bold)).foregroundStyle(accent.deep)
+                Spacer()
+            }
+            Text("You've used all \(freeCap) free smart scans this month. Upgrade to Pro for 500/mo + BAS export, quotes & logbooks.")
+                .font(.ui(13)).foregroundStyle(Palette.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier(AccessibilityID.captureReviewUpgradeNudge)
+            Button {
+                showPaywall = true
+            } label: {
+                Text("Upgrade to Pro")
+                    .font(.ui(13, .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(accent.base, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.captureReviewUpgrade)
         }
         .padding(14)
         .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))

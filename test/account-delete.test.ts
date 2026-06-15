@@ -20,6 +20,8 @@ const PURGE_ORDER = [
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
   "profiles",
+  "smart_scan_usage",
+  "crash_reports",
   "users",
 ] as const;
 
@@ -85,6 +87,16 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   await env.DB.prepare(`INSERT INTO inbound_email_log (message_id, user_id, profile_id, transaction_id, status, received_at) VALUES (?, ?, ?, ?, 'created', ?)`).bind(messageId, userId, profileId, txnId, t).run();
   await env.DB.prepare(`INSERT INTO email_outbox (id, user_id, to_email, kind, status, attempts, created_at) VALUES (?, ?, 'x@e.com', 'magic_link', 'queued', 0, ?)`).bind(outboxId, userId, t).run();
   await env.DB.prepare(`INSERT INTO processed_mutations (mutation_id, user_id, device_id, entity_type, entity_id, op, status, result_json, created_at) VALUES (?, ?, ?, 'transaction', ?, 'upsert', 'applied', '{}', ?)`).bind(mutationId, userId, deviceId, txnId, t).run();
+
+  // smart_scan_usage: server-only cap table — must be purged on account delete.
+  await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 5, ?)`).bind(userId, t).run();
+
+  // crash_reports: iOS MetricKit diagnostics (migration 0007) — right-to-erasure gap if missed.
+  const crashId = uuidv7();
+  await env.DB.prepare(
+    `INSERT INTO crash_reports (id, user_id, device_id, kind, app_version, os_version, device_model, occurred_at, payload, created_at)
+     VALUES (?, ?, ?, 'crash', '1.0.0', '18.0', 'iPhone16,2', ?, '{}', ?)`
+  ).bind(crashId, userId, deviceId, t, t).run();
 
   const r2Key = `u/${userId}/x.jpg`;
   const exportKey = `${userId}/exports/${exportId}.pdf`;

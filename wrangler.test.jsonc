@@ -38,6 +38,6 @@
   ],
   "vars": {
     "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
-    "DEEPSEEK_MODEL": "deepseek-chat"
+    "DEEPSEEK_MODEL": "deepseek-v4-flash"
   }
 }

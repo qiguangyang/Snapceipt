@@ -24,7 +24,7 @@ export type Env = {
   DEEPSEEK_API_KEY: string;
   /**
    * Var: DeepSeek model id used in the request body + echoed as meta.model.
-   * Optional; the route falls back to "deepseek-chat" when unset.
+   * Optional; the route falls back to "deepseek-v4-flash" when unset.
    */
   DEEPSEEK_MODEL?: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
@@ -47,6 +47,16 @@ export type Env = {
   APNS_KEY_ID?: string;
   /** Apple developer Team ID — the JWT `iss` claim. Optional => stub. */
   APNS_TEAM_ID?: string;
+  /**
+   * Var: monthly smart-scan cap for free users (numeric string).
+   * When unset, defaults to 10 (DEFAULT_CAP_FREE in src/lib/smartScan.ts).
+   */
+  SMART_SCAN_CAP_FREE?: string;
+  /**
+   * Var: monthly smart-scan cap for Pro users (numeric string).
+   * When unset, defaults to 500 (DEFAULT_CAP_PRO in src/lib/smartScan.ts).
+   */
+  SMART_SCAN_CAP_PRO?: string;
   /**
    * E2E-ONLY test seam. When set to "1", POST /auth/magic-link/request ALSO
    * returns the raw magic-link token in its 202 body so a black-box HTTP client

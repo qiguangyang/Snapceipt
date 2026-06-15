@@ -58,7 +58,7 @@ async function runExtraction(
         gst: h.total === 0 ? null : h.gst, category: h.category, deductible: h.deductible,
         lineItems: h.lineItems, confidence: 0.9, needsReview: false,
       },
-      model: env.DEEPSEEK_MODEL ?? "deepseek-chat",
+      model: env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
     };
   }
   const result = await runDeepseekExtraction(env, { ocrText, source: "email_in", defaultDate });
