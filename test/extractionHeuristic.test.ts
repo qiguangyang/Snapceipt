@@ -1,6 +1,7 @@
 // test/extractionHeuristic.test.ts
 import { describe, expect, it } from "vitest";
 import { heuristicExtract, type HeuristicReceipt } from "../src/lib/extractionHeuristic";
+import corpusRaw from "./fixtures/heuristic-receipts.json";
 
 const SAMPLE = [
   "THE GROUNDS",
@@ -113,6 +114,31 @@ describe("heuristicExtract()", () => {
     expect(r.confidence).toBeGreaterThanOrEqual(0.6);
     expect(r.needsReview).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Shared golden corpus: both Swift and TS parsers must satisfy these cases.
+// The corpus is the contract — if a case fails, fix the parser, not the corpus.
+// ---------------------------------------------------------------------------
+// Imported as a static module (JSON import) — the @cloudflare/vitest-pool-workers
+// runtime doesn't support node:fs readFileSync, but Vite's JSON plugin works fine.
+const corpus = corpusRaw as Array<{
+  name: string;
+  ocrText: string;
+  expect: { merchant: string; date: string | null; total: number; gst: number; category: string };
+}>;
+
+describe("shared heuristic corpus", () => {
+  for (const c of corpus) {
+    it(c.name, () => {
+      const r = heuristicExtract(c.ocrText, "2026-01-01");
+      expect(r.merchant).toBe(c.expect.merchant);
+      if (c.expect.date) expect(r.date).toBe(c.expect.date);
+      expect(r.total).toBe(c.expect.total);
+      expect(r.gst).toBe(c.expect.gst);
+      expect(r.category).toBe(c.expect.category);
+    });
+  }
 });
 
 // Type guard: the shape the stub + fallback consume.

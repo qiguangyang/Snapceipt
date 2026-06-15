@@ -2,6 +2,22 @@ import Testing
 import Foundation
 @testable import Snapceipt
 
+// ---------------------------------------------------------------------------
+// Decodable types for the shared golden corpus.
+// ---------------------------------------------------------------------------
+private struct CorpusCase: Decodable {
+    let name: String
+    let ocrText: String
+    let expect: CorpusExpect
+    struct CorpusExpect: Decodable {
+        let merchant: String
+        let date: String?
+        let total: Double
+        let gst: Double
+        let category: String
+    }
+}
+
 struct HeuristicParserTests {
     private func lines(_ texts: [String]) -> [RecognizedLine] {
         texts.map { RecognizedLine(text: $0, confidence: 0.9, boundingBox: .zero) }
@@ -87,11 +103,44 @@ struct HeuristicParserTests {
         #expect(strong.confidence <= 0.75)
     }
 
-    // MARK: - Geometry tests (Task 7)
+    // MARK: - Shared golden corpus (Task 8)
+
+    /// Both Swift and TS parsers must satisfy test/fixtures/heuristic-receipts.json.
+    /// The JSON is loaded via a #filePath-relative path (repo root = two parents up
+    /// from SnapceiptTests/HeuristicParserTests.swift).  This works in the Xcode
+    /// simulator / on-device because the test *source* file lives at the absolute
+    /// path embedded by the compiler; the test sandbox can still read ordinary
+    /// filesystem paths outside the app bundle.
+    @Test func sharedCorpusMatches() throws {
+        // SnapceiptTests/HeuristicParserTests.swift
+        //   └─ SnapceiptTests/  (deletingLastPathComponent)
+        //       └─ repo root/   (deletingLastPathComponent)
+        //           └─ test/fixtures/heuristic-receipts.json
+        let here = URL(fileURLWithPath: #filePath)
+        let root = here.deletingLastPathComponent().deletingLastPathComponent()
+        let fixtureURL = root.appendingPathComponent("test/fixtures/heuristic-receipts.json")
+        let data = try Data(contentsOf: fixtureURL)
+        let cases = try JSONDecoder().decode([CorpusCase].self, from: data)
+        #expect(!cases.isEmpty, "corpus must not be empty")
+        for c in cases {
+            let r = HeuristicParser.parse(lines(c.ocrText.split(separator: "\n").map(String.init)))
+            #expect(r.merchant == c.expect.merchant, "\(c.name): merchant")
+            // Round to 2dp before comparing Decimal->Double to avoid binary float drift.
+            let totalRounded = (NSDecimalNumber(decimal: r.total).doubleValue * 100).rounded() / 100
+            #expect(totalRounded == c.expect.total, "\(c.name): total")
+            if let tax = r.tax {
+                let taxRounded = (NSDecimalNumber(decimal: tax).doubleValue * 100).rounded() / 100
+                #expect(taxRounded == c.expect.gst, "\(c.name): gst")
+            }
+            #expect(r.category.rawValue == c.expect.category, "\(c.name): category")
+        }
+    }
 
     private func line(_ t: String, x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> RecognizedLine {
         RecognizedLine(text: t, confidence: 0.9, boundingBox: CGRect(x: x, y: y, width: w, height: h))
     }
+
+    // MARK: - Geometry tests (Task 7)
 
     /// Geometry is decisive: topmost line (largest maxY) is the merchant;
     /// when there is no explicit "total" line the biggest-font (tallest box) non-tender

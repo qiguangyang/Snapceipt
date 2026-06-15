@@ -1,0 +1,22 @@
+[
+  {
+    "name": "woolworths groceries",
+    "ocrText": "WOOLWORTHS METRO\n15/06/2026\nMilk 2.00\nBread 3.50\nTOTAL 5.50\nGST 0.50",
+    "expect": { "merchant": "WOOLWORTHS METRO", "date": "2026-06-15", "total": 5.50, "gst": 0.50, "category": "groceries" }
+  },
+  {
+    "name": "fuel no printed gst",
+    "ocrText": "Shell Coles Express\n01/06/2026\nUnleaded 80.00\nTOTAL 80.00",
+    "expect": { "merchant": "Shell Coles Express", "date": "2026-06-01", "total": 80.00, "gst": 7.27, "category": "fuel" }
+  },
+  {
+    "name": "cafe meals with cash tendered",
+    "ocrText": "The Coffee Club\nFlat White 4.50\nTOTAL 4.50\nCASH 50.00\nCHANGE 45.50",
+    "expect": { "merchant": "The Coffee Club", "date": null, "total": 4.50, "gst": 0.41, "category": "meals" }
+  },
+  {
+    "name": "taxi not gst",
+    "ocrText": "City Cabs\nTaxi fare 25.00\nTOTAL 25.00",
+    "expect": { "merchant": "City Cabs", "date": null, "total": 25.00, "gst": 2.27, "category": "travel" }
+  }
+]
