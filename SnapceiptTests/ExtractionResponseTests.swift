@@ -59,6 +59,35 @@ struct ExtractionResponseTests {
         #expect(draft.lineItems.count == 1)
     }
 
+    @Test("decodes meta.capped and meta.smartScan when present")
+    func decodesCappedMeta() throws {
+        let resp = try decode("""
+        {"requestId":"r3",
+         "receipt":{"merchant":"Kmart","date":"2026-06-15","currencyCode":"AUD",
+           "total":19.99,"gst":1.82,"category":"office","deductible":100,
+           "lineItems":[],"confidence":0.45,"needsReview":true},
+         "meta":{"model":"heuristic","source":"scan","latencyMs":2,"attempts":1,"stub":false,
+                 "capped":true,"smartScan":{"used":10,"cap":10,"plan":"free"}}}
+        """)
+        #expect(resp.meta.capped == true)
+        #expect(resp.meta.smartScan?.used == 10)
+        #expect(resp.meta.smartScan?.cap == 10)
+        #expect(resp.meta.smartScan?.plan == "free")
+    }
+
+    @Test("capped defaults to false and smartScan is nil when both fields are absent (stub/offline)")
+    func cappedDefaultsFalseWhenAbsent() throws {
+        let resp = try decode("""
+        {"requestId":"r4",
+         "receipt":{"merchant":"Stub","date":"2026-06-15","currencyCode":"AUD",
+           "total":5.00,"gst":null,"category":"office","deductible":100,
+           "lineItems":[],"confidence":0.4,"needsReview":true},
+         "meta":{"model":"stub","source":"scan","latencyMs":1,"attempts":1,"stub":true}}
+        """)
+        #expect(resp.meta.capped == false)
+        #expect(resp.meta.smartScan == nil)
+    }
+
     @Test("builds an editable draft from a heuristic ParsedReceipt (status pending, needsReview)")
     func draftFromParsed() {
         var parsed = ParsedReceipt()

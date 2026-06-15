@@ -32,6 +32,15 @@ final class CaptureViewModel {
     /// reconnect drain + server re-extract. Drives the Saved-step "Queued" badge (J18b).
     var isQueued: Bool { draft?.extractionStatus == "pending" }
 
+    /// True when the last `/extract` call was served from the heuristic fallback
+    /// because the user's monthly smart-scan cap was exhausted (`meta.capped == true`).
+    /// Always false on stub/offline paths. Read by ReviewStep to show the upgrade nudge.
+    private(set) var smartScanCapped = false
+    /// The monthly cap limit from `meta.smartScan.cap`, used by the upgrade nudge copy.
+    /// Nil when the backend omits `smartScan` (stub/offline). Defaults to nil; set
+    /// alongside `smartScanCapped` on the real path.
+    private(set) var smartScanCap: Int? = nil
+
     /// The active profile's mode ("personal" | "business"), used to initialize the
     /// Review toggle so it opens on the actual save target. Defaults to personal when
     /// there is no active profile.
@@ -72,11 +81,17 @@ final class CaptureViewModel {
         do {
             let resp = try await api.extract(ocrText: rawText, source: "scan", capturedAt: capturedAt)
             draft = ExtractedReceipt(response: resp)
+            // Thread the cap signal onto the VM so ReviewStep can show the upgrade nudge.
+            smartScanCapped = resp.meta.capped
+            smartScanCap = resp.meta.smartScan?.cap
         } catch {
             let parsed = HeuristicParser.parse(rawText.split(separator: "\n").map {
                 RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
             })
             draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "")
+            // Offline/transport failure — not a cap situation; reset both signals.
+            smartScanCapped = false
+            smartScanCap = nil
         }
         stage = .review
     }

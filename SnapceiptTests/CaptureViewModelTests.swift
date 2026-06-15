@@ -56,6 +56,17 @@ struct CaptureViewModelTests {
         return try! JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
     }
 
+    private func cappedResponse() -> ExtractionResponse {
+        let json = """
+        {"requestId":"r-capped","receipt":{"merchant":"Kmart","date":"2026-06-15","currencyCode":"AUD",
+          "total":19.99,"gst":1.82,"category":"office","deductible":100,
+          "lineItems":[],"confidence":0.45,"needsReview":true},
+         "meta":{"model":"heuristic","source":"scan","latencyMs":2,"attempts":1,"stub":false,
+                 "capped":true,"smartScan":{"used":10,"cap":10,"plan":"free"}}}
+        """
+        return try! JSONDecoder().decode(ExtractionResponse.self, from: Data(json.utf8))
+    }
+
     @Test("onScanned -> scanning -> review with the extracted draft on success")
     func successPath() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }
@@ -98,6 +109,33 @@ struct CaptureViewModelTests {
         #expect(pending.count == 1)
         #expect(pending[0].transactionId == txns[0].id)
         #expect(pending[0].ocrText == "CAFE\nTOTAL 10.00")
+    }
+
+    @Test("capped response sets smartScanCapped=true and smartScanCap from meta.smartScan.cap")
+    func cappedResponseSetsSignal() async throws {
+        let (vm, _, _, _) = try fixture { _, _, _ in self.cappedResponse() }
+        await vm.onScanned(image: image(), rawText: "KMART\nTOTAL 19.99")
+        #expect(vm.stage == .review)
+        #expect(vm.smartScanCapped == true)
+        #expect(vm.smartScanCap == 10)
+        #expect(vm.draft?.needsReview == true)
+    }
+
+    @Test("normal (non-capped) response leaves smartScanCapped=false")
+    func nonCappedResponseLeavesSignalFalse() async throws {
+        let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }
+        await vm.onScanned(image: image(), rawText: "CAFE\nTOTAL 10.00")
+        #expect(vm.smartScanCapped == false)
+        #expect(vm.smartScanCap == nil)
+    }
+
+    @Test("extract failure (offline) resets smartScanCapped to false")
+    func offlineFailureResetsCappedSignal() async throws {
+        struct Boom: Error {}
+        let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
+        await vm.onScanned(image: image(), rawText: "WOOLWORTHS\nTOTAL 22.00")
+        #expect(vm.smartScanCapped == false)
+        #expect(vm.smartScanCap == nil)
     }
 
     /// Locks the Saved-summary save target (Finding 1) against the active profile, not

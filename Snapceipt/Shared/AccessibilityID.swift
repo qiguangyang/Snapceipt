@@ -33,6 +33,10 @@ enum AccessibilityID {
     static let captureReviewCategory = "capture.review.category"
     static let captureReviewBadge = "capture.review.badge"
     static let captureReviewBanner = "capture.review.banner"
+    /// The smart-scan-cap upgrade nudge banner (shown only for free users when capped).
+    static let captureReviewUpgradeNudge = "capture.review.upgradeNudge"
+    /// The "Upgrade" button inside the smart-scan-cap nudge banner.
+    static let captureReviewUpgrade = "capture.review.upgrade"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureSave = "capture.save"
     static let captureSavedTitle = "capture.saved.title"

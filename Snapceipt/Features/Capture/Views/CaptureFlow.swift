@@ -28,7 +28,7 @@ struct CaptureFlow: View {
                 ScanStep(image: vm.capturedImage, draft: vm.draft, onClose: onClose)
             case .review:
                 if let binding = draftBinding {
-                    ReviewStep(draft: binding, mode: $mode, onSave: { vm.save() }, onClose: onClose)
+                    ReviewStep(draft: binding, mode: $mode, vm: vm, onSave: { vm.save() }, onClose: onClose)
                 }
             case .saved:
                 // The summary names the ACTUAL save target (`vm.savedMode`, captured
