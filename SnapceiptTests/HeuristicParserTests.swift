@@ -49,4 +49,20 @@ struct HeuristicParserTests {
         // After Task 3: category defaults to .office (Task 5 will set .groceries), confidence in range.
         #expect(r.confidence >= 0.3 && r.confidence <= 0.75)
     }
+
+    @Test func dotSeparatedDateNotPickedAsTotal() {
+        let r = HeuristicParser.parse(lines(["Acme Pty Ltd", "28.05.2026", "TOTAL 9.00"]))
+        #expect(r.total == Decimal(string: "9.00"))
+    }
+
+    @Test func taxiLineIsNotReadAsGst() {
+        let r = HeuristicParser.parse(lines(["City Cabs", "Taxi fare 25.00", "TOTAL 25.00"]))
+        // No printed GST line -> GST inferred as total/11, NOT 25.00 from "Taxi".
+        #expect(r.tax == Decimal(string: "2.27"))
+    }
+
+    @Test func cashTenderedDoesNotBeatTotal() {
+        let r = HeuristicParser.parse(lines(["Shop", "Item 4.50", "TOTAL 4.50", "CASH 50.00", "CHANGE 45.50"]))
+        #expect(r.total == Decimal(string: "4.50"))
+    }
 }

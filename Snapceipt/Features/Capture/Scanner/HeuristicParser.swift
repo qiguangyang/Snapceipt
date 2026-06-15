@@ -18,22 +18,39 @@ enum HeuristicParser {
     private static let amountRegex = try! NSRegularExpression(
         pattern: #"(-?\d{1,3}(?:[ ,]\d{3})*(?:[.,]\d{2}))"#)
 
+    private static let dateDetector = try? NSDataDetector(
+        types: NSTextCheckingResult.CheckingType.date.rawValue)
+
+    private static func isDateLine(_ s: String) -> Bool {
+        guard let d = dateDetector else { return false }
+        let r = NSRange(s.startIndex..., in: s)
+        return d.firstMatch(in: s, range: r)?.date != nil
+    }
+
     static func parse(_ lines: [RecognizedLine]) -> ParsedReceipt {
         var result = ParsedReceipt()
         let texts = lines.map { $0.text }
         let joined = texts.joined(separator: "\n")
 
-        // Merchant: first line with >=3 letters that isn't web/email noise.
+        // Tender/keyword exclusion regex used for both total calculation and line-items.
+        let tenderRe = #"(?i)\b(total|subtotal|gst|tax|vat|change|cash|eftpos|balance|amount due|tendered|rounding)\b"#
+
+        // Merchant: first line with >=3 letters that isn't web/email/date/header noise.
+        let headerStop = ["tax invoice", "invoice", "receipt", "customer copy", "merchant copy", "eftpos", "duplicate"]
         result.merchant = texts.first(where: { line in
+            let l = line.lowercased()
             let letters = line.filter { $0.isLetter }.count
-            return letters >= 3 && !line.contains("www") && !line.contains("@")
+            return letters >= 3 && !l.contains("www") && !line.contains("@")
+                && !isDateLine(line) && !headerStop.contains(where: { l.contains($0) })
         }) ?? texts.first ?? ""
 
         // Date: NSDataDetector across the joined text.
+        var dateFound = false
         if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) {
             let range = NSRange(joined.startIndex..., in: joined)
             if let match = detector.firstMatch(in: joined, range: range), let d = match.date {
                 result.date = d
+                dateFound = true
             }
         }
 
@@ -52,26 +69,39 @@ enum HeuristicParser {
             }
         }
 
-        // Total: prefer a "total" (not "subtotal") line; else the largest amount.
-        let totalLine = texts.first { line in
+        func maxAmount(_ ls: [String]) -> Decimal? { ls.flatMap(amounts).max() }
+
+        // Total: unified algorithm with date-skip and tender exclusion.
+        let nonDate = texts.filter { !isDateLine($0) }
+        let totalLines = nonDate.filter { line in
             let l = line.lowercased()
             return l.contains("total") && !l.contains("subtotal") && !l.contains("sub total")
         }
-        if let totalLine, let maxAmt = amounts(in: totalLine).max() {
-            result.total = maxAmt
+        let usedTotalLine: Bool
+        if let t = maxAmount(totalLines), t > 0 {
+            result.total = t; usedTotalLine = true
         } else {
-            result.total = texts.flatMap(amounts).max() ?? 0
+            let nonTender = nonDate.filter { $0.range(of: tenderRe, options: .regularExpression) == nil }
+            result.total = maxAmount(nonTender) ?? 0; usedTotalLine = false
         }
 
-        // GST: explicit gst/tax/vat line if present, else AU inference total/11.
-        if let taxLine = texts.first(where: { line in
-                ["gst", "tax", "vat"].contains { kw in line.lowercased().contains(kw) }
-            }),
+        // GST: word-boundary regex to avoid "Taxi" matching "tax".
+        let gstRe = #"(?i)\b(gst|tax|vat)\b"#
+        let gstPrinted: Bool
+        if let taxLine = texts.first(where: { $0.range(of: gstRe, options: .regularExpression) != nil }),
            let taxVal = amounts(in: taxLine).max() {
-            result.tax = taxVal
+            result.tax = taxVal; gstPrinted = true
         } else if result.total > 0 {
-            result.tax = roundedGST(result.total)
-        }
+            result.tax = roundedGST(result.total); gstPrinted = false
+        } else { gstPrinted = false }
+
+        // Category: set from heuristic (populated in Task 5; placeholder .office for Task 4).
+        result.category = .office
+
+        // Line items: populated in Task 5.
+
+        // Confidence: placeholder 0.3 for Task 4 (graded computation added in Task 6).
+        result.confidence = 0.3
 
         return result
     }
