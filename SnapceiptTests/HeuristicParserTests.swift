@@ -78,4 +78,12 @@ struct HeuristicParserTests {
         let r = HeuristicParser.parse(lines(["TAX INVOICE", "Bob's Hardware", "TOTAL 5.00"]))
         #expect(r.merchant == "Bob's Hardware")
     }
+
+    @Test func confidenceRisesWithSignals() {
+        let weak = HeuristicParser.parse(lines(["Zzz Pty Ltd", "9.00"]))
+        let strong = HeuristicParser.parse(lines(["WOOLWORTHS", "TOTAL 11.00", "GST 1.00", "15/06/2026"]))
+        #expect(weak.confidence <= 0.4)
+        #expect(strong.confidence >= 0.6)
+        #expect(strong.confidence <= 0.75)
+    }
 }

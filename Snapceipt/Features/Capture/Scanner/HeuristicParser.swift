@@ -111,8 +111,13 @@ enum HeuristicParser {
         // Category: inferred from merchant name and line text.
         result.category = ReceiptCategoryHeuristic.infer(merchant: result.merchant, lineTexts: texts)
 
-        // Confidence: placeholder 0.3 for Task 5 (graded computation added in Task 6).
-        result.confidence = 0.3
+        // Confidence: graded from 0.3 base + signals found.
+        var confidence = 0.3
+        if usedTotalLine { confidence += 0.2 }
+        if dateFound { confidence += 0.1 }
+        if gstPrinted { confidence += 0.1 }
+        if result.category != .office { confidence += 0.05 }
+        result.confidence = min(0.75, confidence)
 
         return result
     }
