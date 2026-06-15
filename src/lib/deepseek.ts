@@ -56,7 +56,7 @@ export interface ExtractedReceipt {
 
 export interface DeepseekResult {
   receipt: ExtractedReceipt;
-  meta: { model: string; attempts: number; stub: false };
+  meta: { model: string; attempts: number; stub: false; usedLlm: boolean };
 }
 
 function clamp01(n: number): number {
@@ -234,10 +234,12 @@ export async function runDeepseekExtraction(env: Env, input: ExtractionInput): P
       lastRaw = content;
       const parsed = tryParseReceipt(content);
       if (parsed) {
-        return { receipt: finalize(input, parsed), meta: { model, attempts, stub: false } };
+        return { receipt: finalize(input, parsed), meta: { model, attempts, stub: false, usedLlm: true } };
       }
     }
   }
 
-  return { receipt: fallback(input), meta: { model, attempts, stub: false } };
+  // All attempts exhausted — fell back to heuristic. usedLlm:false so the caller
+  // does NOT burn a smart-scan slot (DeepSeek outage should not penalise the user).
+  return { receipt: fallback(input), meta: { model, attempts, stub: false, usedLlm: false } };
 }

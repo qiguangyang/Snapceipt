@@ -24,7 +24,7 @@ export type Env = {
   DEEPSEEK_API_KEY: string;
   /**
    * Var: DeepSeek model id used in the request body + echoed as meta.model.
-   * Optional; the route falls back to "deepseek-chat" when unset.
+   * Optional; the route falls back to "deepseek-v4-flash" when unset.
    */
   DEEPSEEK_MODEL?: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */

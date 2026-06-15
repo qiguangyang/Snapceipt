@@ -12,7 +12,7 @@
 // exercises incrementUsage directly — the route wires those same helpers.
 import { env } from "cloudflare:test";
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppEnv } from "../src/env";
 import { requestId, registerErrorHandler } from "../src/middleware/error";
 import { extractRoutes } from "../src/routes/extract";
@@ -42,6 +42,11 @@ beforeEach(async () => {
   // Clear only tables relevant to these tests.
   await env.DB.exec("DELETE FROM smart_scan_usage");
   await env.DB.exec("DELETE FROM users");
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("POST /extract — stubGate path (no key)", () => {
@@ -170,5 +175,64 @@ describe("POST /extract — no user row (new/deleted user)", () => {
     expect(body.meta.capped).toBe(true);
     expect(body.meta.smartScan.cap).toBe(10);   // free cap
     expect(body.meta.smartScan.plan).toBe("free");
+  });
+});
+
+describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)", () => {
+  it("does not increment usage counter when DeepSeek exhausts all attempts and falls back to heuristic", async () => {
+    const userId = "u-outage-test";
+    const t = nowMs();
+
+    // Seed user as free plan with 3 scans already used.
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)",
+    )
+      .bind(userId, "outage@e.com", t, t)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 3, ?)",
+    )
+      .bind(userId, t)
+      .run();
+
+    // Stub fetch to always return unparseable content so runDeepseekExtraction
+    // exhausts all 3 attempts and falls back to heuristic (usedLlm: false).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: "not valid json at all" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    const app = appWith({ DEEPSEEK_API_KEY: "sk-dummy", DB: env.DB }, userId);
+    const res = await app.request("/extract", {
+      method: "POST",
+      headers: POST_HEADERS,
+      body: JSON.stringify({ ocrText: OCR, source: "scan", capturedAt: "2026-06-15" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+
+    // Not capped — the slot was not consumed.
+    expect(body.meta.capped).toBe(false);
+    // smartScan.used must equal the prior count (3), NOT 4.
+    expect(body.meta.smartScan).toBeDefined();
+    expect(body.meta.smartScan.used).toBe(3);
+    expect(body.meta.smartScan.plan).toBe("free");
+
+    // Verify directly in DB that the counter was not incremented.
+    const row = await env.DB.prepare(
+      "SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '2026-06'",
+    )
+      .bind(userId)
+      .first<{ count: number }>();
+    expect(row!.count).toBe(3);
+
+    // Receipt came from heuristic fallback (needsReview + low confidence).
+    expect(body.receipt.needsReview).toBe(true);
+    expect(body.receipt.confidence).toBeLessThanOrEqual(0.4);
   });
 });

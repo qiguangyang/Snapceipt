@@ -21,6 +21,7 @@ const PURGE_ORDER = [
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
   "profiles",
   "smart_scan_usage",
+  "crash_reports",
   "users",
 ] as const;
 
@@ -89,6 +90,13 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
 
   // smart_scan_usage: server-only cap table — must be purged on account delete.
   await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 5, ?)`).bind(userId, t).run();
+
+  // crash_reports: iOS MetricKit diagnostics (migration 0007) — right-to-erasure gap if missed.
+  const crashId = uuidv7();
+  await env.DB.prepare(
+    `INSERT INTO crash_reports (id, user_id, device_id, kind, app_version, os_version, device_model, occurred_at, payload, created_at)
+     VALUES (?, ?, ?, 'crash', '1.0.0', '18.0', 'iPhone16,2', ?, '{}', ?)`
+  ).bind(crashId, userId, deviceId, t, t).run();
 
   const r2Key = `u/${userId}/x.jpg`;
   const exportKey = `${userId}/exports/${exportId}.pdf`;

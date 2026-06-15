@@ -99,9 +99,21 @@ extractRoutes.post("/", validate("json", extractRequestSchema), async (c) => {
       attempts = result.meta.attempts;
       stub = false;
       capped = false;
-      // Increment after success — fire-and-forget under nowMs() from this point.
-      await incrementUsage(c.env.DB, userId, period, nowMs());
-      smartScan = { used: used + 1, cap, plan };
+      if (result.meta.usedLlm) {
+        // LLM produced a parseable answer — consume one smart-scan slot.
+        // NOTE: TOCTOU race — this read-then-increment is NOT atomic. Two concurrent
+        // under-cap requests for the same user can both pass the `used < cap` check
+        // and both proceed, briefly exceeding the cap by at most 1. This is accepted:
+        // the per-user extract rate limit bounds the overage, and a lock / serialised
+        // transaction is not worth the latency cost for this use case.
+        await incrementUsage(c.env.DB, userId, period, nowMs());
+        smartScan = { used: used + 1, cap, plan };
+      } else {
+        // DeepSeek exhausted all attempts and fell back to heuristic (e.g. outage).
+        // Do NOT burn a slot — the user got a heuristic result through no fault of
+        // their own; meta.capped stays false so the client knows the slot was free.
+        smartScan = { used, cap, plan };
+      }
     } else {
       // 3b. Cap exhausted: serve heuristic, do NOT call DeepSeek.
       receipt = fallback({
