@@ -14,13 +14,15 @@ import {
   revokeSession,
   revokeSessionFamily,
 } from "../lib/sessions";
-import { sendMagicLinkEmail } from "../lib/email";
+import { sendMagicLinkEmail, sendSignInCode } from "../lib/email";
 import { verifyAppleIdentityToken } from "../lib/apple";
 import { requireAuth } from "../middleware/auth";
 import {
   appleBody,
   magicLinkRequestBody,
   magicLinkVerifyBody,
+  otpRequestBody,
+  otpVerifyBody,
   refreshBody,
 } from "../schemas/auth";
 
@@ -57,6 +59,10 @@ const MAGIC_LINK_BASE_URL = "https://api.snapceipt.cc/auth/magic";
 // Superseded-refresh-hash retention for reuse detection == the 60-day refresh window.
 const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 
+// OTP sign-in code TTL — mirrors the email-change code window (account.ts).
+const OTP_TTL_SECONDS = 600; // 10 minutes
+const OTP_MAX_ATTEMPTS = 5;
+
 /** Canonical form for email comparison + storage: trimmed + lowercased. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -66,6 +72,12 @@ export function normalizeEmail(email: string): string {
 async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** 6-digit numeric sign-in code (zero-padded). Mirrors account.ts sixDigitCode. */
+function sixDigitCode(): string {
+  const n = (crypto.getRandomValues(new Uint32Array(1))[0] ?? 0) % 1_000_000;
+  return n.toString().padStart(6, "0");
 }
 
 /** 256-bit opaque token, base64url (no padding) — matches the refresh-token shape. */
@@ -87,16 +99,20 @@ authRoutes.post(
   "/magic-link/request",
   validate("json", magicLinkRequestBody),
   async (c) => {
-    const { email } = c.req.valid("json");
+    const { email, deviceId } = c.req.valid("json");
     const normalized = normalizeEmail(email);
 
     const token = newMagicToken();
     const hash = await sha256Hex(token);
 
-    // Store only the hash; metadata carries the email for verify-time lookup.
+    // Device hint for binding: header wins, body is the fallback. Absent => no binding
+    // (verify stays backward-compatible for already-minted tokens).
+    const deviceHint = c.req.header("X-Device-Id") || deviceId || undefined;
+
+    // Store only the hash; metadata carries the email + (optional) requesting device.
     await c.env.KV.put(`ml:${hash}`, "1", {
       expirationTtl: MAGIC_LINK_TTL_SECONDS,
-      metadata: { email: normalized, createdAt: nowMs() },
+      metadata: { email: normalized, createdAt: nowMs(), ...(deviceHint ? { deviceId: deviceHint } : {}) },
     });
 
     const link = `${MAGIC_LINK_BASE_URL}?token=${token}`;
@@ -146,14 +162,24 @@ authRoutes.post(
     const hash = await sha256Hex(token);
     const key = `ml:${hash}`;
 
-    const stored = await c.env.KV.getWithMetadata<{ email: string }>(key, "text");
+    const stored = await c.env.KV.getWithMetadata<{ email: string; deviceId?: string }>(key, "text");
     if (stored.value === null || !stored.metadata?.email) {
       // Unknown, already-consumed, or expired (KV TTL evicted it).
       throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired magic link");
     }
 
-    // Single-use: delete before issuing so a replay can't double-consume.
+    // Single-use: delete before issuing so a replay can't double-consume. This
+    // runs BEFORE the device-binding check, so a mismatched (intercepted) attempt
+    // still burns the token — the legitimate requester must re-request or use OTP.
     await c.env.KV.delete(key);
+
+    // Device binding (§21 same-device-only): when the token was minted with a
+    // requesting-device hint, the redeemer MUST present the same X-Device-Id.
+    // Tokens minted before this rollout carry no hint and stay redeemable anywhere.
+    const boundDevice = stored.metadata.deviceId;
+    if (boundDevice && c.req.header("X-Device-Id") !== boundDevice) {
+      throw new ApiError("AUTH_DEVICE_MISMATCH", "This sign-in link can only be used on the device that requested it");
+    }
 
     const email = normalizeEmail(stored.metadata.email);
     const now = nowMs();
@@ -219,6 +245,136 @@ authRoutes.post(
     });
   },
 );
+
+/**
+ * POST /auth/otp/request
+ * Cross-device fallback for the (now device-bound) magic link. Mint a 6-digit
+ * code, store only its sha256 in KV under `oc:<sha256(email)>` (600s TTL,
+ * {codeHash, email, attempts, expiresAtMs}), and email it. ALWAYS 202 (no
+ * enumeration). Under E2E_TEST_MODE the code is echoed as devCode. The per-email
+ * + per-IP "auth" rate-limit tier already covers this path.
+ */
+authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
+  const { email } = c.req.valid("json");
+  const normalized = normalizeEmail(email);
+
+  const code = sixDigitCode();
+  const codeHash = await sha256Hex(code);
+  const emailHash = await sha256Hex(normalized);
+  const expiresAtMs = nowMs() + OTP_TTL_SECONDS * 1000;
+  await c.env.KV.put(
+    `oc:${emailHash}`,
+    JSON.stringify({ codeHash, email: normalized, attempts: 0, expiresAtMs }),
+    { expirationTtl: OTP_TTL_SECONDS },
+  );
+
+  const e2e = c.env.E2E_TEST_MODE === "1";
+  if (e2e) {
+    try {
+      await sendSignInCode(c.env, { to: normalized, code });
+    } catch {
+      // E2E-only: ignore the missing/failing local SendEmail binding.
+    }
+    return c.json({ devCode: code }, 202);
+  }
+  await sendSignInCode(c.env, { to: normalized, code });
+  return c.body(null, 202);
+});
+
+/**
+ * POST /auth/otp/verify
+ * Consume the 6-digit code (single-use, 5-attempt cap), upsert the user by email
+ * (+ email auth_identity), register the redeemer's X-Device-Id device, and issue
+ * a session — the same envelope as /magic-link/verify. Unknown/expired => 401
+ * AUTH_INVALID_TOKEN; wrong code => 400 VALIDATION_FAILED until the attempt cap.
+ */
+authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
+  const { email, code } = c.req.valid("json");
+  const normalized = normalizeEmail(email);
+  const emailHash = await sha256Hex(normalized);
+  const kvKey = `oc:${emailHash}`;
+
+  const raw = await c.env.KV.get(kvKey);
+  if (!raw) throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired sign-in code");
+  const pending = JSON.parse(raw) as {
+    codeHash: string;
+    email: string;
+    attempts: number;
+    expiresAtMs: number;
+  };
+
+  if ((await sha256Hex(code)) !== pending.codeHash) {
+    const attempts = (pending.attempts ?? 0) + 1;
+    if (attempts >= OTP_MAX_ATTEMPTS) {
+      await c.env.KV.delete(kvKey);
+      throw new ApiError("AUTH_INVALID_TOKEN", "Too many attempts, request a new code");
+    }
+    const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - nowMs()) / 1000));
+    await c.env.KV.put(kvKey, JSON.stringify({ ...pending, attempts }), { expirationTtl: ttl });
+    throw new ApiError("VALIDATION_FAILED", "Incorrect code");
+  }
+
+  // Correct: single-use delete before issuing.
+  await c.env.KV.delete(kvKey);
+
+  const userEmail = normalizeEmail(pending.email);
+  const now = nowMs();
+
+  let user = await c.env.DB.prepare(
+    "SELECT id, email, display_name FROM users WHERE email = ? AND deleted_at IS NULL",
+  )
+    .bind(userEmail)
+    .first<{ id: string; email: string | null; display_name: string | null }>();
+
+  if (!user) {
+    const userId = uuidv7();
+    await c.env.DB.prepare(
+      `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
+       VALUES (?, ?, 1, NULL, 'free', ?, ?)`,
+    )
+      .bind(userId, userEmail, now, now)
+      .run();
+    user = { id: userId, email: userEmail, display_name: null };
+  } else {
+    await c.env.DB.prepare("UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?")
+      .bind(now, user.id)
+      .run();
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO auth_identities (id, user_id, provider, subject, created_at)
+     VALUES (?, ?, 'email', ?, ?)
+     ON CONFLICT(provider, subject) DO NOTHING`,
+  )
+    .bind(uuidv7(), user.id, userEmail, now)
+    .run();
+
+  const deviceHeader = c.req.header("X-Device-Id");
+  const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
+  await c.env.DB.prepare(
+    `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       last_seen_at = excluded.last_seen_at,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(deviceId, user.id, now, now, now)
+    .run();
+
+  const session = await issueSession(c.env.DB, {
+    userId: user.id,
+    deviceId,
+    signingKey: c.env.JWT_SIGNING_KEY,
+  });
+
+  return c.json({
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    expiresIn: 900,
+    user: { id: user.id, email: user.email, displayName: user.display_name },
+  });
+});
 
 /**
  * GET /auth/magic — bridge page for the magic-link email.

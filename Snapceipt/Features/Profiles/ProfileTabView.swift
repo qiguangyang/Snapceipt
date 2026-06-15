@@ -58,6 +58,7 @@ struct ProfileTabView: View {
                 row(icon: "arrowRight", title: "Export & backup", id: "profile.row.export", action: onOpenExport)
                 connectedBanksRow
                 row(icon: "info", title: "Privacy & security", id: AccessibilityID.profileRowPrivacy, action: onOpenPrivacy)
+                legalRow
                 helpRow
 
                 groupLabel("Account")
@@ -162,10 +163,28 @@ struct ProfileTabView: View {
         .accessibilityIdentifier(AccessibilityID.profileRowConnectedBanks)
     }
 
+    /// Legal — opens the external Terms of Service page via the SwiftUI openURL action.
+    /// (The Privacy Policy is reachable from there and from the sign-in disclaimer.)
+    private var legalRow: some View {
+        Button {
+            if let url = URL(string: "https://snapceipt.cc/terms") { openURL(url) }
+        } label: {
+            Card(padding: 14) {
+                HStack(spacing: 12) {
+                    IconCircle(name: "receipt", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                    Text("Terms & Privacy").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.profileRowLegal)
+    }
+
     /// Help & support — opens the external help site via the SwiftUI openURL action.
     private var helpRow: some View {
         Button {
-            if let url = URL(string: "https://snapceipt.cc/help") { openURL(url) }
+            if let url = URL(string: "https://snapceipt.cc/support") { openURL(url) }
         } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {

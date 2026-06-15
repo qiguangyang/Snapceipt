@@ -70,6 +70,8 @@ struct AppLaunch {
         // on a passcode-less simulator — would lock the shell permanently. -uiTestReset
         // heals it for both the hermetic and live paths.
         UserDefaults.standard.removeObject(forKey: "sc.lock.enabled")
+        // Clear the first-run completion flag so a -uiTestReset launch starts at onboarding.
+        OnboardingGate.reset()
     }
 
     /// Purges the on-disk SwiftData store under `-uiTestReset` so a live journey that

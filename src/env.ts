@@ -10,6 +10,8 @@ export type Env = {
   DB: D1Database;
   /** R2 bucket for receipt images (unused this phase). */
   RECEIPTS: R2Bucket;
+  /** R2 bucket for hourly D1 SQL dumps (ops backup; never read at request time). */
+  BACKUPS: R2Bucket;
   /** Workers AI binding for email-in OCR (unused this phase). */
   AI: Ai;
   /** KV: rate-limit counters + magic-link/nonce/JWKS cache. */
@@ -27,6 +29,14 @@ export type Env = {
   DEEPSEEK_MODEL?: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
+  /**
+   * TEST-ONLY trust-anchor override for Apple JWS x5c verification. When unset
+   * (production), the verifier pins the real AppleRootCA-G3 embedded in
+   * src/lib/appleJws.ts. The test harness injects a self-generated root PEM here
+   * so it can sign payloads with a test chain. MUST be undefined in production —
+   * never declared in wrangler.jsonc.
+   */
+  APPLE_TRUST_ANCHOR_PEM?: string;
   /**
    * APNs auth-key (.p8 PKCS8 PEM). When undefined/empty, sendPush runs in STUB
    * mode: it logs and returns { stub: true } with no network call. Set via

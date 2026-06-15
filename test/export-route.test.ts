@@ -31,7 +31,7 @@ async function seedAuthed() {
   const now = nowMs();
   await env.DB.prepare(
     `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
-     VALUES (?, ?, 1, 'Dev', 'free', ?, ?)`,
+     VALUES (?, ?, 1, 'Dev', 'pro', ?, ?)`,
   ).bind(userId, `${userId}@example.com`, now, now).run();
   await env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, push_enabled, created_at, updated_at)

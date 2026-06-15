@@ -6,9 +6,11 @@ import SwiftData
 struct EmailInView: View {
     @State private var vm: EmailInViewModel
     @State private var shareItem: String?
+    @State private var showPaywall = false
     let onClose: () -> Void
     let onReview: (String) -> Void
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
 
     init(context: ModelContext, sync: any SyncEnqueuing, api: any APIClient,
          userId: String, profileId: String,
@@ -39,7 +41,11 @@ struct EmailInView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
-        .task { await vm.loadAddress() }
+        .task {
+            await vm.loadAddress()
+            if !entitlement.isPro { showPaywall = true }
+        }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: shareBinding) { item in EmailInActivityView(text: item.text) }
     }
 
@@ -66,12 +72,15 @@ struct EmailInView: View {
                 }
                 HStack(spacing: 10) {
                     actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         if let a = vm.address?.address { UIPasteboard.general.string = a }
                     }
                     actionChip("Share", "square.and.arrow.up", id: nil) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         shareItem = vm.address?.address
                     }
                     actionChip("Rotate", "arrow.triangle.2.circlepath", id: AccessibilityID.emailInRotate) {
+                        guard entitlement.isPro else { showPaywall = true; return }
                         Task { await vm.rotate() }
                     }
                 }
@@ -91,7 +100,10 @@ struct EmailInView: View {
     }
 
     private func row(_ txn: Transaction) -> some View {
-        Button { onReview(txn.id) } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            onReview(txn.id)
+        } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
                     IconCircle(name: txn.extractionStatus == "failed" ? "info" : "receipt",

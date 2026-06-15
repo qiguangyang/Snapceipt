@@ -1,0 +1,43 @@
+{
+  // Test-only wrangler config: identical to wrangler.jsonc except the `ai` binding
+  // is omitted.  wrangler v4 creates an external AI worker
+  // (__WRANGLER_EXTERNAL_AI_WORKER) whose inline script imports
+  // `cloudflare-internal:ai-api` — a module not present in the workerd binary
+  // (1.20250906.0) bundled with @cloudflare/vitest-pool-workers 0.8.71.
+  // Omitting the binding here prevents wrangler from generating that external
+  // worker, so the test runtime boots.  The AI binding is unused by the unit
+  // tests (all AI paths are gated behind E2E_EMAIL_MODE, not exercised here).
+  // Production config remains unchanged in wrangler.jsonc.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "snapceipt-api",
+  "account_id": "bb4412973b5e4f6d7a10a4e68b713177",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["0 * * * *"] },
+  "routes": [{ "pattern": "api.snapceipt.cc", "custom_domain": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "snapceipt",
+      "database_id": "109965c6-0c74-40c0-aff9-4b94271add43",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV", "id": "3f5104b31d8c4589833a1ceec7fda212" }
+  ],
+  "r2_buckets": [
+    { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts" },
+    { "binding": "BACKUPS", "bucket_name": "snapceipt-backups" }
+  ],
+  // ai binding is intentionally omitted — see comment at top of file.
+  "send_email": [
+    { "name": "EMAIL", "allowed_sender_addresses": ["noreply@snapceipt.cc"] }
+  ],
+  "vars": {
+    "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
+    "DEEPSEEK_MODEL": "deepseek-chat"
+  }
+}

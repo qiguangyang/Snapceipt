@@ -9,6 +9,8 @@
 	<!-- Release archives are signed directly with the match App Store profile
 	     (manual signing), which pins aps-environment to production — the file
 	     value must match or the archive fails validation. -->
+	<key>com.apple.developer.in-app-purchase</key>
+	<true/>
 	<key>aps-environment</key>
 	<string>production</string>
 </dict>

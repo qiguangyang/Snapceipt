@@ -169,3 +169,76 @@ scripts/ios-e2e-journeys.sh --persist .e2e-journey-state LiveJourneyUITests
 ```
 
 Backend e2e (real HTTP via `unstable_dev`): `npm run test:e2e`.
+
+## Operations runbook
+
+Production Worker: `snapceipt-api` on `api.snapceipt.cc` (account `techsiderau`,
+id `bb4412973b5e4f6d7a10a4e68b713177`). Deploy is `npx wrangler deploy`
+(`scripts/deploy.sh` for a full provision + deploy).
+
+### Backend rollback (Worker code)
+
+```bash
+# 1. List recent deployments (most recent first) and copy a known-good Version ID.
+npx wrangler deployments list
+
+# 2. Roll back to that version (omit the id to roll back to the previous one).
+npx wrangler rollback <version-id>
+```
+
+**WARNING — rollback does NOT revert the database.** D1 migrations in
+`migrations/` are applied with `wrangler d1 migrations apply --remote` and are
+**forward-only**: `wrangler rollback` only swaps the Worker bundle, it never
+un-applies a migration. A migration that drops/renames a column will still be
+gone after a code rollback. Therefore: make every migration **additive +
+backward-compatible** (e.g. `0005_quote_gst_inclusive.sql` is a pure
+`ADD COLUMN ... DEFAULT 0`), so an older Worker bundle keeps working against the
+newer schema. If a migration corrupted data, recover via **D1 Time Travel**
+(see "D1 backups" below), not via code rollback.
+
+### D1 backups
+
+Two layers cover the production `snapceipt` D1 database:
+
+1. **Time Travel (built-in, 30-day):** Cloudflare keeps a continuous restore
+   window. To inspect or restore a point in time:
+   ```bash
+   # Find the bookmark for a timestamp (or use --timestamp directly).
+   npx wrangler d1 time-travel info snapceipt --timestamp=2026-06-15T00:00:00Z
+   # Restore the DB to that point (DESTRUCTIVE — overwrites current state).
+   npx wrangler d1 time-travel restore snapceipt --timestamp=2026-06-15T00:00:00Z
+   ```
+   Use this to recover from a bad migration or accidental mass-delete within the
+   last 30 days.
+
+2. **Off-platform export to R2 (hourly cron):** the Worker's scheduled handler
+   (`src/index.ts`) also runs `d1BackupLogic` (`src/cron/d1Backup.ts`), which the
+   `0 * * * *` cron triggers every hour. It writes a full SQL dump to the
+   `BACKUPS` R2 bucket under `d1/snapceipt/<YYYY-MM-DD>/<epoch-ms>.sql`. To take a
+   manual dump or restore from one:
+   ```bash
+   # Manual full export to a local file:
+   npx wrangler d1 export snapceipt --remote --output=snapceipt-$(date +%F).sql
+   # Restore that dump into a fresh/empty database:
+   npx wrangler d1 execute snapceipt --remote --file=snapceipt-2026-06-15.sql
+   ```
+   R2 lifecycle: set a 30-day expiry on the `snapceipt-backups` bucket so dumps
+   self-prune (Dashboard → R2 → snapceipt-backups → Settings → Object lifecycle
+   rules → delete after 30 days; or CLI: `npx wrangler r2 bucket lifecycle ...`).
+
+### iOS rollback (App Store)
+
+There is no binary downgrade on the App Store. Levers, in order of preference:
+
+1. **Fix-forward** — ship a new build (`bundle exec fastlane beta` →
+   promote). Fastest safe path for most regressions.
+2. **Pause a phased release** — App Store Connect → the version → *Phased
+   Release for Automatic Updates* → **Pause**. Stops the rollout of a bad
+   version to the rest of the install base while you cut a fix.
+3. **Remove from Sale** — App Store Connect → App → *Pricing and Availability*
+   → set availability to no territories. Last resort for a critical defect; new
+   users can't download, existing installs are unaffected.
+
+Because the backend is forward-compatible (additive migrations), an older
+installed app keeps working against the current Worker — so the iOS lever you
+almost always want is **fix-forward**, with phased-release **Pause** to buy time.

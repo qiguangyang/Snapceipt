@@ -197,6 +197,7 @@ enum AccessibilityID {
     static let profileAiAutoCategorise = "profile.row.aiAutoCategorise"  // inert visual toggle
     static let profileRowConnectedBanks = "profile.row.connectedBanks"   // Coming-soon placeholder
     static let profileRowHelp = "profile.row.help"                       // opens external URL
+    static let profileRowLegal = "profile.row.legal"                    // opens external Terms URL
     // Tax & GST
     static let taxScreen = "tax.screen"
     static let taxGstToggle = "tax.gst.toggle"
@@ -247,6 +248,11 @@ enum AccessibilityID {
     static let basFullWorksheetToggle = "bas.fullWorksheet.toggle"
     static let basMarkLodged = "bas.markLodged"
     static let basExport = "bas.export"
+    // Paywall (Workstream 6)
+    static let paywallTitle      = "paywall.title"
+    static let paywallBuyMonthly = "paywall.buy.monthly"
+    static let paywallBuyYearly  = "paywall.buy.yearly"
+    static let paywallRestore    = "paywall.restore"
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"

@@ -11,8 +11,10 @@ struct MileageScreen: View {
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: MileageViewModel?
     @State private var sheet: MileageSheet?
+    @State private var showPaywall = false
 
     private enum MileageSheet: Identifiable {
         case vehicle, logbook, trip, costs
@@ -26,7 +28,10 @@ struct MileageScreen: View {
             Palette.cream.ignoresSafeArea()
             if let vm {
                 VStack(spacing: 0) {
-                    LbHeader(title: "Vehicle logbook", onClose: onClose, onAdd: { sheet = .trip })
+                    LbHeader(title: "Vehicle logbook", onClose: onClose, onAdd: {
+                        guard entitlement.isPro else { showPaywall = true; return }
+                        sheet = .trip
+                    })
                     ScrollView {
                         VStack(spacing: 0) {
                             hero(vm)
@@ -40,7 +45,10 @@ struct MileageScreen: View {
                         .padding(.horizontal, 18).padding(.bottom, 110)
                     }
                 }
-                LbFloatingCTA(title: "Add a trip", a11yId: AccessibilityID.mileageAddTrip) { sheet = .trip }
+                LbFloatingCTA(title: "Add a trip", a11yId: AccessibilityID.mileageAddTrip) {
+                    guard entitlement.isPro else { showPaywall = true; return }
+                    sheet = .trip
+                }
             } else {
                 Color.clear
             }
@@ -54,8 +62,10 @@ struct MileageScreen: View {
                 vm = MileageViewModel(context: context, sync: sync, userId: userId,
                                       profileId: profileId, startMonth: startMonth)
             }
+            if !entitlement.isPro { showPaywall = true }
         }
         .sheet(item: $sheet) { which in sheetView(which) }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     // MARK: cards
@@ -73,7 +83,10 @@ struct MileageScreen: View {
     }
 
     @ViewBuilder private func vehicleCard(_ vm: MileageViewModel) -> some View {
-        Button { sheet = .vehicle } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            sheet = .vehicle
+        } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
                     IconCircle(name: "car", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
@@ -98,7 +111,10 @@ struct MileageScreen: View {
     }
 
     @ViewBuilder private func logbookCard(_ vm: MileageViewModel) -> some View {
-        Button { sheet = .logbook } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            sheet = .logbook
+        } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
                     IconCircle(name: "clock", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
@@ -146,7 +162,10 @@ struct MileageScreen: View {
         let vy = vm.vehicleYear(fyStartYear: fyStartYear)
         let total = vy.map { $0.fuelCents + $0.regoCents + $0.insuranceCents + $0.servicingCents + $0.otherCents + $0.depreciationCents } ?? 0
         let claim = vm.currentClaimCents(fyStartYear: fyStartYear)
-        Button { sheet = .costs } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            sheet = .costs
+        } label: {
             Card(padding: 14) {
                 HStack(spacing: 12) {
                     IconCircle(name: "wallet", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)

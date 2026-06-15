@@ -100,9 +100,10 @@ struct SignInView: View {
             .padding(.horizontal, 22)
             .padding(.bottom, 28)
 
-            Text("By continuing you agree to our Terms & Privacy Policy.")
+            Text("By continuing you agree to our [Terms](https://snapceipt.cc/terms) & [Privacy Policy](https://snapceipt.cc/privacy).")
                 .font(.ui(11.5))
                 .foregroundStyle(Palette.ink3)
+                .tint(accent.base)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 36)
                 .padding(.bottom, 18)
@@ -156,6 +157,8 @@ final class PreviewAPIClient: APIClient {
     func magicLinkRequest(email: String) async throws {}
     func magicLinkRequestDev(email: String) async throws -> String? { nil }
     func magicLinkVerify(token: String) async throws -> SessionResponse { stub }
+    func otpRequest(email: String) async throws {}
+    func otpVerify(email: String, code: String) async throws -> SessionResponse { stub }
     func refresh(refreshToken: String) async throws -> SessionResponse { stub }
     func signOut() async throws {}
     func me() async throws -> MeResponse {
@@ -212,8 +215,11 @@ final class PreviewAPIClient: APIClient {
     func verifyEmailChange(code: String) async throws -> AccountUser {
         AccountUser(id: "u", email: "new@example.com", displayName: "You", plan: "free")
     }
+    func mePlan() async throws -> String { "free" }
+    func recordPurchase(signedTransaction: String) async throws {}
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {}
     private var stub: SessionResponse {
         SessionResponse(accessToken: "a.b.c", refreshToken: "r", expiresIn: 900,
                         user: SessionUser(id: "u", email: "you@example.com", displayName: "You"))

@@ -87,7 +87,7 @@ beforeEach(seedBase);
 
 describe("budgetCronLogic", () => {
   it("fires for a whole-profile budget when month spend crosses the threshold; payload asserted", async () => {
-    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: true });
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
     await addBudget("bw", { categoryId: null, capCents: 10000, thresholdPct: 90 });
     await addTxn("t1", -6000, "2026-05-03", null);
     await addTxn("t2", -3000, "2026-05-10", null);
@@ -146,7 +146,7 @@ describe("budgetCronLogic", () => {
   });
 
   it("re-arms after a month rollover (alert_sent_at in a prior month)", async () => {
-    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: true });
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
     const lastMonth = Date.UTC(2026, 3, 20, 0, 0, 0); // 2026-04
     await addBudget("br", { categoryId: null, capCents: 10000, alertSentAt: lastMonth });
     await addTxn("t1", -9500, "2026-05-03", null);
@@ -174,7 +174,7 @@ describe("budgetCronLogic", () => {
   });
 
   it("delivers when the device is OUTSIDE its wrap-around quiet window", async () => {
-    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: true });
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
     // 16:00 Sydney with a 22:00 (1320) -> 07:00 (420) wrap window: 16:00 is awake.
     await env.DB.prepare(
       `UPDATE devices SET timezone='Australia/Sydney', quiet_hours_start_min=1320, quiet_hours_end_min=420 WHERE id=?`,
@@ -218,7 +218,7 @@ describe("budgetCronLogic", () => {
     // First token throws (e.g. expired APNs token); second succeeds.
     const spy = vi.spyOn(apns, "sendPush").mockImplementation((_env, token, _payload) => {
       if (token === "tok-hex") return Promise.reject(new Error("APNs 410 Gone"));
-      return Promise.resolve({ stub: true });
+      return Promise.resolve({ stub: false, status: 200 });
     });
 
     // Must not throw out of budgetCronLogic.
@@ -229,5 +229,48 @@ describe("budgetCronLogic", () => {
 
     // Second device succeeded -> pushed > 0 -> alert_sent_at is stamped.
     expect(await alertSentAt("berr")).toBe(NOW);
+  });
+
+  it("stub-mode sendPush (no APNS_KEY) does NOT stamp alert_sent_at", async () => {
+    // No mock: the real apns.sendPush runs and returns { stub: true } because the
+    // test env has no APNS_KEY bound. A stub is NOT a real delivery, so the budget
+    // must stay re-armed for the next run once the key is provisioned.
+    const spy = vi.spyOn(apns, "sendPush");
+    await addBudget("bstub", { categoryId: null, capCents: 10000, thresholdPct: 90 });
+    await addTxn("t1", -9500, "2026-05-03", null);
+
+    await budgetCronLogic(env.DB, env, NOW);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await spy.mock.results[0]!.value)).toEqual({ stub: true });
+    expect(await alertSentAt("bstub")).toBeNull();
+  });
+
+  it("a non-2xx APNs status does NOT stamp alert_sent_at", async () => {
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 503 });
+    await addBudget("b503", { categoryId: null, capCents: 10000, thresholdPct: 90 });
+    await addTxn("t1", -9500, "2026-05-03", null);
+
+    await budgetCronLogic(env.DB, env, NOW);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(await alertSentAt("b503")).toBeNull(); // 503 is not a delivery -> re-arm next run
+  });
+
+  it("prunes (nulls) the device token on a 410 Gone and does not stamp when no live delivery", async () => {
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 410 });
+    await addBudget("b410", { categoryId: null, capCents: 10000, thresholdPct: 90 });
+    await addTxn("t1", -9500, "2026-05-03", null);
+
+    await budgetCronLogic(env.DB, env, NOW);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    // The dead token is pruned so the next run skips it (devices WHERE apns_token IS NOT NULL).
+    const dev = await env.DB.prepare(`SELECT apns_token FROM devices WHERE id=?`)
+      .bind(D)
+      .first<{ apns_token: string | null }>();
+    expect(dev?.apns_token).toBeNull();
+    // 410 was the only device and it was not a delivery -> budget stays re-armed.
+    expect(await alertSentAt("b410")).toBeNull();
   });
 });

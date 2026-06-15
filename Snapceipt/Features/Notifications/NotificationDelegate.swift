@@ -15,7 +15,21 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Re-register on every cold launch IF the user already authorized notifications,
+        // so a rotated APNs token re-uploads via didRegisterForRemoteNotifications.
+        Task { await Self.registerIfAuthorized() }
         return true
+    }
+
+    /// Register for remote notifications only when authorization is already granted, so a
+    /// previously-granted user re-uploads a (possibly rotated) token on launch without
+    /// re-prompting. No-op when not authorized.
+    @MainActor
+    static func registerIfAuthorized() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        if settings.authorizationStatus == .authorized {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
     }
 
     /// Lowercase hex of a device token, no separators (the apns token wire format).

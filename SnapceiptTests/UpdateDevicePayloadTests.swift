@@ -48,4 +48,15 @@ struct UpdateDevicePayloadTests {
         #expect(NotificationDelegate.hexToken(data) == "deadbeef01")
         #expect(NotificationDelegate.hexToken(Data()) == "")
     }
+
+    @Test("a granting notifications requester records the notifications request (onboarding grant seam)")
+    func onboardingGrantRequestsNotifications() async {
+        final class RecordingRequester: PermissionRequesting, @unchecked Sendable {
+            private(set) var requested: [PermissionKind] = []
+            func request(_ kind: PermissionKind) async { requested.append(kind) }
+        }
+        let rec = RecordingRequester()
+        await rec.request(.notifications)
+        #expect(rec.requested == [.notifications])
+    }
 }

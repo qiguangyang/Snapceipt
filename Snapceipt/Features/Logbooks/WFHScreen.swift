@@ -11,8 +11,10 @@ struct WFHScreen: View {
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: WFHViewModel?
     @State private var showSheet = false
+    @State private var showPaywall = false
 
     private static let dow = ["M", "T", "W", "T", "F", "S", "S"]
     private var fyStartYear: Int { FinancialYear.of(Epoch.now(), startMonth: startMonth).startYear }
@@ -30,7 +32,10 @@ struct WFHScreen: View {
             Palette.cream.ignoresSafeArea()
             if let vm {
                 VStack(spacing: 0) {
-                    LbHeader(title: "Work from home", onClose: onClose, onAdd: { showSheet = true })
+                    LbHeader(title: "Work from home", onClose: onClose, onAdd: {
+                        guard entitlement.isPro else { showPaywall = true; return }
+                        showSheet = true
+                    })
                     ScrollView {
                         VStack(spacing: 0) {
                             hero(vm)
@@ -42,7 +47,10 @@ struct WFHScreen: View {
                         .padding(.horizontal, 18).padding(.bottom, 110)
                     }
                 }
-                LbFloatingCTA(title: "Log hours", a11yId: AccessibilityID.wfhLogHours) { showSheet = true }
+                LbFloatingCTA(title: "Log hours", a11yId: AccessibilityID.wfhLogHours) {
+                    guard entitlement.isPro else { showPaywall = true; return }
+                    showSheet = true
+                }
             } else {
                 Color.clear
             }
@@ -56,7 +64,9 @@ struct WFHScreen: View {
                 vm = WFHViewModel(context: context, sync: sync, userId: userId,
                                   profileId: profileId, rateCentsPerHour: rate(), startMonth: startMonth)
             }
+            if !entitlement.isPro { showPaywall = true }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(isPresented: $showSheet) {
             if let vm { LogHoursSheet(vm: vm) { showSheet = false } }
         }

@@ -9,9 +9,22 @@ protocol APIClient {
     /// includes only when E2E_TEST_MODE=1 (nil otherwise). Used by the dev sign-in button.
     func magicLinkRequestDev(email: String) async throws -> String?
     func magicLinkVerify(token: String) async throws -> SessionResponse
+    /// POST /auth/otp/request — request a 6-digit sign-in code (cross-device fallback).
+    func otpRequest(email: String) async throws
+    /// POST /auth/otp/verify — confirm the 6-digit code and start a session.
+    func otpVerify(email: String, code: String) async throws -> SessionResponse
     func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
     func me() async throws -> MeResponse
+    /// GET /auth/me, decoding only the plan ("free" | "pro").
+    func mePlan() async throws -> String
+    /// POST /me/subscription — send the StoreKit 2 signed transaction JWS
+    /// (`Transaction.jwsRepresentation`). The backend VERIFIES Apple's signature +
+    /// cert chain (AppleRootCA-G3), asserts our bundle id + a Pro product id, and
+    /// derives originalTransactionId/expiry from the verified payload before
+    /// flipping plan to "pro". The App Store Server Notifications webhook (also
+    /// verified) provides authoritative lifecycle status thereafter.
+    func recordPurchase(signedTransaction: String) async throws
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
@@ -42,6 +55,9 @@ protocol APIClient {
     func revokeDevice(id: String) async throws
     /// DELETE /account — immediate hard purge of the user's data. (§8.3)
     func deleteAccount() async throws
+    /// POST /crash-reports — upload one MetricKit diagnostic (crash/hang). Best-effort;
+    /// callers ignore failures (diagnostics are not critical-path). (ops)
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -73,14 +89,15 @@ final class LiveAPIClient: APIClient {
 
     func magicLinkRequest(email: String) async throws {
         try await sendNoContent("POST", "/auth/magic-link/request",
-                                body: MagicLinkRequestBody(email: email), authenticated: false)
+                                body: MagicLinkRequestBody(email: email, deviceId: auth.deviceId),
+                                authenticated: false)
     }
 
     func magicLinkRequestDev(email: String) async throws -> String? {
         /// The 202 body only carries `devToken` when the backend runs with E2E_TEST_MODE=1.
         struct DevResp: Decodable { let devToken: String? }
         let data = try await perform("POST", "/auth/magic-link/request", query: [],
-                                     body: MagicLinkRequestBody(email: email),
+                                     body: MagicLinkRequestBody(email: email, deviceId: auth.deviceId),
                                      authenticated: false, allowRefresh: false)
         guard !data.isEmpty else { return nil }
         return (try? decoder.decode(DevResp.self, from: data))?.devToken
@@ -89,6 +106,16 @@ final class LiveAPIClient: APIClient {
     func magicLinkVerify(token: String) async throws -> SessionResponse {
         try await send("POST", "/auth/magic-link/verify",
                        body: MagicLinkVerifyBody(token: token), authenticated: false)
+    }
+
+    func otpRequest(email: String) async throws {
+        try await sendNoContent("POST", "/auth/otp/request",
+                                body: OTPRequestBody(email: email), authenticated: false)
+    }
+
+    func otpVerify(email: String, code: String) async throws -> SessionResponse {
+        try await send("POST", "/auth/otp/verify",
+                       body: OTPVerifyBody(email: email, code: code), authenticated: false)
     }
 
     func refresh(refreshToken: String) async throws -> SessionResponse {
@@ -102,6 +129,17 @@ final class LiveAPIClient: APIClient {
 
     func me() async throws -> MeResponse {
         try await send("GET", "/auth/me", body: NoBody(), authenticated: true)
+    }
+
+    func mePlan() async throws -> String {
+        let resp: MePlanResponse = try await send("GET", "/auth/me", body: NoBody(), authenticated: true)
+        return resp.user.plan
+    }
+
+    func recordPurchase(signedTransaction: String) async throws {
+        try await sendNoContent("POST", "/me/subscription",
+                                body: RecordPurchaseBody(signedTransaction: signedTransaction),
+                                authenticated: true)
     }
 
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
@@ -219,6 +257,10 @@ final class LiveAPIClient: APIClient {
 
     func deleteAccount() async throws {
         try await sendNoContent("DELETE", "/account", body: NoBody(), authenticated: true)
+    }
+
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {
+        try await sendNoContent("POST", "/crash-reports", body: body, authenticated: true)
     }
 
     // MARK: - Request plumbing
@@ -412,5 +454,34 @@ private actor RefreshCoordinator {
         let result = await task.value
         inFlight = nil
         return result
+    }
+}
+
+/// POST /crash-reports request body — a MetricKit diagnostic reduced to the
+/// server envelope. `payload` is the raw MXDiagnostic dictionary as JSON.
+struct DiagnosticReportBody: Encodable {
+    let kind: String            // "crash" | "hang"
+    let appVersion: String
+    let osVersion: String
+    let deviceModel: String
+    let occurredAt: Int         // epoch ms
+    let payload: [String: AnyCodable]
+}
+
+/// Minimal type-erased JSON value so an arbitrary MXDiagnostic dictionary encodes.
+struct AnyCodable: Encodable {
+    let value: Any
+    init(_ value: Any) { self.value = value }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch value {
+        case let v as Bool: try c.encode(v)
+        case let v as Int: try c.encode(v)
+        case let v as Double: try c.encode(v)
+        case let v as String: try c.encode(v)
+        case let v as [Any]: try c.encode(v.map(AnyCodable.init))
+        case let v as [String: Any]: try c.encode(v.mapValues(AnyCodable.init))
+        default: try c.encodeNil()
+        }
     }
 }

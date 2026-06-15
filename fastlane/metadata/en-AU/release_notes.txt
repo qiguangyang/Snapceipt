@@ -1,0 +1,1 @@
+First public release of Snapceipt. Snap receipts, track GST and expenses, and get BAS-ready — built for Australian sole traders and small business.

@@ -17,6 +17,9 @@ export type AppleBody = z.infer<typeof appleBody>;
  *  `.trim()` tolerates trailing whitespace; the route lowercases for storage. */
 export const magicLinkRequestBody = z.object({
   email: z.string().trim().email(),
+  /** Optional install hint; the X-Device-Id header takes precedence. Used to
+   *  device-bind the minted token so an intercepted link is unusable elsewhere. */
+  deviceId: z.string().min(1).max(64).optional(),
 });
 
 export type MagicLinkRequestBody = z.infer<typeof magicLinkRequestBody>;
@@ -27,6 +30,21 @@ export const magicLinkVerifyBody = z.object({
 });
 
 export type MagicLinkVerifyBody = z.infer<typeof magicLinkVerifyBody>;
+
+/** POST /auth/otp/request — 6-digit sign-in code fallback for cross-device. */
+export const otpRequestBody = z.object({
+  email: z.string().trim().email(),
+});
+
+export type OtpRequestBody = z.infer<typeof otpRequestBody>;
+
+/** POST /auth/otp/verify — { email, code } single-use 6-digit code. */
+export const otpVerifyBody = z.object({
+  email: z.string().trim().email(),
+  code: z.string().regex(/^\d{6}$/),
+});
+
+export type OtpVerifyBody = z.infer<typeof otpVerifyBody>;
 
 /** POST /auth/refresh — opaque refresh token, rotated on every use. */
 export const refreshBody = z.object({

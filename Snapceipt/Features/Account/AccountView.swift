@@ -18,10 +18,12 @@ struct AccountView: View {
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: AccountViewModel?
     @State private var revokeTarget: DeviceDTO?
     @State private var showDelete = false
     @State private var confirmText = ""
+    @State private var showPaywall = false
 
     var body: some View {
         ZStack {
@@ -32,6 +34,7 @@ struct AccountView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
                             emailSection(vm)
+                            proSection
                             devicesSection(vm)
                             dangerZone(vm)
                             if let err = vm.errorMessage {
@@ -54,6 +57,39 @@ struct AccountView: View {
                 vm = AccountViewModel(api: api, auth: auth, currentDeviceId: auth.deviceId,
                                       onSignedOut: { Task { await authVM.signOut() } })
             }
+        }
+    }
+
+    // MARK: - Pro
+
+    private var proSection: some View {
+        Group {
+            groupLabel("Subscription")
+            Card {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Snapceipt Pro").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                        Text(entitlement.isPro ? "Active" : "Free plan")
+                            .font(.ui(13)).foregroundStyle(entitlement.isPro ? Palette.income : Palette.ink3)
+                    }
+                    Spacer()
+                    if !entitlement.isPro {
+                        Button("Upgrade") { showPaywall = true }
+                            .font(.ui(13, .semibold)).foregroundStyle(accent.base)
+                            .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Palette.income)
+                            Link("Manage subscription",
+                                 destination: URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
+                                .font(.ui(13, .semibold))
+                                .foregroundStyle(accent.base)
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showPaywall) { PaywallView() }
         }
     }
 

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node -e \"const v=require('child_process').execSync('wrangler --version').toString().match(/(\\\\d+)\\\\.\\\\d+\\\\.\\\\d+/);if(!v||+v[1]<4){console.error('wrangler v4+ required for deploy (found '+(v?v[0]:'none')+'): run npm i -D wrangler@4');process.exit(1)}\" && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,18 +16,20 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
+    "@peculiar/x509": "^2.0.0",
     "hono": "^4.12.23",
     "jose": "^5.10.0",
     "mimetext": "^3.0.28",
     "pdf-lib": "^1.17.1",
     "postal-mime": "^2.4.3",
+    "reflect-metadata": "^0.2.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.5.41",
+    "@cloudflare/vitest-pool-workers": "^0.8.71",
     "@cloudflare/workers-types": "^4.20260529.1",
     "typescript": "^5.6.0",
     "vitest": "~2.1.9",
-    "wrangler": "^3.114.17"
+    "wrangler": "^4.25.0"
   }
 }

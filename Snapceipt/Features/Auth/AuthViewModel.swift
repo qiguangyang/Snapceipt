@@ -148,6 +148,7 @@ final class AuthViewModel {
         case signedOut
         case requestingLink
         case awaitingLink(email: String)
+        case awaitingOTP(email: String)
         case verifying
         case signedIn
         case error(String)
@@ -244,6 +245,41 @@ final class AuthViewModel {
         }
     }
 
+    // MARK: OTP (cross-device sign-in code fallback)
+
+    func requestOTP(email: String) async {
+        let normalized = Self.normalize(email)
+        guard Self.isValidEmail(normalized) else {
+            state = .error("Enter a valid email address.")
+            return
+        }
+        state = .requestingLink
+        pendingEmail = normalized
+        do {
+            try await api.otpRequest(email: normalized)
+            state = .awaitingOTP(email: normalized)
+            linkSentCount += 1
+        } catch let e as APIError {
+            state = .error(Self.message(for: e))
+        } catch {
+            state = .error("Couldn't send the code. Check your connection and try again.")
+        }
+    }
+
+    func verifyOTP(code: String) async {
+        guard let email = pendingEmail else { return }
+        state = .verifying
+        do {
+            let session = try await api.otpVerify(email: email, code: code)
+            auth.save(session)
+            state = .signedIn
+        } catch let e as APIError {
+            state = .error(Self.message(for: e))
+        } catch {
+            state = .error("That code is invalid or has expired. Request a new one.")
+        }
+    }
+
     // MARK: Dev sign-in
 
     #if DEBUG
@@ -302,6 +338,8 @@ final class AuthViewModel {
         switch error.code {
         case "AUTH_INVALID_TOKEN", "AUTH_SESSION_REVOKED":
             return "This link is invalid or has expired. Request a new one."
+        case "AUTH_DEVICE_MISMATCH":
+            return "Open the link on the device that requested it, or use a sign-in code instead."
         case "RATE_LIMITED":
             return "Too many attempts. Please wait a moment and try again."
         case "VALIDATION_FAILED":

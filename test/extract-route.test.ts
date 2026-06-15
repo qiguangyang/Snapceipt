@@ -96,6 +96,18 @@ describe("POST /extract (stub gate)", () => {
     expect(body.error.code).toBe("VALIDATION_FAILED");
   });
 
+  it("rejects an over-cap ocrText with 400 VALIDATION_FAILED", async () => {
+    const app = appWith({ DEEPSEEK_API_KEY: "" });
+    const res = await app.request("/extract", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ocrText: "a".repeat(20001), source: "scan" }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+  });
+
   it("defaults the date to today when no capturedAt and OCR has no date", async () => {
     const app = appWith({ DEEPSEEK_API_KEY: "" });
     const res = await app.request("/extract", {

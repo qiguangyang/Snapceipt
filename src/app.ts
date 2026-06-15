@@ -15,6 +15,9 @@ import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
 import { inboxRoutes } from "./routes/inbox";
 import { accountRoutes } from "./routes/account";
+import { crashReportRoutes } from "./routes/crashReports";
+import { appstoreRoutes } from "./routes/appstore";
+import { subscriptionRoutes } from "./routes/subscription";
 
 /**
  * The Snapceipt Worker Hono app. Middleware and routes are mounted at module
@@ -81,6 +84,8 @@ app.use("/profiles/*", rateLimit("inbox"));
 // Account ops (change email / delete account) — tight per-user tier. Auth-gated.
 app.use("/users/*", rateLimit("account"));
 app.use("/account", rateLimit("account"));
+// iOS MetricKit ingest — default tier. Auth-gated.
+app.use("/crash-reports", rateLimit("default"));
 
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
@@ -101,6 +106,15 @@ app.route("/export", exportRoutes);
 app.route("/quotes", quotesRoutes);
 // Protected: per-profile inbox alias (GET mint + POST rotate).
 app.route("/profiles", inboxRoutes);
+// Protected: iOS MetricKit crash/hang ingest (server-only crash_reports table).
+app.route("/crash-reports", crashReportRoutes);
 // Protected: account ops (change email via code, delete account).
 app.route("/", accountRoutes);
+// Protected: POST /me/subscription — purchase link (StoreKit tx → backend).
+app.use("/me/*", rateLimit("account"));
+app.route("/me/subscription", subscriptionRoutes);
+// Public unauthenticated webhook — IP-keyed via the default tier's fallback
+// (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
+app.use("/appstore/*", rateLimit("default"));
+app.route("/appstore", appstoreRoutes);
 app.route("/", miscRoutes);

@@ -43,6 +43,20 @@ describe("extractRequestSchema", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts an ocrText at the 20000-char cap", () => {
+    const atCap = "a".repeat(20000);
+    expect(
+      extractRequestSchema.safeParse({ ocrText: atCap, source: "scan" }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an ocrText over the 20000-char cap", () => {
+    const overCap = "a".repeat(20001);
+    expect(
+      extractRequestSchema.safeParse({ ocrText: overCap, source: "scan" }).success,
+    ).toBe(false);
+  });
 });
 
 describe("CATEGORY_KEYS", () => {

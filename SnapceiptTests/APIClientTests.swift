@@ -223,6 +223,49 @@ struct APIClientTests {
         #expect((obj?["requestId"] as? String)?.isEmpty == false)
     }
 
+    @Test("magicLinkRequest body includes the install deviceId")
+    func magicLinkRequestSendsDeviceId() async throws {
+        let (client, auth) = makeClient(seedBearer: nil)
+        MockURLProtocol.setHandler { _ in (202, [:], Data()) }
+        try await client.magicLinkRequest(email: "user@example.com")
+        let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
+        let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(obj?["email"] as? String == "user@example.com")
+        #expect(obj?["deviceId"] as? String == auth.deviceId)
+        // The header is still attached too (binding source of truth).
+        #expect(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "X-Device-Id") == auth.deviceId)
+    }
+
+    @Test("otpRequest POSTs /auth/otp/request with the email")
+    func otpRequestPosts() async throws {
+        let (client, _) = makeClient(seedBearer: nil)
+        MockURLProtocol.setHandler { _ in (202, [:], Data()) }
+        try await client.otpRequest(email: "code@example.com")
+        #expect(MockURLProtocol.lastRequest?.url?.path == "/auth/otp/request")
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
+        let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
+        let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(obj?["email"] as? String == "code@example.com")
+    }
+
+    @Test("otpVerify POSTs /auth/otp/verify and decodes a SessionResponse")
+    func otpVerifyDecodes() async throws {
+        let (client, _) = makeClient(seedBearer: nil)
+        MockURLProtocol.setHandler { _ in
+            (200, ["Content-Type": "application/json"], self.json("""
+            {"accessToken":"a.b.c","refreshToken":"refresh-0123456789abcdef0123456789abcdef","expiresIn":900,
+             "user":{"id":"u1","email":"code@example.com","displayName":null}}
+            """))
+        }
+        let session = try await client.otpVerify(email: "code@example.com", code: "123456")
+        #expect(session.user.email == "code@example.com")
+        #expect(MockURLProtocol.lastRequest?.url?.path == "/auth/otp/verify")
+        let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
+        let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(obj?["email"] as? String == "code@example.com")
+        #expect(obj?["code"] as? String == "123456")
+    }
+
     @Test("uploadImage POSTs raw JPEG to /images with transactionId/width/height query params")
     func uploadImagePostsRawJPEG() async throws {
         let (client, _) = makeClient()

@@ -41,14 +41,28 @@ struct AppleAuthBody: Encodable {
     var email: String?
 }
 
-/// POST /auth/magic-link/request
+/// POST /auth/magic-link/request — carries the install deviceId so the backend
+/// device-binds the minted token (the X-Device-Id header is the binding source;
+/// this body field is a redundant hint for clients that can't set the header).
 struct MagicLinkRequestBody: Encodable {
     let email: String
+    let deviceId: String
 }
 
 /// POST /auth/magic-link/verify
 struct MagicLinkVerifyBody: Encodable {
     let token: String
+}
+
+/// POST /auth/otp/request — 6-digit sign-in code fallback.
+struct OTPRequestBody: Encodable {
+    let email: String
+}
+
+/// POST /auth/otp/verify — { email, code }.
+struct OTPVerifyBody: Encodable {
+    let email: String
+    let code: String
 }
 
 /// POST /auth/refresh
@@ -138,6 +152,22 @@ struct SessionUser: Decodable {
 struct MeResponse: Decodable {
     let user: SessionUser
     let devices: [DeviceDTO]
+}
+
+/// GET /auth/me -> { user: { …, plan }, … }. A narrow decode that keeps only the
+/// plan so EntitlementStore can sync the backend's cross-device truth without
+/// changing the existing SessionUser shape.
+struct MePlanResponse: Decodable {
+    struct PlanUser: Decodable { let plan: String }
+    let user: PlanUser
+}
+
+/// POST /me/subscription request body — the StoreKit 2 signed transaction JWS
+/// (`Transaction.jwsRepresentation`). The backend VERIFIES Apple's signature/cert
+/// chain and derives originalTransactionId/expiry/productId from the verified
+/// payload, so the client no longer sends those fields (they could be forged).
+struct RecordPurchaseBody: Encodable {
+    let signedTransaction: String
 }
 
 /// A registered device row. `GET /auth/me` returns the full shape (§8.2); only `id`

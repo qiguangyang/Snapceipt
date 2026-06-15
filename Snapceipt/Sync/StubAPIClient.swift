@@ -12,9 +12,13 @@ final class StubAPIClient: APIClient {
     func magicLinkRequest(email: String) async throws {}
     func magicLinkRequestDev(email: String) async throws -> String? { "stub-dev-token" }
     func magicLinkVerify(token: String) async throws -> SessionResponse { devSession() }
+    func otpRequest(email: String) async throws {}
+    func otpVerify(email: String, code: String) async throws -> SessionResponse { devSession() }
     func refresh(refreshToken: String) async throws -> SessionResponse { devSession() }
     func signOut() async throws {}
     func me() async throws -> MeResponse { MeResponse(user: devSession().user, devices: []) }
+    func mePlan() async throws -> String { "free" }
+    func recordPurchase(signedTransaction: String) async throws {}
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
         // J23b/J23c seam: a deterministic 4xx contract rejection. 422 is in the
         // 400..<500 band and is not 401/408/429, so SyncEngine marks the batch
@@ -113,5 +117,6 @@ final class StubAPIClient: APIClient {
     }
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+    func reportDiagnostic(_ body: DiagnosticReportBody) async throws {}
 }
 #endif

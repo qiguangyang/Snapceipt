@@ -12,13 +12,18 @@ struct QuoteListView: View {
     let onEdit: (String?) -> Void   // nil = new quote
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: QuoteListViewModel?
+    @State private var showPaywall = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                LbHeader(title: "Quotes", onClose: onClose, onAdd: { onEdit(nil) })
+                LbHeader(title: "Quotes", onClose: onClose, onAdd: {
+                    guard entitlement.isPro else { showPaywall = true; return }
+                    onEdit(nil)
+                })
                 if let vm {
                     if vm.quotes.isEmpty {
                         Spacer(); EmptyArt()
@@ -28,7 +33,10 @@ struct QuoteListView: View {
                     } else {
                         List {
                             ForEach(vm.quotes) { quote in
-                                Button { onEdit(quote.id) } label: { rowBody(quote) }
+                                Button {
+                                    guard entitlement.isPro else { showPaywall = true; return }
+                                    onEdit(quote.id)
+                                } label: { rowBody(quote) }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier(AccessibilityID.quoteRowPrefix + quote.id)
                                     .swipeActions {
@@ -42,14 +50,19 @@ struct QuoteListView: View {
                     }
                 } else { Color.clear }
             }
-            LbFloatingCTA(title: "New quote", a11yId: AccessibilityID.quotesAdd) { onEdit(nil) }
+            LbFloatingCTA(title: "New quote", a11yId: AccessibilityID.quotesAdd) {
+                guard entitlement.isPro else { showPaywall = true; return }
+                onEdit(nil)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.quotesScreen)
         .transition(.opacity)
         .task {
             vm = QuoteListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            if !entitlement.isPro { showPaywall = true }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     @ViewBuilder private func rowBody(_ quote: Quote) -> some View {

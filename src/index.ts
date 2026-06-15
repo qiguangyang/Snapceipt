@@ -1,13 +1,16 @@
 import { app } from "./app";
 import type { Env } from "./env";
 import { budgetCronLogic } from "./cron/budgetAlert";
+import { d1BackupLogic } from "./cron/d1Backup";
 import { inboundEmailLogic } from "./email/inbound";
 
 /**
  * Hourly scheduled handler (wrangler.jsonc triggers.crons = "0 * * * *").
  */
 const scheduled: ExportedHandlerScheduledHandler<Env> = (_event, env, ctx) => {
-  ctx.waitUntil(budgetCronLogic(env.DB, env, Date.now()));
+  const now = Date.now();
+  ctx.waitUntil(budgetCronLogic(env.DB, env, now));
+  ctx.waitUntil(d1BackupLogic(env.DB, env.BACKUPS, now));
 };
 
 /**

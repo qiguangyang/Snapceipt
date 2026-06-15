@@ -84,6 +84,9 @@ schemes:
         Snapceipt: all
         SnapceiptTests: [test]
         SnapceiptUITests: [test]
+    run:
+      config: Debug
+      storeKitConfiguration: Snapceipt/Snapceipt.storekit
     test:
       targets:
         - SnapceiptTests

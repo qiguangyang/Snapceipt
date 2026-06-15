@@ -22,8 +22,10 @@ struct ReportsView: View {
     let onOpenBas: () -> Void
 
     @Environment(\.accent) private var accent
+    @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: ReportsViewModel?
     @State private var periodSelection: String = Period.month.rawValue
+    @State private var showPaywall = false
 
     private let periodOptions = [
         SegmentOption(id: Period.month.rawValue, label: "Month"),
@@ -74,6 +76,7 @@ struct ReportsView: View {
         .onChange(of: periodSelection) { _, newValue in
             vm?.period = Period(rawValue: newValue) ?? .month
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     private var header: some View {
@@ -94,7 +97,10 @@ struct ReportsView: View {
     }
 
     private var basCard: some View {
-        Button { onOpenBas() } label: {
+        Button {
+            guard entitlement.isPro else { showPaywall = true; return }
+            onOpenBas()
+        } label: {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
