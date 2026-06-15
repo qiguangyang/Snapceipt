@@ -35,14 +35,32 @@ enum HeuristicParser {
         // Tender/keyword exclusion regex used for both total calculation and line-items.
         let tenderRe = #"(?i)\b(total|subtotal|gst|tax|vat|change|cash|eftpos|balance|amount due|tendered|rounding)\b"#
 
-        // Merchant: first line with >=3 letters that isn't web/email/date/header noise.
+        // Determine whether real geometry is available (any non-zero box).
+        let hasGeometry = lines.contains { $0.boundingBox != .zero }
+
+        // Merchant: use geometry when available (topmost = greatest maxY); else
+        // fall back to first letter-rich, non-noise line (text-only path).
         let headerStop = ["tax invoice", "invoice", "receipt", "customer copy", "merchant copy", "eftpos", "duplicate"]
-        result.merchant = texts.first(where: { line in
-            let l = line.lowercased()
-            let letters = line.filter { $0.isLetter }.count
-            return letters >= 3 && !l.contains("www") && !line.contains("@")
-                && !isDateLine(line) && !headerStop.contains(where: { l.contains($0) })
-        }) ?? texts.first ?? ""
+        let isMerchantCandidate: (RecognizedLine) -> Bool = { rl in
+            let l = rl.text.lowercased()
+            let letters = rl.text.filter { $0.isLetter }.count
+            return letters >= 3 && !l.contains("www") && !rl.text.contains("@")
+                && !isDateLine(rl.text) && !headerStop.contains(where: { l.contains($0) })
+        }
+        if hasGeometry {
+            // Top of receipt = largest boundingBox.maxY (origin is bottom-left).
+            result.merchant = lines
+                .filter { isMerchantCandidate($0) }
+                .max(by: { $0.boundingBox.maxY < $1.boundingBox.maxY })?.text
+                ?? texts.first ?? ""
+        } else {
+            result.merchant = texts.first(where: { line in
+                let l = line.lowercased()
+                let letters = line.filter { $0.isLetter }.count
+                return letters >= 3 && !l.contains("www") && !line.contains("@")
+                    && !isDateLine(line) && !headerStop.contains(where: { l.contains($0) })
+            }) ?? texts.first ?? ""
+        }
 
         // Date: NSDataDetector across the joined text.
         var dateFound = false
@@ -72,7 +90,11 @@ enum HeuristicParser {
         func maxAmount(_ ls: [String]) -> Decimal? { ls.flatMap(amounts).max() }
 
         // Total: unified algorithm with date-skip and tender exclusion.
+        // When geometry is present and no explicit "total" line exists, prefer the
+        // amount on the tallest (biggest font = greatest boundingBox.height) non-tender
+        // line; fall back to max value if all heights are equal.
         let nonDate = texts.filter { !isDateLine($0) }
+        let nonDateLines = lines.filter { !isDateLine($0.text) }
         let totalLines = nonDate.filter { line in
             let l = line.lowercased()
             return l.contains("total") && !l.contains("subtotal") && !l.contains("sub total")
@@ -80,6 +102,25 @@ enum HeuristicParser {
         let usedTotalLine: Bool
         if let t = maxAmount(totalLines), t > 0 {
             result.total = t; usedTotalLine = true
+        } else if hasGeometry {
+            // Geometry tiebreak: among non-tender, non-date lines with amounts,
+            // pick the amount on the line with the greatest boundingBox.height.
+            let nonTenderLines = nonDateLines.filter {
+                $0.text.range(of: tenderRe, options: .regularExpression) == nil
+            }
+            // For each candidate line, find its max amount.
+            let candidates: [(amount: Decimal, height: CGFloat)] = nonTenderLines.compactMap { rl in
+                guard let amt = amounts(in: rl.text).max(), amt > 0 else { return nil }
+                return (amount: amt, height: rl.boundingBox.height)
+            }
+            if let best = candidates.max(by: {
+                $0.height != $1.height ? $0.height < $1.height : $0.amount < $1.amount
+            }) {
+                result.total = best.amount
+            } else {
+                result.total = 0
+            }
+            usedTotalLine = false
         } else {
             let nonTender = nonDate.filter { $0.range(of: tenderRe, options: .regularExpression) == nil }
             result.total = maxAmount(nonTender) ?? 0; usedTotalLine = false

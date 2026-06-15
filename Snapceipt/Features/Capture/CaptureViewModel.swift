@@ -16,6 +16,7 @@ final class CaptureViewModel {
     var draft: ExtractedReceipt?
     private(set) var capturedImage: UIImage?
     private(set) var rawText: String = ""
+    private(set) var recognizedLines: [RecognizedLine] = []
     var errorMessage: String?
     /// The profile mode ("personal" | "business") the txn was actually filed under,
     /// captured at `save()` from `profiles.activeProfile` (the real save target —
@@ -68,11 +69,12 @@ final class CaptureViewModel {
 
     // MARK: Capture
 
-    /// Called with the captured page (image + already-run OCR text). Moves to
-    /// `.scanning` and kicks off extraction.
-    func onScanned(image: UIImage, rawText: String) async {
+    /// Called with the captured page (image + already-run OCR lines with geometry).
+    /// Moves to `.scanning` and kicks off extraction.
+    func onScanned(image: UIImage, lines: [RecognizedLine]) async {
         self.capturedImage = image
-        self.rawText = rawText
+        self.recognizedLines = lines
+        self.rawText = lines.map(\.text).joined(separator: "\n")
         self.stage = .scanning
         await extract()
     }
@@ -89,9 +91,9 @@ final class CaptureViewModel {
             smartScanCap = resp.meta.smartScan?.cap
             smartScanUsed = resp.meta.smartScan?.used
         } catch {
-            let parsed = HeuristicParser.parse(rawText.split(separator: "\n").map {
-                RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
-            })
+            // Use the stored recognizedLines (with real bounding boxes) so the
+            // offline parser benefits from OCR geometry when available.
+            let parsed = HeuristicParser.parse(recognizedLines)
             draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "")
             // Offline/transport failure — not a cap situation; reset all signals.
             smartScanCapped = false
@@ -151,7 +153,7 @@ final class CaptureViewModel {
 
     /// Reset to the camera for "Snap another".
     func reset() {
-        draft = nil; capturedImage = nil; rawText = ""; errorMessage = nil
+        draft = nil; capturedImage = nil; rawText = ""; recognizedLines = []; errorMessage = nil
         stage = .camera
     }
 }

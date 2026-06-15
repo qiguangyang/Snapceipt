@@ -45,7 +45,10 @@ struct CaptureHost: View {
             vm = model
             await drainQueues()
             if let stub {
-                await model.onScanned(image: stub.image, rawText: stub.rawText)
+                let lines = stub.rawText.split(separator: "\n").map {
+                    RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
+                }
+                await model.onScanned(image: stub.image, lines: lines)
             }
         }
         // Stub seam: "Snap another" (`vm.reset()`) returns the flow to `.camera`, which
@@ -58,7 +61,12 @@ struct CaptureHost: View {
         // extended for J18.)
         .onChange(of: vm?.stage) { old, new in
             guard let stub, let model = vm, old != nil, new == .camera else { return }
-            Task { await model.onScanned(image: stub.image, rawText: stub.rawText) }
+            Task {
+                let lines = stub.rawText.split(separator: "\n").map {
+                    RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
+                }
+                await model.onScanned(image: stub.image, lines: lines)
+            }
         }
         .onChange(of: reachability.isOnline) { _, online in
             if online { Task { await drainQueues() } }

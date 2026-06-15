@@ -86,4 +86,28 @@ struct HeuristicParserTests {
         #expect(strong.confidence >= 0.6)
         #expect(strong.confidence <= 0.75)
     }
+
+    // MARK: - Geometry tests (Task 7)
+
+    private func line(_ t: String, x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) -> RecognizedLine {
+        RecognizedLine(text: t, confidence: 0.9, boundingBox: CGRect(x: x, y: y, width: w, height: h))
+    }
+
+    /// Geometry is decisive: topmost line (largest maxY) is the merchant;
+    /// when there is no explicit "total" line the biggest-font (tallest box) non-tender
+    /// amount wins even when a distractor has a larger numeric value in a tiny box.
+    @Test func geometryPicksTopLineAsMerchantAndBigFontTotal() {
+        // Vision bottom-left origin: y=0.92 → near top of receipt.
+        // 44.00 has a tall box (h=0.05) → big font → chosen as total.
+        // 99.00 has a tiny box (h=0.015) → distractor; would win by value if geometry ignored.
+        let ls = [
+            line("WOOLWORTHS METRO", x: 0.1, y: 0.92, w: 0.6, h: 0.03),
+            line("Milk 2.00",        x: 0.1, y: 0.60, w: 0.5, h: 0.02),
+            line("44.00",            x: 0.7, y: 0.30, w: 0.2, h: 0.05),
+            line("99.00",            x: 0.7, y: 0.10, w: 0.2, h: 0.015),
+        ]
+        let r = HeuristicParser.parse(ls)
+        #expect(r.merchant == "WOOLWORTHS METRO")
+        #expect(r.total == Decimal(string: "44.00"))
+    }
 }
