@@ -6,6 +6,7 @@ import SwiftData
 struct ActivityTabView: View {
     let context: ModelContext
     let profileId: String
+    let onOpenReceipt: (String) -> Void
     @Environment(\.accent) private var accent
     @State private var vm: ReceiptsListViewModel?
 
@@ -46,8 +47,11 @@ struct ActivityTabView: View {
     }
 
     @ViewBuilder private func receiptRow(_ row: ReceiptRow) -> some View {
-        ReceiptRowView(row: row)
-            .accessibilityIdentifier(AccessibilityID.activityRowPrefix + row.id)
+        Button { onOpenReceipt(row.id) } label: {
+            ReceiptRowView(row: row)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.activityRowPrefix + row.id)
     }
 
     private var emptyState: some View {

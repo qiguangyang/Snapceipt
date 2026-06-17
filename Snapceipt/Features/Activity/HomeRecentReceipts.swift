@@ -8,9 +8,11 @@ struct HomeRecentReceipts: View {
     @Environment(\.accent) private var accent
     @Query private var txns: [Transaction]
     private let onSeeAll: () -> Void
+    private let onOpenReceipt: (String) -> Void
 
-    init(profileId: String, onSeeAll: @escaping () -> Void) {
+    init(profileId: String, onSeeAll: @escaping () -> Void, onOpenReceipt: @escaping (String) -> Void) {
         self.onSeeAll = onSeeAll
+        self.onOpenReceipt = onOpenReceipt
         _txns = Query(filter: #Predicate<Transaction> { $0.profileId == profileId && $0.deletedAt == nil },
                       sort: \.txnDate, order: .reverse)
     }
@@ -21,7 +23,12 @@ struct HomeRecentReceipts: View {
             if !rows.isEmpty {
                 VStack(spacing: 10) {
                     header
-                    ForEach(rows) { ReceiptRowView(row: $0) }
+                    ForEach(rows) { row in
+                        Button { onOpenReceipt(row.id) } label: {
+                            ReceiptRowView(row: row)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .accessibilityIdentifier(AccessibilityID.homeRecentSection)
             }
