@@ -402,7 +402,7 @@ struct ShellView: View {
         case .home:
             homeStub(accent: accent)
         case .activity:
-            StubTabView(title: "Activity", accent: accent)
+            ActivityTabView(context: profiles.context, profileId: profiles.activeProfileId)
         case .reports:
             ReportsView(
                 context: profiles.context,
