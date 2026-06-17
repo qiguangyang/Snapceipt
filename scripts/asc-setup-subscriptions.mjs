@@ -18,11 +18,18 @@
  * for AUS that is AUD. Confirm AUD vs USD before APPLY (the dry run prints the
  * matched price point so you can verify the currency + amount).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { SignJWT, importPKCS8 } from "jose";
 
+// Self-load fastlane/.env so the script runs as a plain `node scripts/...` (no sourcing).
+const ENV = new URL("../fastlane/.env", import.meta.url);
+if (existsSync(ENV)) for (const line of readFileSync(ENV, "utf8").split("\n")) {
+  const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+  if (m) process.env[m[1]] ??= m[2].replace(/^["']|["']$/g, "");
+}
+
 const API = "https://api.appstoreconnect.apple.com";
-const APPLY = process.env.APPLY === "1";
+const APPLY = process.env.APPLY === "1" || process.argv.includes("--apply");
 const BUNDLE_ID = process.env.BUNDLE_ID || "app.snapceipt.Snapceipt";
 const GROUP_REF = process.env.GROUP_REF || "Snapceipt Pro";
 const BASE_TERRITORY = process.env.BASE_TERRITORY || "AUS"; // Australia
@@ -148,21 +155,34 @@ async function getOrCreateSub(groupId, p, existingSubs) {
   return created.data.id;
 }
 
+// Availability MUST be worldwide (all territories + availableInNewTerritories:true).
+// A limited set (e.g. just AU+NZ) with availableInNewTerritories:false keeps the
+// subscription in MISSING_METADATA — verified against a working app. Availability is
+// IMMUTABLE once created (the API forbids DELETE/PATCH/relationship edits), but a fresh
+// POST supersedes a prior one, so this is also the repair path for a bad availability.
 async function setAvailability(subId, p) {
-  if (!subId) { log(`WOULD set ${p.productId} availability to ${TERRITORIES.join(",")}`); return; }
-  let cur; try { cur = await api("GET", `/v1/subscriptions/${subId}/subscriptionAvailability`); } catch { cur = {}; }
-  if (cur.data) { log(`  availability already set for ${p.productId} — leaving as-is`); return; }
+  if (!subId) { log(`WOULD set ${p.productId} availability to ALL territories`); return; }
+  let cur; try { cur = await api("GET", `/v1/subscriptions/${subId}/subscriptionAvailability?include=availableTerritories&limit[availableTerritories]=50`); } catch { cur = {}; }
+  const haveAll = cur.data?.attributes?.availableInNewTerritories === true;
+  if (haveAll) { log(`  availability already worldwide for ${p.productId} — leaving as-is`); return; }
+  const all = [];
+  let url = `/v1/territories?limit=200`;
+  for (let page = 0; page < 5 && url; page++) {
+    const r = await api("GET", url);
+    for (const t of (r.data || [])) all.push(t.id);
+    url = r.links?.next ? r.links.next.replace(API, "") : null;
+  }
   await api("POST", "/v1/subscriptionAvailabilities", {
     data: {
       type: "subscriptionAvailabilities",
-      attributes: { availableInNewTerritories: false },
+      attributes: { availableInNewTerritories: true },
       relationships: {
         subscription: { data: { type: "subscriptions", id: subId } },
-        availableTerritories: { data: TERRITORIES.map((id) => ({ type: "territories", id })) },
+        availableTerritories: { data: all.map((id) => ({ type: "territories", id })) },
       },
     },
   });
-  log(`  set availability for ${p.productId}: ${TERRITORIES.join(",")}`);
+  log(`  set availability for ${p.productId}: worldwide (${all.length} territories)`);
 }
 
 async function setPrice(subId, p) {
@@ -179,22 +199,29 @@ async function setPrice(subId, p) {
   }
   if (!baseId) { warn(`no ${BASE_TERRITORY} price point == ${p.price} for ${p.productId} — set manually`); return; }
 
-  // Which territories already have a price? (per-territory idempotency — the old code
-  // skipped if ANY price existed, so non-base territories were never priced.)
+  // Which territories already have a price? (per-territory idempotency.)
   const cur = await api("GET", `/v1/subscriptions/${subId}/prices?include=territory&limit=200`);
   const priced = new Set((cur.included || []).filter((x) => x.type === "territories").map((t) => t.id));
 
-  // Price EVERY availability territory. An available-but-unpriced territory keeps the
-  // sub in MISSING_METADATA. Non-base territories use the Apple tier-EQUALIZED point
-  // (same tier as the base) — creating one base price does NOT auto-price the rest via API.
-  for (const terr of TERRITORIES) {
-    if (priced.has(terr)) { log(`  ${terr} price already set for ${p.productId} — leaving as-is`); continue; }
-    let pointId = baseId;
-    if (terr !== BASE_TERRITORY) {
-      const eq = await api("GET", `/v1/subscriptionPricePoints/${baseId}/equalizations?filter[territory]=${terr}&limit=1`);
-      pointId = eq.data?.[0]?.id;
-      if (!pointId) { warn(`no ${terr} equalization for ${p.productId} — set price manually`); continue; }
+  // Price EVERY territory (the full global price schedule), NOT just the availability
+  // territories: a subscription's price is a worldwide schedule (the ASC UI always sets
+  // all ~175), and an incomplete schedule keeps it in MISSING_METADATA. Availability
+  // (set separately in setAvailability) is what restricts where it's actually SOLD.
+  // The base point's `equalizations` give the Apple tier-equivalent point per territory.
+  const points = [{ id: baseId, terr: BASE_TERRITORY }];
+  let eq = `/v1/subscriptionPricePoints/${baseId}/equalizations?include=territory&limit=200`;
+  for (let page = 0; page < 5 && eq; page++) {
+    const r = await api("GET", eq);
+    for (const pp of (r.data || [])) {
+      const terr = pp.relationships?.territory?.data?.id;
+      if (terr && terr !== BASE_TERRITORY) points.push({ id: pp.id, terr });
     }
+    eq = r.links?.next ? r.links.next.replace(API, "") : null;
+  }
+
+  let set = 0, skip = 0, failed = 0;
+  for (const { id: pointId, terr } of points) {
+    if (priced.has(terr)) { skip++; continue; }
     try {
       await api("POST", "/v1/subscriptionPrices", {
         data: {
@@ -206,32 +233,39 @@ async function setPrice(subId, p) {
           },
         },
       });
-      log(`  set ${terr} price for ${p.productId} (point ${pointId})`);
+      set++;
     } catch (e) {
-      warn(`could not set ${terr} price for ${p.productId}: ${e.message.split("\n")[0]}`);
+      failed++;
+      if (failed <= 2) warn(`could not set ${terr} price for ${p.productId}: ${e.message.split("\n")[0]}`);
     }
   }
+  log(`  prices for ${p.productId}: +${set} set, ${skip} already, ${failed} failed (full ${points.length}-territory schedule)`);
 }
 
 async function setTrial(subId, p) {
-  if (!subId) { log(`WOULD add a ${TRIAL_DURATION} FREE_TRIAL intro offer to ${p.productId}`); return; }
-  const cur = await api("GET", `/v1/subscriptions/${subId}/introductoryOffers?limit=200`);
-  if ((cur.data || []).length) { log(`  intro offer already exists for ${p.productId} — leaving as-is`); return; }
-  try {
-    await api("POST", "/v1/subscriptionIntroductoryOffers", {
-      data: {
-        type: "subscriptionIntroductoryOffers",
-        attributes: { duration: TRIAL_DURATION, offerMode: "FREE_TRIAL", numberOfPeriods: 1 },
-        relationships: {
-          subscription: { data: { type: "subscriptions", id: subId } },
-          territory: { data: { type: "territories", id: BASE_TERRITORY } },
+  if (!subId) { log(`WOULD add a ${TRIAL_DURATION} FREE_TRIAL intro offer to ${p.productId} in ${TERRITORIES.join(",")}`); return; }
+  // Per-territory idempotency. The free trial MUST cover every availability territory:
+  // an availability territory (e.g. NZL) with a price but NO intro offer leaves the
+  // subscription stuck in MISSING_METADATA — the offer must match availability.
+  const cur = await api("GET", `/v1/subscriptions/${subId}/introductoryOffers?include=territory&limit=200`);
+  const have = new Set((cur.data || []).map((o) => o.relationships?.territory?.data?.id).filter(Boolean));
+  for (const terr of TERRITORIES) {
+    if (have.has(terr)) { log(`  intro offer for ${terr} already set for ${p.productId} — leaving as-is`); continue; }
+    try {
+      await api("POST", "/v1/subscriptionIntroductoryOffers", {
+        data: {
+          type: "subscriptionIntroductoryOffers",
+          attributes: { duration: TRIAL_DURATION, offerMode: "FREE_TRIAL", numberOfPeriods: 1 },
+          relationships: {
+            subscription: { data: { type: "subscriptions", id: subId } },
+            territory: { data: { type: "territories", id: terr } },
+          },
         },
-      },
-    });
-    log(`  added ${TRIAL_DURATION} free-trial intro offer to ${p.productId} (${BASE_TERRITORY})`);
-  } catch (e) {
-    warn(`could not add trial for ${p.productId} via API (${e.message.split("\n")[0]}).`);
-    warn(`  -> add it in ASC: Introductory Offer > Free Trial > ${TRIAL_DURATION} > all countries.`);
+      });
+      log(`  added ${TRIAL_DURATION} free-trial intro offer to ${p.productId} (${terr})`);
+    } catch (e) {
+      warn(`could not add trial for ${p.productId} (${terr}): ${e.message.split("\n")[0]}`);
+    }
   }
 }
 
