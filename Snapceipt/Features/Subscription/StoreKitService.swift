@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import OSLog
 
 /// Disambiguates `StoreKit.Transaction` from the app's `Transaction` SwiftData model.
 private typealias SKTransaction = StoreKit.Transaction
@@ -25,11 +26,43 @@ final class StoreKitService {
         var entitled: Bool { self == .success }
     }
 
+    /// Load lifecycle for the two Pro products. Critically distinguishes "the store
+    /// succeeded but returned 0 products" (`.empty` — App Store Connect isn't vending:
+    /// Paid Apps agreement inactive, or subscriptions not yet "Ready to Submit") from
+    /// "the call threw" (`.failed` — network/StoreKit error). The old code collapsed
+    /// both into an empty array that PaywallView rendered as a permanent spinner.
+    enum ProductsState: Equatable {
+        case loading
+        case loaded([Product])
+        case empty             // succeeded with 0 products → ASC misconfiguration
+        case failed(String)    // threw → short, log-friendly diagnostic
+
+        /// Products to render; empty for every non-loaded state.
+        var products: [Product] { if case .loaded(let p) = self { return p } else { return [] } }
+    }
+
     /// True iff the product id is one of our entitling Pro subscriptions.
     static func isProProduct(_ id: String) -> Bool { ProductID.all.contains(id) }
 
-    /// Loaded products; empty until `loadProducts()` resolves.
-    private(set) var products: [Product] = []
+    /// Pure, StoreKit-free mapping seam (mirrors `isProProduct` / `PurchaseOutcome`):
+    /// turns the outcome of a load attempt into a ProductsState. Unit-tested without
+    /// touching StoreKit I/O.
+    static func productsState(loaded: [Product]?, error: Error?) -> ProductsState {
+        if let error { return .failed(loadErrorMessage(error)) }
+        let loaded = loaded ?? []
+        return loaded.isEmpty ? .empty : .loaded(loaded)
+    }
+
+    /// Short, log-friendly diagnostic for a load failure. Separate so it's testable
+    /// and so the user-facing copy in PaywallView can stay generic.
+    static func loadErrorMessage(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+    }
+
+    /// Observable load state for the two Pro products; drives PaywallView.
+    private(set) var productsState: ProductsState = .loading
+    /// Back-compat array accessor for callers that just want the products.
+    var products: [Product] { productsState.products }
     /// The set of currently-entitled product ids derived from Transaction.currentEntitlements.
     private(set) var entitledProductIDs: Set<String> = []
 
@@ -45,6 +78,7 @@ final class StoreKitService {
     var onVerifiedTransaction: (@MainActor (String) -> Void)?
 
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
+    @ObservationIgnored private let log = Logger(subsystem: "app.snapceipt", category: "storekit")
 
     init() {
         // Listen for out-of-band transaction updates (renewals, Ask-to-Buy approvals,
@@ -66,9 +100,22 @@ final class StoreKitService {
     deinit { updatesTask?.cancel() }
 
     /// Load both Pro products from the store (or the .storekit config in DEBUG).
+    /// Records the outcome as a ProductsState via the pure `productsState(loaded:error:)`
+    /// seam so a thrown error AND the "loaded but empty" (ASC not vending) case are both
+    /// visible to the paywall instead of collapsing into a forever-spinner. Logs the
+    /// failure so a TestFlight build can be diagnosed via Console.app.
     func loadProducts() async {
-        do { products = try await Product.products(for: ProductID.all) }
-        catch { products = [] }
+        productsState = .loading
+        do {
+            let loaded = try await Product.products(for: ProductID.all)
+            productsState = Self.productsState(loaded: loaded, error: nil)
+            if loaded.isEmpty {
+                log.error("Pro products loaded EMPTY — check App Store Connect: Paid Apps agreement Active? subscriptions Ready to Submit? product ids \(ProductID.all.joined(separator: ", "), privacy: .public)")
+            }
+        } catch {
+            productsState = Self.productsState(loaded: nil, error: error)
+            log.error("Pro products load FAILED: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Buy a product. Maps the StoreKit result to our stable PurchaseOutcome.

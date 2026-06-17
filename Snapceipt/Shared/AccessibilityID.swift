@@ -257,6 +257,9 @@ enum AccessibilityID {
     static let paywallBuyMonthly = "paywall.buy.monthly"
     static let paywallBuyYearly  = "paywall.buy.yearly"
     static let paywallRestore    = "paywall.restore"
+    static let paywallLoading    = "paywall.loading"     // spinner while products load
+    static let paywallLoadError  = "paywall.loadError"   // empty/failed load message
+    static let paywallRetry      = "paywall.retry"       // re-run loadProducts()
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"

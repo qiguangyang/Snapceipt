@@ -13,6 +13,10 @@ struct PaywallView: View {
 
     @State private var isPurchasing = false
     @State private var isRestoring = false
+    /// Set after a delay while still `.loading` so a slow/stuck network surfaces a
+    /// Retry escape hatch beneath the spinner — without flipping load state (a late
+    /// success still wins). Resets each time the loading view re-appears.
+    @State private var slowLoad = false
 
     private let benefits: [(icon: String, text: String)] = [
         ("doc.text.magnifyingglass", "BAS-ready export & accountant pack"),
@@ -75,14 +79,74 @@ struct PaywallView: View {
 
     private var productButtons: some View {
         VStack(spacing: 12) {
-            if storekit.products.isEmpty {
-                ProgressView().tint(accent.base)
-            } else {
-                ForEach(storekit.products, id: \.id) { product in
+            switch storekit.productsState {
+            case .loading:
+                loadingState
+            case .loaded(let products):
+                ForEach(products, id: \.id) { product in
                     productButton(product)
                 }
+            case .empty:
+                // Store responded but vended nothing → App Store Connect isn't
+                // serving the products (agreement/availability). Generic copy;
+                // the specific cause is in the os_log (Console.app).
+                loadProblem("Couldn't load plans right now.")
+            case .failed:
+                loadProblem("Plans are temporarily unavailable.")
             }
         }
+    }
+
+    /// Spinner while products load. After a delay, also reveals a Retry button so a
+    /// stuck network never dead-ends on a forever-spinner — state is left untouched,
+    /// so a slow-but-valid load still flips to the buttons on its own.
+    private var loadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView().tint(accent.base)
+            if slowLoad {
+                Button {
+                    Task { await storekit.loadProducts() }
+                } label: {
+                    Text("Taking a while — Retry")
+                        .font(.ui(13, .semibold))
+                        .foregroundStyle(accent.base)
+                }
+                .accessibilityIdentifier(AccessibilityID.paywallRetry)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .accessibilityIdentifier(AccessibilityID.paywallLoading)
+        .task {
+            slowLoad = false
+            try? await Task.sleep(for: .seconds(12))
+            slowLoad = true
+        }
+    }
+
+    /// Empty/failed message + Retry. Restore/Terms/Privacy stay reachable below it.
+    private func loadProblem(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Text(message)
+                .font(.ui(15, .semibold))
+                .foregroundStyle(Palette.alert)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier(AccessibilityID.paywallLoadError)
+            Button {
+                Task { await storekit.loadProducts() }
+            } label: {
+                Text("Retry")
+                    .font(.ui(16, .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(accent.base, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .accessibilityIdentifier(AccessibilityID.paywallRetry)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder private func productButton(_ product: Product) -> some View {
