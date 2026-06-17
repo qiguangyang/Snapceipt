@@ -28,6 +28,10 @@ const GROUP_REF = process.env.GROUP_REF || "Snapceipt Pro";
 const BASE_TERRITORY = process.env.BASE_TERRITORY || "AUS"; // Australia
 const LOCALE = process.env.LOCALE || "en-AU";
 const TRIAL_DURATION = process.env.TRIAL_DURATION || "TWO_WEEKS"; // 14-day free trial
+// Territories the subscriptions are sold in. ASC REJECTS price + intro-offer writes
+// ("You need to set up availabilities first") until availability is set, so this MUST
+// run before setPrice/setTrial. Default AUS+NZL (the launch markets).
+const TERRITORIES = (process.env.TERRITORIES || "AUS,NZL").split(",").map((s) => s.trim()).filter(Boolean);
 const PRODUCTS = [
   {
     productId: "app.snapceipt.pro.monthly",
@@ -127,14 +131,32 @@ async function getOrCreateSub(groupId, p, existingSubs) {
   return created.data.id;
 }
 
+async function setAvailability(subId, p) {
+  if (!subId) { log(`WOULD set ${p.productId} availability to ${TERRITORIES.join(",")}`); return; }
+  let cur; try { cur = await api("GET", `/v1/subscriptions/${subId}/subscriptionAvailability`); } catch { cur = {}; }
+  if (cur.data) { log(`  availability already set for ${p.productId} — leaving as-is`); return; }
+  await api("POST", "/v1/subscriptionAvailabilities", {
+    data: {
+      type: "subscriptionAvailabilities",
+      attributes: { availableInNewTerritories: false },
+      relationships: {
+        subscription: { data: { type: "subscriptions", id: subId } },
+        availableTerritories: { data: TERRITORIES.map((id) => ({ type: "territories", id })) },
+      },
+    },
+  });
+  log(`  set availability for ${p.productId}: ${TERRITORIES.join(",")}`);
+}
+
 async function setPrice(subId, p) {
   if (!subId) { log(`WOULD set ${p.productId} price to ${p.price} (${BASE_TERRITORY} currency)`); return; }
-  // Eligible price points are per-subscription + per-territory.
+  // Eligible price points are per-subscription + per-territory. Match by NUMERIC value:
+  // the API returns "79.0" where our config says "79.00", so string-equality misses.
   let url = `/v1/subscriptions/${subId}/pricePoints?filter[territory]=${BASE_TERRITORY}&include=territory&limit=200`;
   let match;
   for (let page = 0; page < 30 && url && !match; page++) {
     const r = await api("GET", url);
-    match = (r.data || []).find((pp) => pp.attributes?.customerPrice === p.price);
+    match = (r.data || []).find((pp) => parseFloat(pp.attributes?.customerPrice) === parseFloat(p.price));
     url = r.links?.next ? r.links.next.replace(API, "") : null;
   }
   if (!match) { warn(`no ${BASE_TERRITORY} price point == ${p.price} for ${p.productId} — set the price manually in ASC`); return; }
@@ -210,6 +232,7 @@ async function setLocalization(subId, p) {
   for (const p of PRODUCTS) {
     log(`--- ${p.productId} ---`);
     const subId = await getOrCreateSub(groupId, p, existingSubs);
+    await setAvailability(subId, p); // MUST precede price/trial — ASC 409s otherwise.
     await setPrice(subId, p);
     await setTrial(subId, p);
     await setLocalization(subId, p);
@@ -219,8 +242,10 @@ async function setLocalization(subId, p) {
   log("Done.");
   if (!APPLY) {
     log("Re-run with APPLY=1 to create the products. Manual steps the API can't finish:");
-    console.log("   - Each subscription needs a review screenshot + review note before submission.");
-    console.log("   - Set 'Cleared for Sale' / availability, then submit the group for review (or attach to the next app version).");
+    console.log("   - Each subscription needs a review screenshot + review note (this clears the");
+    console.log("     final 'Missing Metadata' and is required before submission).");
+    console.log("   - Submit the group for review (or attach to the next app version).");
     console.log("   - Confirm the matched price points are in the intended currency (AUD vs USD).");
+    console.log("   - Ensure the Paid Applications Agreement is Active (ASC > Business).");
   }
 })().catch((e) => die(e.message));
