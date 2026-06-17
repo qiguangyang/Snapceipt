@@ -110,6 +110,23 @@ async function getOrCreateGroup(appId) {
   return created.data.id;
 }
 
+// A subscription GROUP needs a localized display name (shown in the iOS
+// Manage-Subscriptions UI). Without it, EVERY subscription in the group stays
+// in MISSING_METADATA — even with price/availability/screenshot all set.
+async function setGroupLocalization(groupId) {
+  if (!groupId) { log(`WOULD set group localization (${LOCALE} "${GROUP_REF}")`); return; }
+  const cur = await api("GET", `/v1/subscriptionGroups/${groupId}/subscriptionGroupLocalizations?limit=50`);
+  if ((cur.data || []).some((l) => l.attributes?.locale === LOCALE)) { log(`group localization ${LOCALE} exists`); return; }
+  await api("POST", "/v1/subscriptionGroupLocalizations", {
+    data: {
+      type: "subscriptionGroupLocalizations",
+      attributes: { name: GROUP_REF, locale: LOCALE },
+      relationships: { subscriptionGroup: { data: { type: "subscriptionGroups", id: groupId } } },
+    },
+  });
+  log(`set group localization ${LOCALE} "${GROUP_REF}"`);
+}
+
 async function listSubs(groupId) {
   if (!groupId) return [];
   const r = await api("GET", `/v1/subscriptionGroups/${groupId}/subscriptions?limit=200`);
@@ -149,36 +166,50 @@ async function setAvailability(subId, p) {
 }
 
 async function setPrice(subId, p) {
-  if (!subId) { log(`WOULD set ${p.productId} price to ${p.price} (${BASE_TERRITORY} currency)`); return; }
-  // Eligible price points are per-subscription + per-territory. Match by NUMERIC value:
-  // the API returns "79.0" where our config says "79.00", so string-equality misses.
-  let url = `/v1/subscriptions/${subId}/pricePoints?filter[territory]=${BASE_TERRITORY}&include=territory&limit=200`;
-  let match;
-  for (let page = 0; page < 30 && url && !match; page++) {
+  if (!subId) { log(`WOULD set ${p.productId} price ${p.price} across ${TERRITORIES.join(",")}`); return; }
+  // Find the base-territory price point matching the configured amount. Match by
+  // NUMERIC value: the API returns "79.0" where our config says "79.00".
+  let baseId;
+  let url = `/v1/subscriptions/${subId}/pricePoints?filter[territory]=${BASE_TERRITORY}&limit=200`;
+  for (let page = 0; page < 30 && url && !baseId; page++) {
     const r = await api("GET", url);
-    match = (r.data || []).find((pp) => parseFloat(pp.attributes?.customerPrice) === parseFloat(p.price));
+    const m = (r.data || []).find((pp) => parseFloat(pp.attributes?.customerPrice) === parseFloat(p.price));
+    if (m) baseId = m.id;
     url = r.links?.next ? r.links.next.replace(API, "") : null;
   }
-  if (!match) { warn(`no ${BASE_TERRITORY} price point == ${p.price} for ${p.productId} — set the price manually in ASC`); return; }
-  log(`matched price point for ${p.productId}: ${p.price} (${match.id})`);
-  // Idempotency: skip if a current price already references this point.
-  const cur = await api("GET", `/v1/subscriptions/${subId}/prices?include=subscriptionPricePoint&limit=200`);
-  if ((cur.data || []).length) { log(`  price already set for ${p.productId} — leaving as-is`); return; }
-  try {
-    await api("POST", "/v1/subscriptionPrices", {
-      data: {
-        type: "subscriptionPrices",
-        attributes: { startDate: null },
-        relationships: {
-          subscription: { data: { type: "subscriptions", id: subId } },
-          subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: match.id } },
+  if (!baseId) { warn(`no ${BASE_TERRITORY} price point == ${p.price} for ${p.productId} — set manually`); return; }
+
+  // Which territories already have a price? (per-territory idempotency — the old code
+  // skipped if ANY price existed, so non-base territories were never priced.)
+  const cur = await api("GET", `/v1/subscriptions/${subId}/prices?include=territory&limit=200`);
+  const priced = new Set((cur.included || []).filter((x) => x.type === "territories").map((t) => t.id));
+
+  // Price EVERY availability territory. An available-but-unpriced territory keeps the
+  // sub in MISSING_METADATA. Non-base territories use the Apple tier-EQUALIZED point
+  // (same tier as the base) — creating one base price does NOT auto-price the rest via API.
+  for (const terr of TERRITORIES) {
+    if (priced.has(terr)) { log(`  ${terr} price already set for ${p.productId} — leaving as-is`); continue; }
+    let pointId = baseId;
+    if (terr !== BASE_TERRITORY) {
+      const eq = await api("GET", `/v1/subscriptionPricePoints/${baseId}/equalizations?filter[territory]=${terr}&limit=1`);
+      pointId = eq.data?.[0]?.id;
+      if (!pointId) { warn(`no ${terr} equalization for ${p.productId} — set price manually`); continue; }
+    }
+    try {
+      await api("POST", "/v1/subscriptionPrices", {
+        data: {
+          type: "subscriptionPrices",
+          attributes: { startDate: null },
+          relationships: {
+            subscription: { data: { type: "subscriptions", id: subId } },
+            subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: pointId } },
+          },
         },
-      },
-    });
-    log(`  set base price ${p.price} (${BASE_TERRITORY}); ASC equalises other territories`);
-  } catch (e) {
-    warn(`could not set price for ${p.productId} via API (${e.message.split("\n")[0]}).`);
-    warn(`  -> set it manually in ASC: ${p.price} ${BASE_TERRITORY} (price point ${match.id}).`);
+      });
+      log(`  set ${terr} price for ${p.productId} (point ${pointId})`);
+    } catch (e) {
+      warn(`could not set ${terr} price for ${p.productId}: ${e.message.split("\n")[0]}`);
+    }
   }
 }
 
@@ -226,6 +257,7 @@ async function setLocalization(subId, p) {
   log(`app: ${app.attributes?.name} (${BUNDLE_ID}, id ${app.id})`);
 
   const groupId = await getOrCreateGroup(app.id);
+  await setGroupLocalization(groupId); // group display name — required to clear MISSING_METADATA.
   const existingSubs = await listSubs(groupId);
   if (existingSubs.length) log(`existing subscriptions in group: ${existingSubs.map((s) => s.attributes?.productId).join(", ")}`);
 
