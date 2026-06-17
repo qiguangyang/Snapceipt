@@ -328,16 +328,25 @@ struct ReviewStep: View {
     }
 
     private var saveButton: some View {
-        Button(action: onSave) {
-            HStack(spacing: 8) {
-                Icon(name: "check", size: 20, color: .white)
-                Text("Save receipt").font(.ui(16, .bold)).foregroundStyle(.white)
+        VStack(spacing: 8) {
+            // Surface a save failure (e.g. no active profile) instead of failing silently.
+            if let error = vm.errorMessage {
+                Text(error)
+                    .font(.ui(13, .semibold)).foregroundStyle(Palette.alert)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier(AccessibilityID.captureSaveError)
             }
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+            Button(action: onSave) {
+                HStack(spacing: 8) {
+                    Icon(name: "check", size: 20, color: .white)
+                    Text("Save receipt").font(.ui(16, .bold)).foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.captureSave)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(AccessibilityID.captureSave)
     }
 
     @ViewBuilder

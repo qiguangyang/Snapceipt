@@ -39,6 +39,7 @@ enum AccessibilityID {
     static let captureReviewUpgrade = "capture.review.upgrade"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureSave = "capture.save"
+    static let captureSaveError = "capture.save.error"   // surfaced save failure (e.g. no profile)
     static let captureSavedTitle = "capture.saved.title"
     /// Shown on the Saved confirmation only when the receipt was captured offline
     /// (HeuristicParser fallback → outbox queue, extractionStatus=="pending"). Drives J18b/J18c.
@@ -261,6 +262,12 @@ enum AccessibilityID {
     static let paywallLoadError  = "paywall.loadError"   // empty/failed load message
     static let paywallRetry      = "paywall.retry"       // re-run loadProducts()
     static let paywallSubscribe  = "paywall.subscribe"   // CTA buying the selected plan
+    // Activity tab (receipts list)
+    static let activityScreen    = "activity.screen"
+    static let activityRowPrefix = "activity.row."       // + transaction.id
+    static let activityEmpty     = "activity.empty"
+    static let homeRecentSection = "home.recent.section"
+    static let homeRecentSeeAll  = "home.recent.seeAll"
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"
