@@ -22,4 +22,11 @@ struct AccessibilityIDBasTests {
         #expect(AccessibilityID.txnGstAmountField == "txn.gstAmount.field")
         #expect(AccessibilityID.taxAbnHint == "tax.abn.hint")
     }
+
+    @Test("paywall load-state ids exist with stable string values")
+    func paywallLoadStateIds() {
+        #expect(AccessibilityID.paywallLoading == "paywall.loading")
+        #expect(AccessibilityID.paywallLoadError == "paywall.loadError")
+        #expect(AccessibilityID.paywallRetry == "paywall.retry")
+    }
 }
