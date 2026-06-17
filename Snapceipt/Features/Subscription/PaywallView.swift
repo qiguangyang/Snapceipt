@@ -13,6 +13,9 @@ struct PaywallView: View {
 
     @State private var isPurchasing = false
     @State private var isRestoring = false
+    /// The plan the user has selected; the CTA buys this one. Defaults to the
+    /// highlighted (best-value) plan once products load.
+    @State private var selectedID: String?
     /// Set after a delay while still `.loading` so a slow/stuck network surfaces a
     /// Retry escape hatch beneath the spinner — without flipping load state (a late
     /// success still wins). Resets each time the loading view re-appears.
@@ -77,23 +80,20 @@ struct PaywallView: View {
         .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private var productButtons: some View {
-        VStack(spacing: 12) {
-            switch storekit.productsState {
-            case .loading:
-                loadingState
-            case .loaded(let products):
-                ForEach(products, id: \.id) { product in
-                    productButton(product)
-                }
-            case .empty:
-                // Store responded but vended nothing → App Store Connect isn't
-                // serving the products (agreement/availability). Generic copy;
-                // the specific cause is in the os_log (Console.app).
-                loadProblem("Couldn't load plans right now.")
-            case .failed:
-                loadProblem("Plans are temporarily unavailable.")
+    @ViewBuilder private var productButtons: some View {
+        switch storekit.productsState {
+        case .loading:
+            loadingState
+        case .loaded(let products):
+            planSelector(plans(from: products)) { id in
+                if let product = products.first(where: { $0.id == id }) { buy(product) }
             }
+        case .empty:
+            // Store responded but vended nothing → App Store Connect isn't serving the
+            // products (agreement/availability). Generic copy; cause is in the os_log.
+            loadProblem("Couldn't load plans right now.")
+        case .failed:
+            loadProblem("Plans are temporarily unavailable.")
         }
     }
 
@@ -149,33 +149,133 @@ struct PaywallView: View {
         .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    @ViewBuilder private func productButton(_ product: Product) -> some View {
-        let isMonthly = product.id == StoreKitService.ProductID.monthly
-        Button {
-            guard !isPurchasing else { return }
-            isPurchasing = true
-            Task {
-                let outcome = await storekit.purchase(product)
-                isPurchasing = false
-                if outcome == .success { dismiss() }
+    // MARK: - Plan selector (cards + CTA)
+
+    /// Selectable plan cards + a single CTA that buys the selected plan. Best-value plan
+    /// is selected by default.
+    @ViewBuilder private func planSelector(_ plans: [PaywallPlan],
+                                           purchase: @escaping (String) -> Void = { _ in }) -> some View {
+        let current = plans.first { $0.id == selectedID } ?? plans.first { $0.highlight } ?? plans.first
+        VStack(spacing: 12) {
+            ForEach(plans) { plan in
+                planCard(plan, isSelected: plan.id == current?.id)
+                    .onTapGesture { withAnimation(.snappy(duration: 0.18)) { selectedID = plan.id } }
             }
-        } label: {
-            VStack(spacing: 4) {
-                Text("\(product.displayName) — \(product.displayPrice)")
-                    .font(.ui(16, .semibold))
-                    .foregroundStyle(.white)
-                if product.subscription?.introductoryOffer != nil {
-                    Text("14-day free trial, then \(product.displayPrice)/\(isMonthly ? "mo" : "yr")")
-                        .font(.ui(12))
-                        .foregroundStyle(.white.opacity(0.85))
+            if let current {
+                ctaButton(current, purchase: purchase).padding(.top, 4)
+            }
+        }
+        .onAppear {
+            if selectedID == nil { selectedID = (plans.first { $0.highlight } ?? plans.last)?.id }
+        }
+    }
+
+    @ViewBuilder private func planCard(_ plan: PaywallPlan, isSelected: Bool) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(plan.title).font(.ui(16, .bold)).foregroundStyle(Palette.ink)
+                    if let badge = plan.savingsBadge {
+                        Text(badge)
+                            .font(.ui(10.5, .bold)).tracking(0.3).foregroundStyle(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(accent.base, in: Capsule())
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(plan.price).font(.ui(25, .bold)).foregroundStyle(Palette.ink)
+                    Text("/ \(plan.periodNoun)").font(.ui(14, .medium)).foregroundStyle(Palette.ink2)
+                }
+                if let perMonth = plan.perMonth {
+                    Text("\(perMonth)/mo · billed annually").font(.ui(12.5)).foregroundStyle(Palette.ink2)
+                }
+                if plan.hasTrial {
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.seal.fill").font(.ui(12)).foregroundStyle(accent.base)
+                        Text("14-day free trial included").font(.ui(12.5, .semibold)).foregroundStyle(accent.deep)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(accent.base, in: RoundedRectangle(cornerRadius: 14))
+            Spacer(minLength: 8)
+            ZStack {
+                Circle().strokeBorder(isSelected ? accent.base : Palette.ink3, lineWidth: 2)
+                if isSelected { Circle().fill(accent.base).padding(5) }
+            }
+            .frame(width: 24, height: 24)
         }
-        .disabled(isPurchasing)
-        .accessibilityIdentifier(isMonthly ? AccessibilityID.paywallBuyMonthly : AccessibilityID.paywallBuyYearly)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? accent.soft : Palette.paper, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(isSelected ? accent.base : Palette.line, lineWidth: isSelected ? 2 : 1.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityIdentifier(plan.id == StoreKitService.ProductID.monthly
+                                 ? AccessibilityID.paywallBuyMonthly : AccessibilityID.paywallBuyYearly)
+    }
+
+    @ViewBuilder private func ctaButton(_ plan: PaywallPlan, purchase: @escaping (String) -> Void) -> some View {
+        VStack(spacing: 8) {
+            Button {
+                guard !isPurchasing else { return }
+                purchase(plan.id)
+            } label: {
+                HStack(spacing: 8) {
+                    if isPurchasing { ProgressView().tint(.white) }
+                    Text(plan.hasTrial ? "Start 14-day free trial" : "Subscribe")
+                        .font(.ui(17, .semibold)).foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 17)
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 16))
+            }
+            .disabled(isPurchasing)
+            .accessibilityIdentifier(AccessibilityID.paywallSubscribe)
+            Text(plan.hasTrial
+                 ? "Then \(plan.price)/\(plan.periodNoun) · cancel anytime"
+                 : "\(plan.price)/\(plan.periodNoun) · cancel anytime")
+                .font(.ui(12)).foregroundStyle(Palette.ink3)
+        }
+    }
+
+    /// Buy a product, dismissing on success. Shared by the CTA.
+    private func buy(_ product: Product) {
+        guard !isPurchasing else { return }
+        isPurchasing = true
+        Task {
+            let outcome = await storekit.purchase(product)
+            isPurchasing = false
+            if outcome == .success { dismiss() }
+        }
+    }
+
+    /// Map loaded StoreKit products to display plans (annual first, with per-month +
+    /// savings derived from the monthly price).
+    private func plans(from products: [Product]) -> [PaywallPlan] {
+        let monthly = products.first { $0.id == StoreKitService.ProductID.monthly }
+        let yearly = products.first { $0.id == StoreKitService.ProductID.yearly }
+        var result: [PaywallPlan] = []
+        if let y = yearly {
+            var badge: String?
+            if let m = monthly?.price {
+                let md = Double(truncating: m as NSNumber), yd = Double(truncating: y.price as NSNumber)
+                if md > 0 {
+                    let pct = Int((100 * (1 - yd / (md * 12))).rounded())
+                    if pct > 0 { badge = "SAVE \(pct)%" }
+                }
+            }
+            result.append(PaywallPlan(
+                id: y.id, title: "Annual", price: y.displayPrice, periodNoun: "year",
+                perMonth: (y.price / 12).formatted(y.priceFormatStyle),
+                savingsBadge: badge, highlight: true, hasTrial: y.subscription?.introductoryOffer != nil))
+        }
+        if let m = monthly {
+            result.append(PaywallPlan(
+                id: m.id, title: "Monthly", price: m.displayPrice, periodNoun: "month",
+                perMonth: nil, savingsBadge: nil, highlight: false,
+                hasTrial: m.subscription?.introductoryOffer != nil))
+        }
+        return result
     }
 
     private var restoreButton: some View {
@@ -208,6 +308,19 @@ struct PaywallView: View {
         .font(.ui(13))
         .foregroundStyle(Palette.ink3)
     }
+}
+
+/// View model for a paywall plan card — decoupled from `Product` so the layout can be
+/// previewed/screenshotted with sample data.
+struct PaywallPlan: Identifiable {
+    let id: String
+    let title: String          // "Annual" / "Monthly"
+    let price: String          // localized display price, e.g. "$49.00"
+    let periodNoun: String     // "year" / "month"
+    let perMonth: String?      // yearly equivalent, e.g. "$4.08"; nil for monthly
+    let savingsBadge: String?  // e.g. "SAVE 32%"; nil when none
+    let highlight: Bool        // best-value plan (default-selected)
+    let hasTrial: Bool
 }
 
 #Preview {

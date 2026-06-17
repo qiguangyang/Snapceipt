@@ -28,5 +28,6 @@ struct AccessibilityIDBasTests {
         #expect(AccessibilityID.paywallLoading == "paywall.loading")
         #expect(AccessibilityID.paywallLoadError == "paywall.loadError")
         #expect(AccessibilityID.paywallRetry == "paywall.retry")
+        #expect(AccessibilityID.paywallSubscribe == "paywall.subscribe")
     }
 }
