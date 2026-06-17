@@ -268,6 +268,8 @@ enum AccessibilityID {
     static let activityEmpty     = "activity.empty"
     static let homeRecentSection = "home.recent.section"
     static let homeRecentSeeAll  = "home.recent.seeAll"
+    static let receiptDetailScreen = "receipt.detail.screen"
+    static let receiptDetailClose  = "receipt.detail.close"
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"

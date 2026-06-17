@@ -402,7 +402,8 @@ struct ShellView: View {
         case .home:
             homeStub(accent: accent)
         case .activity:
-            ActivityTabView(context: profiles.context, profileId: profiles.activeProfileId)
+            ActivityTabView(context: profiles.context, profileId: profiles.activeProfileId,
+                            onOpenReceipt: { router.present(.receiptDetail(id: $0)) })
         case .reports:
             ReportsView(
                 context: profiles.context,
@@ -493,7 +494,8 @@ struct ShellView: View {
                 }
 
                 HomeRecentReceipts(profileId: profiles.activeProfileId,
-                                   onSeeAll: { router.go(.activity) })
+                                   onSeeAll: { router.go(.activity) },
+                                   onOpenReceipt: { router.present(.receiptDetail(id: $0)) })
                     .padding(.horizontal, 18).padding(.top, 16)
 
                 BudgetTrackerView(
@@ -639,6 +641,11 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
+        case .receiptDetail(let id):
+            ReceiptDetailView(context: profiles.context, transactionId: id,
+                              onClose: { router.dismissOverlay() })
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Palette.cream)
         case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .emailIn, .emailInReview,
