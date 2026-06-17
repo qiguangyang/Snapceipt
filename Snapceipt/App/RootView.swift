@@ -492,6 +492,10 @@ struct ShellView: View {
                     .padding(.horizontal, 18).padding(.top, 12)
                 }
 
+                HomeRecentReceipts(profileId: profiles.activeProfileId,
+                                   onSeeAll: { router.go(.activity) })
+                    .padding(.horizontal, 18).padding(.top, 16)
+
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
                     userId: profiles.userId, profileId: profiles.activeProfileId,
