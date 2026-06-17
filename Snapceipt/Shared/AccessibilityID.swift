@@ -260,6 +260,7 @@ enum AccessibilityID {
     static let paywallLoading    = "paywall.loading"     // spinner while products load
     static let paywallLoadError  = "paywall.loadError"   // empty/failed load message
     static let paywallRetry      = "paywall.retry"       // re-run loadProducts()
+    static let paywallSubscribe  = "paywall.subscribe"   // CTA buying the selected plan
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"

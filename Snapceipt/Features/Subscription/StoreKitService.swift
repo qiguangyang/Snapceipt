@@ -79,6 +79,11 @@ final class StoreKitService {
 
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
     @ObservationIgnored private let log = Logger(subsystem: "app.snapceipt", category: "storekit")
+    /// The product fetch — injectable so tests can drive `loadProducts()` deterministically
+    /// (StoreKit's `Product` has no public initializer and `SKTestSession` is flaky on CI).
+    /// Defaults to the live StoreKit 2 query.
+    @ObservationIgnored
+    var fetchProducts: @Sendable () async throws -> [Product] = { try await Product.products(for: ProductID.all) }
 
     init() {
         // Listen for out-of-band transaction updates (renewals, Ask-to-Buy approvals,
@@ -107,7 +112,7 @@ final class StoreKitService {
     func loadProducts() async {
         productsState = .loading
         do {
-            let loaded = try await Product.products(for: ProductID.all)
+            let loaded = try await fetchProducts()
             productsState = Self.productsState(loaded: loaded, error: nil)
             if loaded.isEmpty {
                 log.error("Pro products loaded EMPTY — check App Store Connect: Paid Apps agreement Active? subscriptions Ready to Submit? product ids \(ProductID.all.joined(separator: ", "), privacy: .public)")
