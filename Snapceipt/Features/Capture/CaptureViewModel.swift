@@ -6,6 +6,13 @@ import Observation
 /// The 4-stage capture flow state.
 enum CaptureStage: Equatable { case camera, scanning, review, saved }
 
+/// A pickable profile for the Review "Assign to profile" control.
+struct ProfileOption: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let type: String   // "personal" | "business"
+}
+
 /// Drives snap → OCR → extract → review → save. `@MainActor`; all deps injected as
 /// protocols so it is unit-testable with mocks. Never dead-ends offline: a failed
 /// `/extract` falls back to the on-device `HeuristicParser`.
@@ -52,6 +59,14 @@ final class CaptureViewModel {
     /// Review toggle so it opens on the actual save target. Defaults to personal when
     /// there is no active profile.
     var activeMode: String { profiles.activeProfile?.type ?? ProfileType.personal.rawValue }
+
+    /// The active profile's id — the default Review "Assign to profile" selection.
+    var activeProfileId: String { profiles.activeProfileId }
+
+    /// All of the user's profiles, by name, for the Review "Assign to profile" picker.
+    var profileOptions: [ProfileOption] {
+        profiles.profiles.map { ProfileOption(id: $0.id, name: $0.name, type: $0.type) }
+    }
 
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let reducer: ImageReducing
@@ -147,9 +162,13 @@ final class CaptureViewModel {
     /// Persist the (possibly edited) draft: insert the txn + line items, enqueue each
     /// for sync, and create a local-only `PendingReceipt` (writing the reduced JPEG to
     /// Application Support). Guards on an active profile.
-    func save() {
+    func save(toProfileId profileId: String? = nil) {
         guard let draft else { return }
-        guard let profile = profiles.activeProfile else {
+        // File under the chosen profile (Review "Assign to profile"); fall back to the
+        // active profile when no explicit target is given (callers/tests that omit it).
+        let targetId = profileId ?? profiles.activeProfileId
+        guard let profile = profiles.profiles.first(where: { $0.id == targetId })
+            ?? profiles.activeProfile else {
             errorMessage = "Select a profile before saving."
             return
         }

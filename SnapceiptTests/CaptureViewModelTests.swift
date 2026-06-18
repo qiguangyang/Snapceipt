@@ -222,4 +222,29 @@ struct CaptureViewModelTests {
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.diagnostics?.engine == .offlineHeuristic)
     }
+
+    @Test("save(toProfileId:) files the txn under the SELECTED profile, not the active one")
+    func saveUnderSelectedProfile() async throws {
+        UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let p1 = Profile(userId: "u1", name: "Home Budget", type: "personal",
+                         accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)
+        let p2 = Profile(userId: "u1", name: "Studio North", type: "business",
+                         accent1: "#2F6FB0", accent2: "#E2ECF6", accent3: "#1E4E80", isDefault: false)
+        ctx.insert(p1); ctx.insert(p2); try ctx.save()
+        let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u1")
+        store.setActive(p1.id)
+        let api = MockAPIClient(); api.extractHandler = { _, _, _ in self.okResponse() }
+        let vm = CaptureViewModel(api: api, reducer: PassReducer(), sync: SpySync(),
+                                  profiles: store, context: ctx, userId: "u1")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
+        // Active profile is p1 (personal); explicitly assign the receipt to p2 (business).
+        vm.save(toProfileId: p2.id)
+        let txns = try ctx.fetch(FetchDescriptor<Transaction>())
+        #expect(txns.count == 1)
+        #expect(txns.first?.profileId == p2.id)
+        #expect(txns.first?.mode == "business")
+        #expect(vm.savedMode == "business")
+    }
 }

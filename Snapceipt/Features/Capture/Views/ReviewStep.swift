@@ -8,11 +8,9 @@ struct ReviewStep: View {
     @Environment(\.accent) private var accent
     @Environment(EntitlementStore.self) private var entitlement
     @Binding var draft: ExtractedReceipt
-    // Presentation-only in v1: re-skins the toggle live but is NOT the save target.
-    // `CaptureViewModel.save()` always persists under `profiles.activeProfile` (the
-    // txn `mode`/`profileId` come from the active profile, per the scope-by-active-
-    // profileId rule). See the toggle comment below.
-    @Binding var mode: String                 // "personal" | "business"
+    /// The profile the receipt will be saved under (Review "Assign to profile"). Drives
+    /// the business-only GST fields via `selectedType`; passed to `save(toProfileId:)`.
+    @Binding var selectedProfileId: String
     /// The view model, read-only here — ReviewStep only reads `smartScanCapped` /
     /// `smartScanCap`; it never mutates the VM directly.
     let vm: CaptureViewModel
@@ -26,6 +24,15 @@ struct ReviewStep: View {
     private func label(_ key: String) -> String {
         guard let ck = CategoryKey(rawValue: key) else { return key.capitalized }
         return CATS[ck]?.label ?? key.capitalized
+    }
+
+    /// The selected profile's type — drives the business-only GST fields and the icon.
+    private var selectedType: String {
+        vm.profileOptions.first(where: { $0.id == selectedProfileId })?.type
+            ?? ProfileType.personal.rawValue
+    }
+    private var selectedProfileName: String {
+        vm.profileOptions.first(where: { $0.id == selectedProfileId })?.name ?? "Select profile"
     }
 
     var body: some View {
@@ -217,7 +224,7 @@ struct ReviewStep: View {
                     get: { draft.taxLabel ?? "" },
                     set: { draft.taxLabel = $0.isEmpty ? nil : $0 }))
             }
-            if mode == "business" {
+            if selectedType == "business" {
                 Toggle("GST-free (no GST)", isOn: Binding(
                     get: { draft.gstFree },
                     set: { isFree in
@@ -259,10 +266,8 @@ struct ReviewStep: View {
             .cardShadow()
     }
 
-    // v1: presentation-only. Toggling Personal/Business re-skins the card live but
-    // does NOT change which profile the txn is saved under — `save()` uses
-    // `profiles.activeProfile` (scope-by-active-profileId). This is intentional for
-    // v1; switching the save target is deferred.
+    // The "Assign to profile" picker drives the real save target: the receipt is saved
+    // under the selected profile via `CaptureViewModel.save(toProfileId:)`.
     private var profileToggle: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Assign to profile")
@@ -273,52 +278,33 @@ struct ReviewStep: View {
         .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
     }
 
-    /// The default ModeToggle Segmented sliding control (spec §2 L152-155): a paper-2
-    /// track with a single white thumb that animates between Personal/Business, each
-    /// option carrying a leading icon tinted to its FIXED per-option color (Personal
-    /// wallet+terracotta, Business building+teal) when selected, else --ink-3.
+    /// Menu picker over ALL the user's profiles by name. Selecting one sets
+    /// `selectedProfileId` (the save target) and drives the business-only GST fields.
     private var segmented: some View {
-        let types = ProfileType.allCases
-        let selectedIndex = types.firstIndex { mode == $0.rawValue } ?? 0
-        return GeometryReader { geo in
-            let thumbW = (geo.size.width - 8) / CGFloat(types.count)
-            ZStack(alignment: .leading) {
-                // Sliding white thumb with a soft shadow.
-                Capsule()
-                    .fill(Palette.paper)
-                    .shadow(color: Palette.ink.opacity(0.18), radius: 3, x: 0, y: 2)
-                    .frame(width: thumbW)
-                    .padding(.vertical, 4)
-                    .offset(x: 4 + CGFloat(selectedIndex) * thumbW)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selectedIndex)
-
-                HStack(spacing: 0) {
-                    ForEach(types) { type in
-                        let selected = mode == type.rawValue
-                        Button { mode = type.rawValue } label: {
-                            HStack(spacing: 6) {
-                                Icon(name: type.iconName, size: 16,
-                                     color: selected ? optionTint(type) : Palette.ink3)
-                                Text(type.label)
-                                    .font(.ui(14, .semibold))
-                                    .foregroundStyle(selected ? Palette.ink : Palette.ink3)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+        Menu {
+            ForEach(vm.profileOptions) { opt in
+                Button { selectedProfileId = opt.id } label: {
+                    if opt.id == selectedProfileId {
+                        Label(opt.name, systemImage: "checkmark")
+                    } else {
+                        Text(opt.name)
                     }
                 }
             }
+        } label: {
+            HStack(spacing: 8) {
+                Icon(name: selectedType == ProfileType.business.rawValue ? "building" : "wallet",
+                     size: 16, color: accent.base)
+                Text(selectedProfileName)
+                    .font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
+                Spacer()
+                Icon(name: "chevD", size: 15, color: Palette.ink3)
+            }
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .padding(.horizontal, 14)
+            .background(Palette.paper2, in: Capsule())
         }
-        .frame(height: 46)
-        .background(Palette.paper2, in: Capsule())
-    }
-
-    /// FIXED per-option tint (spec §2 L155): Personal terracotta, Business teal,
-    /// independent of the active accent.
-    private func optionTint(_ type: ProfileType) -> Color {
-        type == .personal ? AccentPalette.personal.base : AccentPalette.business.base
+        .tint(accent.base)
     }
 
     private var lineItemsCard: some View {
