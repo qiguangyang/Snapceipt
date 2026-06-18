@@ -53,6 +53,23 @@ struct BudgetListViewModelTests {
         #expect(sync.calls.count == 2)
     }
 
+    @Test("existingBudget detects a whole-profile duplicate and a per-category duplicate")
+    func existingBudgetDetectsDuplicates() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        // Nothing yet → no duplicate for either scope.
+        #expect(v.existingBudget(scopeCategory: false, catKey: "meals") == nil)
+        #expect(v.existingBudget(scopeCategory: true, catKey: "meals") == nil)
+        // One whole-profile budget → whole-profile scope is now a duplicate; categories are free.
+        v.save(existing: nil, categoryId: nil, catKey: nil, label: "All", capCents: 100_00, alertThresholdPct: 90)
+        #expect(v.existingBudget(scopeCategory: false, catKey: "meals") != nil)
+        #expect(v.existingBudget(scopeCategory: true, catKey: "meals") == nil)
+        // A meals category budget → meals is a duplicate; another category (fuel) is still free.
+        v.save(existing: nil, categoryId: "c-meals", catKey: "meals", label: "Meals", capCents: 50_00, alertThresholdPct: 90)
+        #expect(v.existingBudget(scopeCategory: true, catKey: "meals") != nil)
+        #expect(v.existingBudget(scopeCategory: true, catKey: "fuel") == nil)
+    }
+
     @Test("delete soft-deletes and enqueues a delete")
     func deleteSoft() throws {
         let (ctx, sync) = try makeFixture()

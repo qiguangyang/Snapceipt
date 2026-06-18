@@ -52,6 +52,14 @@ struct BudgetEditorView: View {
     }
     @State private var scopeSelection = "profile"
 
+    /// When adding (budgetId == nil), the conflicting budget for the current scope, if any.
+    /// Drives the duplicate warning + disables Save so a whole-profile budget can't be
+    /// duplicated and a category can have at most one budget.
+    private var existingDuplicate: Budget? {
+        guard budgetId == nil, let vm else { return nil }
+        return vm.existingBudget(scopeCategory: scopeCategory, catKey: catKey)
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Palette.cream.ignoresSafeArea()
@@ -65,6 +73,7 @@ struct BudgetEditorView: View {
                                 .accessibilityIdentifier(AccessibilityID.budgetEditorScopeProfile)
                         }
                         if scopeSelection == "category" { categoryPicker }
+                        duplicateWarning
                         field("Label", text: $label)
                         capField
                         thresholdField
@@ -118,6 +127,25 @@ struct BudgetEditorView: View {
         .accessibilityIdentifier(AccessibilityID.budgetEditorScopeCategory)
     }
 
+    /// Shown when adding a budget for a scope that already has one — explains why Save
+    /// is disabled (budgets can't be duplicated).
+    @ViewBuilder
+    private var duplicateWarning: some View {
+        if existingDuplicate != nil {
+            HStack(alignment: .top, spacing: 8) {
+                Icon(name: "info", size: 16, color: Palette.alert)
+                Text(scopeCategory
+                     ? "You already have a budget for \(CATS[CategoryKey(rawValue: catKey) ?? .meals]?.label ?? catKey). Edit it from the list instead."
+                     : "You already have a whole-profile budget. Edit it from the list instead.")
+                    .font(.ui(12.5)).foregroundStyle(Palette.ink2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(12)
+            .background(Palette.alert.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityIdentifier(AccessibilityID.budgetEditorDuplicateWarning)
+        }
+    }
+
     private func field(_ title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
@@ -163,8 +191,10 @@ struct BudgetEditorView: View {
         Button(action: save) {
             Text("Save").font(.ui(16, .semibold)).foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: 16))
+                .background(existingDuplicate == nil ? accent.base : Palette.line,
+                            in: RoundedRectangle(cornerRadius: 16))
         }
+        .disabled(existingDuplicate != nil)
         .padding(.horizontal, 18).padding(.bottom, 26)
         .accessibilityIdentifier(AccessibilityID.budgetEditorSave)
     }
@@ -179,6 +209,9 @@ struct BudgetEditorView: View {
     }
 
     private func save() {
+        // Belt-and-braces: Save is disabled when a duplicate scope exists, but never
+        // create a second whole-profile / same-category budget even if reached.
+        guard existingDuplicate == nil else { return }
         let capCents = (Int(capText) ?? 0) * 100
         let categoryId: String? = scopeCategory ? resolveCategoryId(catKey) : nil
         vm?.save(existing: editing, categoryId: categoryId,

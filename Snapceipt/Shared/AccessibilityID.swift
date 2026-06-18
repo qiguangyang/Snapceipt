@@ -133,6 +133,7 @@ enum AccessibilityID {
     static let budgetEditorThreshold = "budget.editor.threshold"
     static let budgetEditorSave = "budget.editor.save"
     static let budgetEditorDelete = "budget.editor.delete"
+    static let budgetEditorDuplicateWarning = "budget.editor.duplicateWarning"
 
     // Alerts (F3)
     static let alertsScreen = "alerts.screen"

@@ -213,7 +213,22 @@ async function applyMutation(
     status: "applied",
     entity: rowToEntity(meta, persisted),
   };
-  await db.batch([writeStmt, recordStmt(db, userId, deviceId, m, result)]);
+  try {
+    await db.batch([writeStmt, recordStmt(db, userId, deviceId, m, result)]);
+  } catch {
+    // A DB constraint violation here (e.g. a budget whose category_id references a
+    // category that has not synced yet → FOREIGN KEY, or a duplicate-scope budget →
+    // UNIQUE) must reject ONLY this mutation — never throw out of /sync/push and 500
+    // the whole batch, which makes the client treat the push as transient and silently
+    // go offline. The batch rolled back, so nothing was written; record + return a
+    // clean rejection (mirrors the PROFILE_ID_REQUIRED pre-check above).
+    return recordAndReturn(db, userId, deviceId, m, {
+      mutationId: m.mutationId,
+      status: "rejected",
+      reason: "VALIDATION_FAILED",
+      entity: null,
+    });
+  }
   return result;
 }
 
