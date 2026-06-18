@@ -126,11 +126,11 @@ struct ReviewStep: View {
         .onAppear {
             if totalText.isEmpty { totalText = Self.priceText(draft.total) }
         }
-        // Editing the total directly updates the draft + recomputes GST. (Editing line
-        // items below re-drives the total; this stands until the next item edit.)
+        // Editing the total directly updates the draft. (Editing line items below
+        // re-drives the total; this stands until the next item edit.) GST is NOT derived
+        // from the total — it's the receipt's value, edited in its own field below.
         .onChange(of: totalText) { _, _ in
             draft.total = Self.parseAmount(totalText)
-            recomputeGst()
         }
     }
 
@@ -255,7 +255,8 @@ struct ReviewStep: View {
                     get: { draft.gstFree },
                     set: { isFree in
                         draft.gstFree = isFree
-                        // Authority rule: keep the displayed GST in sync immediately.
+                        // GST-free zeroes GST; turning it back on re-infers a starting
+                        // value that's then editable in the GST field below.
                         let r = GstTreatment.applyGstFree(isFree, totalCents: Int((draft.total as NSDecimalNumber).doubleValue * 100))
                         draft.gst = r.gstCents.map { Decimal($0) / 100 }
                     }))
@@ -263,19 +264,20 @@ struct ReviewStep: View {
 
                 Toggle("Capital purchase (asset)", isOn: $draft.capital)
                     .accessibilityIdentifier(AccessibilityID.txnCapitalToggle)
-
-                if !draft.gstFree {
-                    field("GST amount") {
-                        TextField("GST", text: Binding(
-                            get: { draft.gst.map { "\($0)" } ?? "" },
-                            set: { s in
-                                let cents = Int((Double(s) ?? 0) * 100)
-                                let r = GstTreatment.applyManualGst(cents)
-                                draft.gst = r.gstCents.map { Decimal($0) / 100 }
-                            }))
-                            .keyboardType(.decimalPad)
-                            .accessibilityIdentifier(AccessibilityID.txnGstAmountField)
-                    }
+            }
+            // GST is read from the receipt and editable here — NOT derived from the total
+            // (some items can be GST-free, so total/11 is wrong). Hidden only when a
+            // business receipt is marked GST-free.
+            if !(selectedType == "business" && draft.gstFree) {
+                field("GST") {
+                    TextField("0.00", text: Binding(
+                        get: { draft.gst.map { NSDecimalNumber(decimal: $0).stringValue } ?? "" },
+                        set: { s in
+                            let raw = s.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
+                            draft.gst = raw.isEmpty ? nil : max(Decimal(string: raw) ?? 0, 0)
+                        }))
+                        .keyboardType(.decimalPad)
+                        .accessibilityIdentifier(AccessibilityID.txnGstAmountField)
                 }
             }
         }
@@ -442,19 +444,6 @@ struct ReviewStep: View {
     private static func parseAmount(_ text: String) -> Decimal {
         let raw = text.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
         return max(Decimal(string: raw) ?? 0, 0)
-    }
-
-    /// Recompute the inclusive AU GST (total/11) whenever the total changes, so the
-    /// "incl. $X GST" pill stays consistent with the displayed total. GST-free receipts
-    /// carry no GST.
-    private func recomputeGst() {
-        guard !draft.gstFree else { draft.gst = nil; return }
-        draft.gst = draft.total > 0 ? Self.roundedGst(draft.total) : nil
-    }
-    private static func roundedGst(_ total: Decimal) -> Decimal {
-        var raw = total / 11, rounded = Decimal()
-        NSDecimalRound(&rounded, &raw, 2, .plain)
-        return rounded
     }
 
     private var disabledChips: some View {
