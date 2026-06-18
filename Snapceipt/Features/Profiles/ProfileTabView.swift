@@ -25,6 +25,10 @@ struct ProfileTabView: View {
     /// Inert visual toggle (matches the prototype): defaults ON, drives no behaviour.
     @State private var aiAutoCategorise = true
 
+    /// Persisted Smart Scan AI toggle (default ON). Controls whether a scan calls
+    /// DeepSeek (`/extract`) or uses the on-device heuristic — see CaptureViewModel.extract().
+    @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = true
+
     // Per-row icon tints (from the Claude design): purple categories, green tax,
     // ocean-blue banks. App-group rows use the neutral ink/paper treatment.
     private let categoriesTint = Color(hex: 0x7B5BD6)
@@ -84,6 +88,8 @@ struct ProfileTabView: View {
             Card(padding: 16) {
                 VStack(spacing: 0) {
                     aiAutoCategoriseRow
+                    rowDivider
+                    smartScanRow
                     rowDivider
                     settingRow(icon: "tag", title: "Categories & rules", detail: nil,
                                tint: categoriesTint, soft: categoriesSoft,
@@ -251,6 +257,21 @@ struct ProfileTabView: View {
         }
         .padding(.vertical, 13)
         .accessibilityIdentifier(AccessibilityID.profileAiAutoCategorise)
+    }
+
+    /// Real, persisted Smart Scan toggle (distinct from the inert aiAutoCategoriseRow).
+    private var smartScanRow: some View {
+        HStack(spacing: 12) {
+            IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Smart Scan AI").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                Text("Use AI to read receipts").font(.ui(12)).foregroundStyle(Palette.ink3)
+            }
+            Spacer()
+            Toggle("", isOn: $smartScanEnabled).labelsHidden().tint(Palette.income)
+        }
+        .padding(.vertical, 13)
+        .accessibilityIdentifier(AccessibilityID.profileSmartScanToggle)
     }
 
     /// Connected banks — Coming-soon placeholder. Disabled, no action, no network
