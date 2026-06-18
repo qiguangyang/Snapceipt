@@ -41,6 +41,7 @@ struct ReviewStep: View {
                     } else {
                         aiBanner
                     }
+                    diagnosticLine
                     fieldsCard
                     // "Assign to profile" lives in its OWN block AFTER the details card.
                     profileBlock
@@ -133,6 +134,20 @@ struct ReviewStep: View {
             RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
                 .stroke(accent.base.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    /// Developer diagnostic line: which engine produced this draft + timing/confidence.
+    /// Visible to all users by product decision; reads `vm.diagnostics`.
+    @ViewBuilder
+    private var diagnosticLine: some View {
+        if let d = vm.diagnostics {
+            Text(d.summary)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Palette.ink3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .accessibilityIdentifier(AccessibilityID.captureReviewDiagnostics)
+        }
     }
 
     /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the free-plan
