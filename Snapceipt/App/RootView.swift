@@ -174,10 +174,9 @@ struct ShellView: View {
             // `.accessibilityIdentifier` directly to the composite TabBar would instead
             // propagate down and clobber every child id to `shell.tabbar`.
             TabBar(router: router, accent: accent)
-                // Sit the floating bar just above the home-indicator safe area
-                // (the inset itself keeps it clear of the gesture zone) rather
-                // than floating it well above the bottom edge.
-                .padding(.bottom, 8)
+                // Sit the floating bar low — just clear of the home-indicator safe area
+                // (the inset keeps it out of the gesture zone) for a tighter bottom edge.
+                .padding(.bottom, 2)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
