@@ -24,7 +24,7 @@ final class BasUITests: UITestCase {
     }
 
     @MainActor func test_basCardOpensBasViewFixesIncomeAndLodges() {
-        launchBasSeed()
+        launchBasSeed(pro: true)   // the BAS card is Pro-gated; open it without a paywall
         app.buttons[AccessibilityID.tabReports].tap()
         // The Reports restyle reordered/added cards, so the BAS card may now sit further
         // down the Reports ScrollView — it exists but isn't hittable off the fold. Bind it

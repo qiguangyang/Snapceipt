@@ -118,6 +118,7 @@ struct ReportsView: View {
                     }
                 }
             }
+            .contentShape(Rectangle())   // whole card tappable (Spacers aren't dead-zones)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.reportsBasCard)

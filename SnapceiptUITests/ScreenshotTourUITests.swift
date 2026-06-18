@@ -134,7 +134,9 @@ final class ScreenshotTourUITests: UITestCase {
     @MainActor func test_area06_logbooks() {
         // Mileage/WFH are PERSONAL-only Home quick actions AND Pro-gated, so launch the
         // tour with the personal profile active + a Pro plan (no paywall on Add vehicle).
-        launchTour(activeType: "personal", pro: true)
+        // Launch business-active, then switch to personal via the picker — the switcher
+        // header reads "Studio North", so "Home Budget" is unambiguous (picker only).
+        launchTour(pro: true)
         switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickMileage], "home.quick.mileage")
         app.descendants(matching: .any)[AccessibilityID.homeQuickMileage].firstMatch.tap()
@@ -180,7 +182,9 @@ final class ScreenshotTourUITests: UITestCase {
         // Loyalty is a PERSONAL-only Home quick action, so launch with the personal
         // profile active. pro:true is harmless (loyalty itself isn't Pro-gated) and
         // keeps this area paywall-free if the quick action ever becomes gated.
-        launchTour(activeType: "personal", pro: true)
+        // Launch business-active, then switch to personal via the picker — the switcher
+        // header reads "Studio North", so "Home Budget" is unambiguous (picker only).
+        launchTour(pro: true)
         switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty], "home.quick.loyalty")
         app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
@@ -338,7 +342,7 @@ final class ScreenshotTourUITests: UITestCase {
     // so the gated card + BasView render. Shoots the card, the spine, and the
     // post-lodge state.
     @MainActor func test_area14_bas() {
-        launchBasSeed()
+        launchBasSeed(pro: true)   // the BAS card is Pro-gated; open it without a paywall
         require(app.buttons[AccessibilityID.tabReports], "tab.reports")
         app.buttons[AccessibilityID.tabReports].tap()
         // The BAS card moved FURTHER DOWN the restyled Reports ScrollView (cards

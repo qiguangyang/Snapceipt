@@ -39,8 +39,9 @@ class UITestCase: XCTestCase {
 
     /// Launch directly into the BAS fixture: a GST-registered Business profile p1
     /// active + a non-registered Business p2 — for BasUITests.
-    func launchBasSeed() {
+    func launchBasSeed(pro: Bool = false) {
         app.launchArguments += ["-uiTestStub", "-uiTestBasSeed"]
+        if pro { app.launchArguments += ["-uiTestPro"] }
         app.launch()
     }
 
