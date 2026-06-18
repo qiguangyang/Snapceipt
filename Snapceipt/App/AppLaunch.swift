@@ -106,6 +106,10 @@ struct AppLaunch {
     /// where the profile switcher must be enabled (needs >1 profile). DEBUG only.
     func applySeedIfNeeded(authStore: AuthStore, context: ModelContext) {
         guard seed else { return }
+        // A seeded user is already onboarded — skip first-run priming so the launch
+        // lands directly in the shell (the cleared onboarding flag would otherwise
+        // show OnboardingView instead of the seeded tabs).
+        OnboardingGate.markComplete()
         authStore.save(SessionResponse(
             accessToken: "seed-access", refreshToken: "seed-refresh", expiresIn: 900,
             user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
@@ -206,6 +210,7 @@ struct AppLaunch {
     /// to verify the card is hidden. Under -uiTestBasSeed.
     func applyBasSeedIfNeeded(authStore: AuthStore, context: ModelContext) {
         guard basSeed else { return }
+        OnboardingGate.markComplete()   // seeded user is already onboarded → shell
         authStore.save(SessionResponse(
             accessToken: "basseed-access", refreshToken: "basseed-refresh", expiresIn: 900,
             user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
@@ -245,6 +250,7 @@ struct AppLaunch {
     /// `-uiTestSeed`, which 11 existing classes still depend on unchanged).
     func applyTourSeedIfNeeded(authStore: AuthStore, context: ModelContext) {
         guard tour else { return }
+        OnboardingGate.markComplete()   // seeded user is already onboarded → shell
         // Pin the clock to a fixed instant so seeded dates + every Epoch.nowMs()
         // timestamp (budget alertSentAt, quote sentAt) AND the view-layer "now"
         // seams (Epoch.now(), wired in Task 3) are deterministic across tour runs
@@ -400,6 +406,7 @@ struct AppLaunch {
     /// explicitly audits empty states.
     func applyTourEmptySeedIfNeeded(authStore: AuthStore, context: ModelContext) {
         guard tourEmpty else { return }
+        OnboardingGate.markComplete()   // seeded user is already onboarded → shell
         Epoch.override = 1_768_478_400_000   // same pin as the populated tour
         authStore.save(SessionResponse(
             accessToken: "tour-access", refreshToken: "tour-refresh", expiresIn: 900,

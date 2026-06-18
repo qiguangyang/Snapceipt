@@ -25,11 +25,16 @@ struct RootView: View {
     /// Live count of non-deleted profiles drives the "needs onboarding" gate.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
 
+    /// Observe the first-run completion flag so RootView re-renders into the shell the
+    /// instant the notifications step calls `OnboardingGate.markComplete()`. Without this
+    /// the gate's UserDefaults read isn't reactive and the shell never appears.
+    @AppStorage(OnboardingGate.key) private var onboardingComplete = false
+
     var body: some View {
         Group {
             switch authVM.state {
             case .signedIn:
-                if OnboardingGate.needsOnboarding() {
+                if !onboardingComplete {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.
@@ -206,6 +211,17 @@ struct ShellView: View {
                               isBusiness: profiles.activeProfile?.type == ProfileType.business.rawValue,
                               editId: editId,
                               onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            // Receipt detail is a full-screen page (matches the design's TxnDetail,
+            // inset:0). Presenting it as a `.sheet` from a deeply-nested Activity row
+            // didn't reliably fire, so it lives here like the other detail screens.
+            if case let .receiptDetail(id) = router.overlay {
+                ReceiptDetailView(context: profiles.context, sync: sync, transactionId: id,
+                                  onEdit: { router.present(.manual(editId: $0)) },
+                                  onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -558,9 +574,9 @@ struct ShellView: View {
                           accent: accent) { router.present(.quotes) }
                 quickTile(title: "Add Manually", icon: "plus", id: AccessibilityID.homeQuickManual,
                           accent: accent) { router.present(.manual(editId: nil)) }
-                quickTile(title: "Reports", icon: "chart", id: AccessibilityID.homeQuickMileage,
+                quickTile(title: "Reports", icon: "chart", id: AccessibilityID.homeQuickReports,
                           accent: accent) { router.go(.reports) }
-                quickTile(title: "Receipts", icon: "receipt", id: AccessibilityID.homeQuickWFH,
+                quickTile(title: "Receipts", icon: "receipt", id: AccessibilityID.homeQuickReceipts,
                           accent: accent) { router.go(.activity) }
             } else {
                 quickTile(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
@@ -604,7 +620,7 @@ struct ShellView: View {
         Binding(
             get: {
                 switch router.overlay {
-                case .capture, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
+                case .capture, .mileage, .wfh, .manual, .receiptDetail, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
                      .emailIn, .emailInReview,
                      .tax, .categories, .ruleEditor, .profileDetail,
@@ -629,7 +645,7 @@ struct ShellView: View {
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
                    !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview"),
                    !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail"),
-                   !cur.id.hasPrefix("manual") {
+                   !cur.id.hasPrefix("manual"), !cur.id.hasPrefix("receiptDetail") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -680,13 +696,7 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
-        case .receiptDetail(let id):
-            ReceiptDetailView(context: profiles.context, sync: sync, transactionId: id,
-                              onEdit: { router.present(.manual(editId: $0)) },
-                              onClose: { router.dismissOverlay() })
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Palette.cream)
-        case .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
+        case .receiptDetail, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .emailIn, .emailInReview,
              .tax, .categories, .ruleEditor, .profileDetail,

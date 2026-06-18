@@ -40,6 +40,7 @@ struct HomeSummaryCard: View {
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .shadow(color: accent.base.opacity(0.45), radius: 13, x: 0, y: 12)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.homeSummary)
     }
 

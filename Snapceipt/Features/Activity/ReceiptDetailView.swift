@@ -35,6 +35,7 @@ struct ReceiptDetailView: View {
             header
         }
         .task { vm = ReceiptDetailViewModel(context: context, transactionId: transactionId) }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.receiptDetailScreen)
         .confirmationDialog("Delete this transaction?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { deleteReceipt() }

@@ -43,6 +43,7 @@ struct AddManualView: View {
             header
             saveBar
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.manualScreen)
         .task { loadIfEditing() }
     }

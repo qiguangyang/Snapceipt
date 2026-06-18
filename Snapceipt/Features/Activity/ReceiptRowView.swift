@@ -38,5 +38,8 @@ struct ReceiptRowView: View {
             .padding(.vertical, 12).padding(.horizontal, 2)
             if showDivider { Divider().overlay(Palette.line2) }
         }
+        // Make the whole row (incl. the empty spacer between merchant and amount)
+        // a single hit target so a tap anywhere opens the receipt.
+        .contentShape(Rectangle())
     }
 }

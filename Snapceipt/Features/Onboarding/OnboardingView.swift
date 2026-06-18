@@ -5,7 +5,10 @@ import SwiftData
 /// `FirstProfileForm` inserts the profile mid-flow, so gating on profile-existence
 /// would unmount onboarding before the camera/notifications priming steps run.
 enum OnboardingGate {
-    private static let key = "sc.onboardingComplete"
+    /// UserDefaults key for the first-run completion flag. Exposed so `RootView` can
+    /// observe it via `@AppStorage` — otherwise a `markComplete()` write at the
+    /// notifications step doesn't re-invalidate RootView and the shell never appears.
+    static let key = "sc.onboardingComplete"
 
     /// True while first-run priming should still show. Drives off the persisted
     /// completion flag (set when the notifications step finishes) so a profile inserted

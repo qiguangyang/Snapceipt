@@ -39,7 +39,13 @@ struct ActivityTabView: View {
         }
         .accessibilityIdentifier(AccessibilityID.activityScreen)
         .task(id: profileId) {
-            vm = ReceiptsListViewModel(context: context, profileId: profileId)
+            let model = ReceiptsListViewModel(context: context, profileId: profileId)
+            vm = model
+            // Land on the newest transaction's month so the list shows data by default
+            // (a brand-new profile with no receipts stays on the current month).
+            if let newest = model.rows.first?.txnDate, newest.count >= 7 {
+                monthKey = String(newest.prefix(7))
+            }
         }
     }
 
@@ -140,7 +146,9 @@ struct ActivityTabView: View {
             }
             .padding(.horizontal, 14)
             .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1))
+            // Decorative border must not hit-test, or it sits above the row buttons and
+            // swallows their taps (the card chrome is shared, not per-row).
+            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1).allowsHitTesting(false))
             .cardShadow()
             .padding(.horizontal, 18)
         }

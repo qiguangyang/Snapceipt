@@ -56,7 +56,8 @@ struct HomeRecentReceipts: View {
         }
         .padding(.horizontal, 14)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1))
+        // Non-hit-testing so the decorative border doesn't swallow the row buttons' taps.
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1).allowsHitTesting(false))
         .cardShadow()
     }
 }

@@ -271,6 +271,8 @@ enum AccessibilityID {
     static let homeSnapCTA       = "home.snap.cta"
     static let homeSummary       = "home.summary"
     static let homeQuickManual   = "home.quick.manual"
+    static let homeQuickReports  = "home.quick.reports"
+    static let homeQuickReceipts = "home.quick.receipts"
     static let receiptDetailScreen = "receipt.detail.screen"
     static let receiptDetailClose  = "receipt.detail.close"
     static let receiptDetailEdit   = "receipt.detail.edit"
