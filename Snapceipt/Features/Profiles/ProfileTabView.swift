@@ -25,53 +25,49 @@ struct ProfileTabView: View {
     /// Inert visual toggle (matches the prototype): defaults ON, drives no behaviour.
     @State private var aiAutoCategorise = true
 
+    // Per-row icon tints (from the Claude design): purple categories, green tax,
+    // ocean-blue banks. App-group rows use the neutral ink/paper treatment.
+    private let categoriesTint = Color(hex: 0x7B5BD6)
+    private let categoriesSoft = Color(hex: 0xEBE5F8)
+    private let banksTint = Color(hex: 0x2F6FB0)
+    private let banksSoft = Color(hex: 0xE2ECF6)
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                Text("Profile").font(.display(28)).foregroundStyle(Palette.ink)
+                Text("Profile").font(.display(30)).tracking(-0.6).foregroundStyle(Palette.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Identity header (data-bound; no hardcoded name).
-                Card(padding: 14) {
-                    HStack(spacing: 12) {
-                        IconCircle(name: "user", tint: accent.base, soft: accent.soft, size: 44, iconSize: 22)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(userName).font(.ui(16, .semibold)).foregroundStyle(Palette.ink)
-                            if let e = userEmail { Text(e).font(.ui(13)).foregroundStyle(Palette.ink3) }
-                        }
-                        Spacer()
-                    }
-                }
+                identityHeader
 
                 // Profile switcher grid.
+                groupLabel("Profiles · \(profiles.profiles.count)")
                 profileSwitcher
 
-                groupLabel("Capture & tax")
-                aiAutoCategoriseRow
-                row(icon: "receipt", title: "Categories & rules", id: AccessibilityID.profileRowCategories, action: onOpenCategories)
-                row(icon: "gear", title: "Tax & GST settings", id: AccessibilityID.profileRowTax, action: onOpenTax)
-
-                groupLabel("App")
-                row(icon: "bell", title: "Notifications & alerts", id: AccessibilityID.profileRowNotifications, action: onOpenNotifications)
-                row(icon: "wallet", title: "Budgets", id: AccessibilityID.profileRowBudgets, action: onOpenBudgets)
-                row(icon: "receipt", title: "Email-in receipts", id: AccessibilityID.profileRowEmailIn, action: onOpenEmailIn)
-                row(icon: "arrowRight", title: "Export & backup", id: "profile.row.export", action: onOpenExport)
-                connectedBanksRow
-                row(icon: "info", title: "Privacy & security", id: AccessibilityID.profileRowPrivacy, action: onOpenPrivacy)
-                legalRow
-                helpRow
-
-                groupLabel("Account")
-                row(icon: "user", title: "Account", id: AccessibilityID.profileRowAccount, action: onOpenAccount)
+                captureAndTaxGroup
+                appGroup
+                accountGroup
 
                 Button(action: onSignOut) {
-                    Text("Sign out").font(.ui(15, .semibold)).foregroundStyle(Palette.alert)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    HStack(spacing: 8) {
+                        Icon(name: "logout", size: 19, color: Palette.alert)
+                        Text("Sign out").font(.ui(15, .bold)).foregroundStyle(Palette.alert)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Palette.paper, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .strokeBorder(Palette.line, lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.signOutButton)
                 .padding(.top, 8)
+
+                Text("Snapceipt · v1.0 · Snap it. Sort it. Sorted.")
+                    .font(.ui(12)).foregroundStyle(Palette.ink3)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 16)
             }
             .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 110)
         }
@@ -79,6 +75,106 @@ struct ProfileTabView: View {
         .background(Palette.cream)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.profileHubScreen)
+    }
+
+    /// Capture & tax group: AI toggle + categories/tax/banks rows in one shared card.
+    private var captureAndTaxGroup: some View {
+        VStack(spacing: 14) {
+            groupLabel("Capture & tax")
+            Card(padding: 16) {
+                VStack(spacing: 0) {
+                    aiAutoCategoriseRow
+                    rowDivider
+                    settingRow(icon: "tag", title: "Categories & rules", detail: nil,
+                               tint: categoriesTint, soft: categoriesSoft,
+                               id: AccessibilityID.profileRowCategories, action: onOpenCategories)
+                    rowDivider
+                    settingRow(icon: "shield", title: "Tax & GST settings", detail: nil,
+                               tint: Palette.income, soft: Palette.incomeSoft,
+                               id: AccessibilityID.profileRowTax, action: onOpenTax)
+                    rowDivider
+                    connectedBanksRow
+                }
+            }
+        }
+    }
+
+    /// App group: notifications, budgets, email-in, export, privacy, legal, help.
+    /// Built from a descriptor array so the divider-separated list isn't bound by the
+    /// 10-view `@ViewBuilder` limit.
+    private var appGroup: some View {
+        let rows: [SettingRowSpec] = [
+            .init(icon: "bell", title: "Notifications & alerts",
+                  id: AccessibilityID.profileRowNotifications, action: onOpenNotifications),
+            .init(icon: "wallet", title: "Budgets",
+                  id: AccessibilityID.profileRowBudgets, action: onOpenBudgets),
+            .init(icon: "receipt", title: "Email-in receipts",
+                  id: AccessibilityID.profileRowEmailIn, action: onOpenEmailIn),
+            .init(icon: "download", title: "Export & backup",
+                  id: "profile.row.export", action: onOpenExport),
+            .init(icon: "lock", title: "Privacy & security",
+                  id: AccessibilityID.profileRowPrivacy, action: onOpenPrivacy),
+            .init(icon: "doc", title: "Terms & Privacy",
+                  id: AccessibilityID.profileRowLegal, action: openTerms),
+            .init(icon: "info", title: "Help & support",
+                  id: AccessibilityID.profileRowHelp, action: openSupport),
+        ]
+        return VStack(spacing: 14) {
+            groupLabel("App")
+            Card(padding: 16) {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { idx, spec in
+                        if idx > 0 { rowDivider }
+                        settingRow(icon: spec.icon, title: spec.title, detail: nil,
+                                   tint: Palette.ink2, soft: Palette.paper2,
+                                   id: spec.id, action: spec.action)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Account group: the single Account row in its own shared card.
+    private var accountGroup: some View {
+        VStack(spacing: 14) {
+            groupLabel("Account")
+            Card(padding: 16) {
+                settingRow(icon: "user", title: "Account", detail: nil,
+                           tint: Palette.ink2, soft: Palette.paper2,
+                           id: AccessibilityID.profileRowAccount, action: onOpenAccount)
+            }
+        }
+    }
+
+    /// Identity header: gradient initials avatar + name/email (data-bound; no hardcoded name).
+    private var identityHeader: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [accent.base, accent.deep],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 60, height: 60)
+                .overlay(
+                    Text(avatarInitials)
+                        .font(.display(24, .bold)).foregroundStyle(.white)
+                )
+                .shadow(color: accent.base.opacity(0.4), radius: 12, x: 0, y: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(userName).font(.ui(19, .bold)).foregroundStyle(Palette.ink)
+                if let e = userEmail { Text(e).font(.ui(13.5)).foregroundStyle(Palette.ink3) }
+            }
+            Spacer()
+        }
+    }
+
+    /// Initials for the identity avatar — derived from the signed-in user's name.
+    private var avatarInitials: String {
+        let parts = userName.split(separator: " ").prefix(2)
+        let s = parts.compactMap { $0.first }.map(String.init).joined().uppercased()
+        return s.isEmpty ? "?" : s
     }
 
     private var profileSwitcher: some View {
@@ -115,19 +211,31 @@ struct ProfileTabView: View {
     }
 
     private func groupLabel(_ s: String) -> some View {
-        Text(s).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+        Text(s.uppercased()).font(.ui(13, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
     }
 
-    private func row(icon: String, title: String, id: String, action: @escaping () -> Void) -> some View {
+    /// Hairline between rows inside a shared settings card.
+    private var rowDivider: some View {
+        Divider().overlay(Palette.line2)
+    }
+
+    /// A tappable setting row inside a shared card: tinted icon tile, label, optional
+    /// right-aligned `detail`, and a chevron. Rows sit flush so the enclosing card
+    /// supplies the horizontal padding and dividers separate them.
+    private func settingRow(icon: String, title: String, detail: String?,
+                            tint: Color, soft: Color, id: String,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Card(padding: 14) {
-                HStack(spacing: 12) {
-                    IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                    Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
-                }
+            HStack(spacing: 12) {
+                IconCircle(name: icon, tint: tint, soft: soft, size: 36, iconSize: 19)
+                Text(title).font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                Spacer()
+                if let detail { Text(detail).font(.ui(13.5)).foregroundStyle(Palette.ink3) }
+                Icon(name: "chevR", size: 17, color: Palette.ink3)
             }
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
@@ -135,66 +243,49 @@ struct ProfileTabView: View {
 
     /// Inert AI auto-categorise toggle (defaults ON; purely visual, drives no behaviour).
     private var aiAutoCategoriseRow: some View {
-        Card(padding: 14) {
-            HStack(spacing: 12) {
-                IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                Text("AI auto-categorise").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                Spacer()
-                Toggle("", isOn: $aiAutoCategorise).labelsHidden().tint(accent.base)
-            }
+        HStack(spacing: 12) {
+            IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
+            Text("AI auto-categorise").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+            Spacer()
+            Toggle("", isOn: $aiAutoCategorise).labelsHidden().tint(Palette.income)
         }
+        .padding(.vertical, 13)
         .accessibilityIdentifier(AccessibilityID.profileAiAutoCategorise)
     }
 
     /// Connected banks — Coming-soon placeholder. Disabled, no action, no network
     /// (mirrors the MileageScreen GPS-card treatment: dimmed with a "Coming soon" label).
     private var connectedBanksRow: some View {
-        Card(padding: 14) {
-            HStack(spacing: 12) {
-                IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Connected banks").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
-                }
-                Spacer()
+        HStack(spacing: 12) {
+            IconCircle(name: "bank", tint: banksTint, soft: banksSoft, size: 36, iconSize: 19)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Connected banks").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
             }
+            Spacer()
         }
+        .padding(.vertical, 13)
         .opacity(0.7)
         .accessibilityIdentifier(AccessibilityID.profileRowConnectedBanks)
     }
 
     /// Legal — opens the external Terms of Service page via the SwiftUI openURL action.
     /// (The Privacy Policy is reachable from there and from the sign-in disclaimer.)
-    private var legalRow: some View {
-        Button {
-            if let url = URL(string: "https://snapceipt.cc/terms") { openURL(url) }
-        } label: {
-            Card(padding: 14) {
-                HStack(spacing: 12) {
-                    IconCircle(name: "receipt", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                    Text("Terms & Privacy").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(AccessibilityID.profileRowLegal)
+    private func openTerms() {
+        if let url = URL(string: "https://snapceipt.cc/terms") { openURL(url) }
     }
 
     /// Help & support — opens the external help site via the SwiftUI openURL action.
-    private var helpRow: some View {
-        Button {
-            if let url = URL(string: "https://snapceipt.cc/support") { openURL(url) }
-        } label: {
-            Card(padding: 14) {
-                HStack(spacing: 12) {
-                    IconCircle(name: "info", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                    Text("Help & support").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(AccessibilityID.profileRowHelp)
+    private func openSupport() {
+        if let url = URL(string: "https://snapceipt.cc/support") { openURL(url) }
     }
+}
+
+/// Lightweight descriptor for a tappable App-group setting row (drives the
+/// descriptor-array build that keeps the divider list under the ViewBuilder limit).
+private struct SettingRowSpec {
+    let icon: String
+    let title: String
+    let id: String
+    let action: () -> Void
 }

@@ -37,6 +37,7 @@ struct ReceiptRow: Identifiable, Equatable {
     let currency: String
     let txnDate: String       // "YYYY-MM-DD"
     let category: CategoryKey?
+    let isAi: Bool
 
     var isIncome: Bool { amountCents > 0 }
 
@@ -47,6 +48,7 @@ struct ReceiptRow: Identifiable, Equatable {
         currency = t.currency.isEmpty ? "AUD" : t.currency
         txnDate = t.txnDate
         category = CategoryKey(rawValue: t.catKey)
+        isAi = t.isAi
     }
 
     /// Localized amount, e.g. "$10.00" (sign is conveyed by colour/prefix in the row).

@@ -27,7 +27,6 @@ struct SavedStep: View {
                     .frame(width: 110, height: 110)
                     .scaleEffect(pop ? 1.5 : 0.6)
                     .animation(.easeOut(duration: 1.1).delay(0.1), value: pop)
-                Confetti(active: pop, color: accent.base)
                 Circle().fill(Palette.income).frame(width: 96, height: 96)
                     .shadow(color: Palette.income.opacity(0.5), radius: 14, x: 0, y: 10)
                 Icon(name: "check", size: 44, color: .white)
@@ -82,6 +81,11 @@ struct SavedStep: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
+        // Confetti rains DOWN from across the top of the screen.
+        .overlay(alignment: .top) {
+            Confetti(active: pop, accent: accent.base)
+                .allowsHitTesting(false)
+        }
         .onAppear { pop = true }
         // Success haptic on the save confirmation (fires once as the disc pops in).
         .sensoryFeedback(.success, trigger: pop)
@@ -96,21 +100,34 @@ struct SavedStep: View {
     }
 }
 
-/// A lightweight confetti burst (no dependency): random colored shards fanning out.
+/// A lightweight confetti shower (no dependency): 14 colored shards spread across
+/// the top of the screen, raining DOWN as the success disc pops in.
 private struct Confetti: View {
     let active: Bool
-    let color: Color
+    let accent: Color
+
+    private static let shardCount = 14
+    /// 5-colour palette: accent, income-green, violet, gold, blue.
+    private var palette: [Color] {
+        [accent, Palette.income, Color(hex: 0x7B5BD6), Color(hex: 0xC99A22), Color(hex: 0x2F6FB0)]
+    }
+
     var body: some View {
-        ZStack {
-            ForEach(0..<14, id: \.self) { i in
-                let angle = Double(i) / 14 * 2 * .pi
-                RoundedRectangle(cornerRadius: 1)
-                    .fill([color, Palette.income, Palette.alert, Palette.ink3][i % 4])
-                    .frame(width: 5, height: 9)
-                    .offset(x: active ? cos(angle) * 90 : 0,
-                            y: active ? sin(angle) * 90 : 0)
-                    .opacity(active ? 0 : 1)
-                    .animation(.easeOut(duration: 0.9).delay(0.05), value: active)
+        GeometryReader { geo in
+            ZStack(alignment: .top) {
+                ForEach(0..<Self.shardCount, id: \.self) { i in
+                    // x spread evenly from ~8%..92% of the available width.
+                    let frac = Double(i) / Double(Self.shardCount - 1)
+                    let x = geo.size.width * (0.08 + 0.84 * frac)
+                    let fall = geo.size.height * 0.85
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(palette[i % palette.count])
+                        .frame(width: 8, height: 12)
+                        .position(x: x, y: active ? fall : -20)
+                        .opacity(active ? 0 : 1)
+                        .animation(.easeIn(duration: 1.0 + Double(i % 5) * 0.18)
+                            .delay(Double(i % 4) * 0.06), value: active)
+                }
             }
         }
     }

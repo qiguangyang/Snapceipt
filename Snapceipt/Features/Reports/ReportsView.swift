@@ -51,8 +51,8 @@ struct ReportsView: View {
                         Segmented(options: periodOptions, selection: $periodSelection)
                             .accessibilityIdentifier(AccessibilityID.reportsPeriod)
                         netCard(vm)
-                        if !vm.isBusiness, let ub = vm.underBudget { underBudgetCard(ub) }
                         donutCard(vm)
+                        if !vm.isBusiness, let ub = vm.underBudget { underBudgetCard(ub) }
                         if vm.isBusiness {
                             taxPills(vm)
                             logbookRows(vm)
@@ -85,11 +85,12 @@ struct ReportsView: View {
             Spacer()
             Button { onOpenExport(vm?.period ?? Period(rawValue: periodSelection) ?? .month) } label: {
                 HStack(spacing: 6) {
-                    Icon(name: "chart", size: 16, color: accent.base)
-                    Text("Export").font(.ui(13.5, .semibold)).foregroundStyle(accent.base)
+                    Icon(name: "share", size: 17, color: .white)
+                    Text("Export").font(.ui(13.5, .semibold)).foregroundStyle(.white)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(accent.soft, in: Capsule())
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: accent.base.opacity(0.4), radius: 8, y: 8)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.reportsExportPill)
@@ -125,13 +126,13 @@ struct ReportsView: View {
     private func netCard(_ vm: ReportsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Net saved · \(vm.headline)").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
-                Text(fmt(vm.netCents)).font(.display(30)).foregroundStyle(Palette.ink)
+                Text("Net saved · last 5 months").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+                Text(fmt(vm.netCents)).font(.display(28)).foregroundStyle(Palette.ink)
                     .monospacedDigit()
                     .accessibilityIdentifier(AccessibilityID.reportsNet)
-                HStack(spacing: 14) {
-                    legendDot(color: Palette.income, label: "In \(fmt(vm.incomeCents))")
-                    legendDot(color: accent.base, label: "Out \(fmt(vm.expenseCents))")
+                HStack(spacing: 12) {
+                    legendDot(color: Palette.income, label: "In")
+                    legendDot(color: accent.base, label: "Out")
                 }
                 BarPair(data: vm.barData)
             }
@@ -142,7 +143,7 @@ struct ReportsView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    IconCircle(name: "check", tint: accent.base, soft: accent.soft, size: 34, iconSize: 17)
+                    IconCircle(name: "star", tint: accent.base, soft: accent.soft, size: 40, iconSize: 20, filled: true)
                     Text("You're under budget").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
                 }
                 Text("\(fmt(ub.spentCents)) of \(fmt(ub.capCents)) used")
@@ -155,49 +156,67 @@ struct ReportsView: View {
 
     private func donutCard(_ vm: ReportsViewModel) -> some View {
         Card {
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Where it went").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                    Spacer()
-                }
-                Donut(segments: vm.donutSegments, size: 150, thickness: 22) {
-                    VStack(spacing: 2) {
-                        Text(fmt(vm.donutTotalCents, showCents: false))
-                            .font(.display(20)).foregroundStyle(Palette.ink).monospacedDigit()
-                        Text("spent").font(.ui(11, .semibold)).foregroundStyle(Palette.ink3)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Where it went").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                HStack(spacing: 18) {
+                    Donut(segments: vm.donutSegments, size: 140, thickness: 20) {
+                        VStack(spacing: 2) {
+                            Text(fmtK(vm.donutTotalCents))
+                                .font(.display(22)).foregroundStyle(Palette.ink).monospacedDigit()
+                            Text("spent").font(.ui(11, .semibold)).foregroundStyle(Palette.ink3)
+                        }
                     }
+                    .accessibilityIdentifier(AccessibilityID.reportsDonut)
+                    legend(vm)
                 }
-                .accessibilityIdentifier(AccessibilityID.reportsDonut)
-                legend(vm)
             }
         }
     }
 
     @ViewBuilder private func legend(_ vm: ReportsViewModel) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 9) {
             ForEach(Array(vm.legend.prefix(5).enumerated()), id: \.offset) { _, row in
                 HStack(spacing: 8) {
-                    Circle().fill(tint(row.catKey)).frame(width: 9, height: 9)
-                    Text(label(row.catKey)).font(.ui(13)).foregroundStyle(Palette.ink2)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous).fill(tint(row.catKey)).frame(width: 9, height: 9)
+                    Text(label(row.catKey)).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink2)
                     Spacer()
-                    Text(fmt(row.spendCents)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink).monospacedDigit()
+                    Text(fmtK(row.spendCents)).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
                 }
             }
         }
     }
 
+    /// Compact dollar formatter: |v|≥$1000 → "$1.2k" (1 dp under $10k, else 0 dp);
+    /// otherwise "$<int>". Leading minus preserved for negatives. Mirrors design fmtK.
+    private func fmtK(_ cents: Int) -> String {
+        let dollars = Double(cents) / 100
+        let neg = dollars < 0
+        let v = abs(dollars)
+        let body: String
+        if v >= 1000 {
+            let k = v / 1000
+            body = k < 10 ? String(format: "$%.1fk", k) : String(format: "$%.0fk", k)
+        } else {
+            body = "$\(Int(v))"
+        }
+        return neg ? "-\(body)" : body
+    }
+
     private func taxPills(_ vm: ReportsViewModel) -> some View {
         HStack(spacing: 10) {
-            pill("Deductible YTD", fmt(vm.deductibleYTDCents), id: AccessibilityID.reportsDeductiblePill)
-            pill("GST on purchases", fmt(vm.gstYTDCents), id: AccessibilityID.reportsGstPill)
+            pill("Deductible YTD", fmt(vm.deductibleYTDCents), icon: "shield", tint: Palette.income,
+                 id: AccessibilityID.reportsDeductiblePill)
+            pill("GST on purchases", fmt(vm.gstYTDCents), icon: "receipt", tint: accent.base,
+                 id: AccessibilityID.reportsGstPill)
         }
     }
 
-    private func pill(_ caption: String, _ value: String, id: String) -> some View {
+    private func pill(_ caption: String, _ value: String, icon: String, tint: Color, id: String) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 4) {
+                Icon(name: icon, size: 20, color: tint)
+                Text(value).font(.display(22)).foregroundStyle(Palette.ink).monospacedDigit()
                 Text(caption).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink3)
-                Text(value).font(.display(18)).foregroundStyle(Palette.ink).monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -211,26 +230,26 @@ struct ReportsView: View {
 
     private func logbookRows(_ vm: ReportsViewModel) -> some View {
         VStack(spacing: 10) {
-            logbookRow(icon: "car", title: "Vehicle logbook",
+            logbookRow(icon: "car", tint: Color(hex: 0x2F6FB0), soft: Color(hex: 0xE2ECF6),
+                       title: "Vehicle logbook",
                        value: fmt(vm.vehicleClaimCents), id: AccessibilityID.reportsLogbookVehicle,
                        action: onOpenMileage)
-            logbookRow(icon: "wfh", title: "Work from home",
+            logbookRow(icon: "wfh", tint: Color(hex: 0x0E7C72), soft: Color(hex: 0xDCF0ED),
+                       title: "Working from home",
                        value: fmt(vm.wfhClaimCents), id: AccessibilityID.reportsLogbookWFH,
                        action: onOpenWFH)
         }
     }
 
-    private func logbookRow(icon: String, title: String, value: String, id: String,
+    private func logbookRow(icon: String, tint: Color, soft: Color, title: String, value: String, id: String,
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Card(padding: 14) {
                 HStack(spacing: 12) {
-                    IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                        Text("FY claim \(value)").font(.ui(12)).foregroundStyle(Palette.ink3).monospacedDigit()
-                    }
+                    IconCircle(name: icon, tint: tint, soft: soft, size: 38, iconSize: 19)
+                    Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     Spacer()
+                    Text(value).font(.ui(14.5, .semibold)).foregroundStyle(Palette.income).monospacedDigit()
                     Icon(name: "chevR", size: 16, color: Palette.ink3)
                 }
             }
@@ -266,9 +285,9 @@ struct ReportsView: View {
     }
 
     private func legendDot(color: Color, label: String) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 9, height: 9)
-            Text(label).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous).fill(color).frame(width: 9, height: 9)
+            Text(label).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink2)
         }
     }
 
