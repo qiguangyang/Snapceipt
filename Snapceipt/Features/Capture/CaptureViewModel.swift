@@ -157,3 +157,50 @@ final class CaptureViewModel {
         stage = .camera
     }
 }
+
+/// App-wide persisted settings (UserDefaults-backed, `sc.*` keys).
+enum AppSettings {
+    /// Persisted "Smart Scan AI" toggle key.
+    static let smartScanEnabledKey = "sc.smartScan.enabled"
+
+    /// Whether scans use DeepSeek (`/extract`) vs the on-device heuristic.
+    /// Default ON: `UserDefaults.bool` returns false for a missing key, so read
+    /// the object and fall back to `true`.
+    static var smartScanEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: smartScanEnabledKey) }
+    }
+}
+
+/// Which engine produced the current Review draft, plus timing/confidence, surfaced
+/// on the Review screen so DeepSeek (Smart Scan ON) and the on-device heuristic
+/// (Smart Scan OFF / offline fallback) can be compared back-to-back.
+struct ScanDiagnostics: Equatable {
+    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic }
+    var engine: Engine
+    var model: String?      // meta.model (ON path only)
+    var clientMs: Int       // client-measured wall time (all paths)
+    var serverMs: Int?      // meta.latencyMs (ON path only)
+    var attempts: Int?      // meta.attempts (ON path only)
+    var stub: Bool?         // meta.stub (ON path only)
+    var capped: Bool?       // meta.capped (ON path only)
+    var confidence: Double  // draft.confidence (all paths)
+
+    /// One-line monospaced summary for the Review diagnostic row.
+    var summary: String {
+        var parts: [String] = []
+        switch engine {
+        case .deepseek:          parts.append(model ?? "server")
+        case .onDeviceHeuristic: parts.append("on-device heuristic")
+        case .offlineHeuristic:  parts.append("on-device (offline)")
+        }
+        if let attempts { parts.append("\(attempts) try") }
+        if let serverMs { parts.append("\(serverMs)ms srv") }
+        parts.append("\(clientMs)ms")
+        parts.append(String(format: "conf %.2f", confidence))
+        if stub == true { parts.append("stub") }
+        if capped == true { parts.append("capped") }
+        if engine == .offlineHeuristic { parts.append("queued") }
+        return parts.joined(separator: " · ")
+    }
+}
