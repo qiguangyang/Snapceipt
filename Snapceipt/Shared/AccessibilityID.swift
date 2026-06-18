@@ -39,6 +39,7 @@ enum AccessibilityID {
     static let captureReviewUpgrade = "capture.review.upgrade"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureReviewDiagnostics = "capture.review.diagnostics"
+    static let captureReviewTotal = "capture.review.total"
     /// Editable Review line-item rows (suffixed with the row index).
     static let captureReviewItemNamePrefix = "capture.review.item.name."
     static let captureReviewItemPricePrefix = "capture.review.item.price."

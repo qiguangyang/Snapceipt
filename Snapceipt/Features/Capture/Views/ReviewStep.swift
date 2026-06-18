@@ -26,6 +26,11 @@ struct ReviewStep: View {
     /// and synced back on every edit so `save()` persists the user's changes.
     @State private var itemDrafts: [ItemDraft] = []
     @FocusState private var focusedItem: ReviewItemField?
+    /// Editable total buffer (a string so decimal typing isn't reformatted mid-entry).
+    @State private var totalText = ""
+    /// Gates item→total auto-recompute until after the initial seed, so loading the
+    /// extracted draft doesn't overwrite the AI's detected total with the items sum.
+    @State private var didSeed = false
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -106,13 +111,27 @@ struct ReviewStep: View {
                     .background(Palette.incomeSoft, in: Capsule())
                 }
             }
-            Text(fmt(draft.total)).numeric(40)
-                .foregroundStyle(Palette.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 2) {
+                Text("$").numeric(40).foregroundStyle(Palette.ink)
+                TextField("0.00", text: $totalText)
+                    .numeric(40).foregroundStyle(Palette.ink)
+                    .keyboardType(.decimalPad)
+                    .accessibilityIdentifier(AccessibilityID.captureReviewTotal)
+                Spacer(minLength: 0)
+            }
         }
         .padding(16)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .cardShadow()
+        .onAppear {
+            if totalText.isEmpty { totalText = Self.priceText(draft.total) }
+        }
+        // Editing the total directly updates the draft + recomputes GST. (Editing line
+        // items below re-drives the total; this stands until the next item edit.)
+        .onChange(of: totalText) { _, _ in
+            draft.total = Self.parseAmount(totalText)
+            recomputeGst()
+        }
     }
 
     @ViewBuilder
@@ -333,8 +352,17 @@ struct ReviewStep: View {
                     ItemDraft(name: $0.name, priceText: Self.priceText($0.price))
                 }
             }
+            // Allow item→total recompute only after the seed settles (next runloop), so
+            // the initial load doesn't clobber the AI's detected total with the items sum.
+            DispatchQueue.main.async { didSeed = true }
         }
-        .onChange(of: itemDrafts) { _, _ in syncItemsToDraft() }
+        .onChange(of: itemDrafts) { _, _ in
+            syncItemsToDraft()
+            // After the seed, editing line items automatically drives the total (which
+            // in turn recomputes GST via the total's onChange).
+            guard didSeed, !itemDrafts.isEmpty else { return }
+            totalText = Self.priceText(Decimal(ManualItemsMapper.totalCents(itemDrafts)) / 100)
+        }
     }
 
     private func itemRow(_ item: Binding<ItemDraft>) -> some View {
@@ -408,6 +436,25 @@ struct ReviewStep: View {
     /// Format an extracted Decimal price for the editable text field ("" when zero).
     private static func priceText(_ price: Decimal) -> String {
         price == 0 ? "" : String(format: "%.2f", NSDecimalNumber(decimal: price).doubleValue)
+    }
+
+    /// Parse the editable total text → Decimal (≥ 0).
+    private static func parseAmount(_ text: String) -> Decimal {
+        let raw = text.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
+        return max(Decimal(string: raw) ?? 0, 0)
+    }
+
+    /// Recompute the inclusive AU GST (total/11) whenever the total changes, so the
+    /// "incl. $X GST" pill stays consistent with the displayed total. GST-free receipts
+    /// carry no GST.
+    private func recomputeGst() {
+        guard !draft.gstFree else { draft.gst = nil; return }
+        draft.gst = draft.total > 0 ? Self.roundedGst(draft.total) : nil
+    }
+    private static func roundedGst(_ total: Decimal) -> Decimal {
+        var raw = total / 11, rounded = Decimal()
+        NSDecimalRound(&rounded, &raw, 2, .plain)
+        return rounded
     }
 
     private var disabledChips: some View {

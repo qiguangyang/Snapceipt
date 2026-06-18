@@ -174,7 +174,7 @@ struct CaptureViewModelTests {
         let d = ScanDiagnostics(engine: .deepseek, model: "deepseek-v4-flash",
                                 clientMs: 850, serverMs: 700, attempts: 1,
                                 stub: false, capped: false, confidence: 0.91)
-        #expect(d.summary == "deepseek-v4-flash · 1 try · 700ms srv · 850ms · conf 0.91")
+        #expect(d.summary == "Snapceipt AI · 1 try · 700ms srv · 850ms · conf 0.91")
     }
 
     @Test("ScanDiagnostics.summary renders the on-device heuristic line")

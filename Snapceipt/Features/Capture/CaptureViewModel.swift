@@ -249,7 +249,7 @@ struct ScanDiagnostics: Equatable {
     var summary: String {
         var parts: [String] = []
         switch engine {
-        case .deepseek:          parts.append(model ?? "server")
+        case .deepseek:          parts.append("Snapceipt AI")
         case .onDeviceHeuristic: parts.append("on-device heuristic")
         case .offlineHeuristic:  parts.append("on-device (offline)")
         }
