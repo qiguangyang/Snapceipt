@@ -8,6 +8,10 @@ import SwiftData
 struct ActivityTabView: View {
     let context: ModelContext
     let profileId: String
+    /// Bumped by the shell when a full-screen overlay closes (e.g. the receipt detail
+    /// after a delete/edit) so the list re-fetches — the tab is not re-keyed on overlay
+    /// dismiss, so its snapshot would otherwise stay stale.
+    let reloadToken: Int
     let onOpenReceipt: (String) -> Void
     let onSnap: () -> Void
     @Environment(\.accent) private var accent
@@ -47,6 +51,10 @@ struct ActivityTabView: View {
                 monthKey = String(newest.prefix(7))
             }
         }
+        // A transaction-mutating overlay (receipt-detail delete/edit, manual add) just
+        // closed — re-fetch so the change is reflected. The tab isn't re-keyed on overlay
+        // dismiss (only on tab/profile change), so the snapshot would otherwise stay stale.
+        .onChange(of: reloadToken) { _, _ in vm?.load() }
     }
 
     // MARK: - Header / controls
