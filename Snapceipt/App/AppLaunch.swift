@@ -16,6 +16,10 @@ struct AppLaunch {
     /// `-uiTestActiveType personal|business`: which seeded profile is active on launch
     /// (quick actions are profile-type-gated, so type-specific tests pick the right one).
     let activeType: String?
+    /// `-uiTestPro`: the stub reports a "pro" plan so Pro-gated features (Quotes, Email-in,
+    /// Mileage, WFH) are reachable without the paywall (StoreKit purchase can't complete
+    /// in the UI-test stub, so a test can't subscribe through the paywall).
+    let pro: Bool
     let cannedNeedsReview: Bool
     /// Test seam (`-uiTestOffline`): the API client throws a transport error on
     /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
@@ -53,6 +57,7 @@ struct AppLaunch {
         activeType = arguments.firstIndex(of: "-uiTestActiveType").flatMap {
             $0 + 1 < arguments.count ? arguments[$0 + 1] : nil
         }
+        pro = arguments.contains("-uiTestPro")
         cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
         offline = arguments.contains("-uiTestOffline")
         pushReject = arguments.contains("-uiTestPushReject")
@@ -446,7 +451,7 @@ struct AppLaunch {
     }
 
     func makeAPIClient(auth: AuthStore) -> APIClient {
-        if useStub { return StubAPIClient() }
+        if useStub { return StubAPIClient(pro: pro) }
         let base = apiBaseURLOverride ?? URL(string: "https://api.snapceipt.cc")!
         return LiveAPIClient(baseURL: base, auth: auth)
     }

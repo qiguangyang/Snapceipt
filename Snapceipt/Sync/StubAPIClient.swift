@@ -4,6 +4,11 @@ import Foundation
 /// In-app deterministic APIClient for hermetic XCUITests (selected by -uiTestStub).
 /// No network — returns fixed fixtures for the dev account.
 final class StubAPIClient: APIClient {
+    /// When true (`-uiTestPro`), `mePlan()` reports "pro" so Pro-gated features are
+    /// reachable in tests without the (un-completable) StoreKit paywall purchase.
+    private let pro: Bool
+    init(pro: Bool = false) { self.pro = pro }
+
     private func devSession() -> SessionResponse {
         SessionResponse(accessToken: "stub-access", refreshToken: "stub-refresh", expiresIn: 900,
                         user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev"))
@@ -17,7 +22,7 @@ final class StubAPIClient: APIClient {
     func refresh(refreshToken: String) async throws -> SessionResponse { devSession() }
     func signOut() async throws {}
     func me() async throws -> MeResponse { MeResponse(user: devSession().user, devices: []) }
-    func mePlan() async throws -> String { "free" }
+    func mePlan() async throws -> String { pro ? "pro" : "free" }
     func recordPurchase(signedTransaction: String) async throws {}
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse {
         // J23b/J23c seam: a deterministic 4xx contract rejection. 422 is in the

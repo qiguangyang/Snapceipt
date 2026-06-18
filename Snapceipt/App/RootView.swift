@@ -602,12 +602,14 @@ struct ShellView: View {
                 Icon(name: icon, size: 23, color: accent.base)
                     .frame(width: 52, height: 52)
                     .background(Palette.paper, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).strokeBorder(Palette.line, lineWidth: 1)
+                        .allowsHitTesting(false))   // decorative border must not swallow the tile tap
                     .cardShadow()
                 Text(title).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink2)
                     .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())   // whole tile column is the hit target
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)

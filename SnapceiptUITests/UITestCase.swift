@@ -26,16 +26,14 @@ class UITestCase: XCTestCase {
     /// Launch directly into a SEEDED, already-signed-in shell (2 profiles) — for
     /// shell-level tests. NOTE: no `-uiTestReset` (seeding wants a live session;
     /// the seed overwrites the session deterministically).
-    func launchSeeded() {
+    /// Launch into the seeded shell. `activeType` ("personal"/"business") chooses which
+    /// seeded profile is active — Home quick actions are profile-type-gated (personal:
+    /// Loyalty/Mileage/WFH; business: Quote/Reports/Receipts). `pro` reports a Pro plan so
+    /// Pro-gated features (Quotes, Email-in, Mileage, WFH) open without the paywall.
+    func launchSeeded(activeType: String? = nil, pro: Bool = false) {
         app.launchArguments += ["-uiTestStub", "-uiTestSeed"]
-        app.launch()
-    }
-
-    /// Like `launchSeeded()` but makes the seeded profile of `type` active on launch.
-    /// Home quick actions are profile-type-gated (personal: Loyalty/Mileage/WFH;
-    /// business: Quote/Reports/Receipts), so type-specific tests pick the right one.
-    func launchSeeded(activeType: String) {
-        app.launchArguments += ["-uiTestStub", "-uiTestSeed", "-uiTestActiveType", activeType]
+        if let activeType { app.launchArguments += ["-uiTestActiveType", activeType] }
+        if pro { app.launchArguments += ["-uiTestPro"] }
         app.launch()
     }
 
@@ -47,9 +45,11 @@ class UITestCase: XCTestCase {
     }
 
     /// Launch directly into the RICH tour fixture (both profiles populated,
-    /// clock pinned) — for ScreenshotTourUITests only.
-    func launchTour() {
+    /// clock pinned) — for ScreenshotTourUITests only. `pro` reports a Pro plan so
+    /// Pro-gated areas (Quotes, Email-in, Mileage, WFH) open without the paywall.
+    func launchTour(pro: Bool = false) {
         app.launchArguments += ["-uiTestStub", "-uiTestTour"]
+        if pro { app.launchArguments += ["-uiTestPro"] }
         app.launch()
     }
 

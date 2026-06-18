@@ -104,6 +104,7 @@ struct MileageScreen: View {
                     Spacer(minLength: 0)
                     Icon(name: "chevR", size: 18, color: Palette.ink3)
                 }
+                .contentShape(Rectangle())   // whole row tappable (the Spacer isn't a dead-zone)
             }
         }
         .buttonStyle(.plain)
