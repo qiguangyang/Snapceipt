@@ -402,19 +402,23 @@ struct ShellView: View {
         .toastHost(toasts)
         .task {
             profiles.rescope(to: auth.session?.userId ?? "")
+            // Seed the active profile's default categories at launch (idempotent) so a
+            // category-scoped budget never references a category that hasn't synced to the
+            // server — previously categories were seeded only lazily on the Categories
+            // screen, so a budget could push a category_id the server lacked and FK-fail.
+            seedCategoriesForActive()
             // One-time per-profile GST-default backfill (spec §1/§4.2): upgrading installs
             // seeded their categories BEFORE `gstFreeDefault` existed, so groceries stayed
             // taxable and over-claimed GST via ÷11. `backfillGstDefaults` flips groceries →
             // gstFreeDefault and is idempotent (UserDefaults-guarded per profile), so running
-            // it on every launch/activation is safe. `CategorySeeder.ensure` is only called
-            // lazily from CategoriesViewModel.init, which is NOT a launch path — so this is the
-            // launch wire-in for the backfill alongside rescope.
+            // it on every launch/activation is safe.
             backfillGstDefaultsForActive()
             await sync.sync()
         }
         // Re-run the (idempotent) backfill when the active profile changes, so switching to a
         // not-yet-backfilled profile fixes its groceries GST default too.
         .onChange(of: profiles.activeProfileId) { _, _ in
+            seedCategoriesForActive()
             backfillGstDefaultsForActive()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -432,6 +436,16 @@ struct ShellView: View {
         let pid = profiles.activeProfileId
         guard !pid.isEmpty else { return }
         CategorySeeder.backfillGstDefaults(profileId: pid, context: profiles.context, sync: sync)
+    }
+
+    /// Seed the active profile's default categories at launch / profile switch (idempotent,
+    /// insert-only) so category-scoped budgets always reference a category that syncs to the
+    /// server first. Skips when there is no active profile yet (rescope handoff).
+    private func seedCategoriesForActive() {
+        let pid = profiles.activeProfileId
+        guard !pid.isEmpty else { return }
+        CategorySeeder.ensure(profileId: pid, userId: profiles.userId,
+                              context: profiles.context, sync: sync)
     }
 
     // MARK: - Tab content
