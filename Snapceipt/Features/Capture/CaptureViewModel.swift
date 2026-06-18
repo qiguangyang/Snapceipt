@@ -14,6 +14,9 @@ enum CaptureStage: Equatable { case camera, scanning, review, saved }
 final class CaptureViewModel {
     private(set) var stage: CaptureStage = .camera
     var draft: ExtractedReceipt?
+    /// Which engine produced the current draft (Smart Scan ON = DeepSeek, OFF =
+    /// on-device heuristic, ON-but-offline = offline heuristic). Read by ReviewStep.
+    var diagnostics: ScanDiagnostics?
     private(set) var capturedImage: UIImage?
     private(set) var rawText: String = ""
     private(set) var recognizedLines: [RecognizedLine] = []
@@ -79,17 +82,43 @@ final class CaptureViewModel {
         await extract()
     }
 
-    /// Calls `/extract`; on success maps the response, on failure falls back to the
-    /// on-device heuristic. Either way it ends at `.review`.
+    /// ON (Smart Scan): calls `/extract` (DeepSeek); on failure falls back to the
+    /// on-device heuristic (status "pending", queued for re-extract). OFF: runs the
+    /// on-device heuristic directly with status "done" (never re-extracted) and makes
+    /// no network call. Every branch records `diagnostics` and ends at `.review`.
     func extract() async {
         let capturedAt = ExtractedReceipt.ymd(from: Date())
+        let started = Date()
+
+        guard AppSettings.smartScanEnabled else {
+            // Deliberate OFF: on-device heuristic, FINAL ("done") so the reconciler
+            // never re-runs DeepSeek over it. No network, no smart-scan slot.
+            let parsed = HeuristicParser.parse(recognizedLines)
+            draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "",
+                                     extractionStatus: "done")
+            smartScanCapped = false
+            smartScanCap = nil
+            smartScanUsed = nil
+            diagnostics = ScanDiagnostics(
+                engine: .onDeviceHeuristic, model: nil,
+                clientMs: Self.elapsedMs(since: started), serverMs: nil,
+                attempts: nil, stub: nil, capped: nil,
+                confidence: draft?.confidence ?? 0)
+            stage = .review
+            return
+        }
+
         do {
             let resp = try await api.extract(ocrText: rawText, source: "scan", capturedAt: capturedAt)
             draft = ExtractedReceipt(response: resp)
-            // Thread the cap signal onto the VM so ReviewStep can show the upgrade nudge.
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
             smartScanUsed = resp.meta.smartScan?.used
+            diagnostics = ScanDiagnostics(
+                engine: .deepseek, model: resp.meta.model,
+                clientMs: Self.elapsedMs(since: started), serverMs: resp.meta.latencyMs,
+                attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
+                confidence: draft?.confidence ?? 0)
         } catch {
             // Use the stored recognizedLines (with real bounding boxes) so the
             // offline parser benefits from OCR geometry when available.
@@ -99,8 +128,18 @@ final class CaptureViewModel {
             smartScanCapped = false
             smartScanCap = nil
             smartScanUsed = nil
+            diagnostics = ScanDiagnostics(
+                engine: .offlineHeuristic, model: nil,
+                clientMs: Self.elapsedMs(since: started), serverMs: nil,
+                attempts: nil, stub: nil, capped: nil,
+                confidence: draft?.confidence ?? 0)
         }
         stage = .review
+    }
+
+    /// Client-measured wall time in ms (never negative).
+    private static func elapsedMs(since start: Date) -> Int {
+        max(0, Int((Date().timeIntervalSince(start) * 1000).rounded()))
     }
 
     // MARK: Save
@@ -154,6 +193,7 @@ final class CaptureViewModel {
     /// Reset to the camera for "Snap another".
     func reset() {
         draft = nil; capturedImage = nil; rawText = ""; recognizedLines = []; errorMessage = nil
+        diagnostics = nil
         stage = .camera
     }
 }

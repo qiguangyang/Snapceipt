@@ -30,6 +30,7 @@ struct CaptureViewModelTests {
                          extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         let profile = Profile(userId: "u1", name: "Me", type: activeType,
@@ -182,5 +183,43 @@ struct CaptureViewModelTests {
                                 clientMs: 12, serverMs: nil, attempts: nil,
                                 stub: nil, capped: nil, confidence: 0.55)
         #expect(d.summary == "on-device heuristic · 12ms · conf 0.55")
+    }
+
+    @Test("Smart Scan OFF -> on-device heuristic, status done, no /extract call, diagnostics onDeviceHeuristic")
+    func smartScanOffUsesHeuristic() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }
+        // The handler must NOT be invoked when Smart Scan is OFF.
+        let (vm, api, _, _) = try fixture { _, _, _ in
+            Issue.record("extract() must not be called when Smart Scan is OFF")
+            throw MockAPIClientError.unscripted
+        }
+        // Set OFF *after* fixture(), which resets the key to default-ON.
+        UserDefaults.standard.set(false, forKey: AppSettings.smartScanEnabledKey)
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        #expect(vm.stage == .review)
+        #expect(api.extractCalls.isEmpty)
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.draft?.needsReview == true)
+        #expect(vm.diagnostics?.engine == .onDeviceHeuristic)
+    }
+
+    @Test("Smart Scan ON success -> diagnostics deepseek with model/attempts from meta, status done")
+    func smartScanOnSuccessDiagnostics() async throws {
+        let (vm, api, _, _) = try fixture { _, _, _ in self.okResponse() }
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
+        #expect(api.extractCalls.count == 1)
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.diagnostics?.engine == .deepseek)
+        #expect(vm.diagnostics?.model == "x")     // okResponse() meta.model == "x"
+        #expect(vm.diagnostics?.attempts == 1)
+    }
+
+    @Test("Smart Scan ON failure -> offline heuristic, status pending, diagnostics offlineHeuristic")
+    func smartScanOnFailureDiagnostics() async throws {
+        struct Boom: Error {}
+        let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        #expect(vm.draft?.extractionStatus == "pending")
+        #expect(vm.diagnostics?.engine == .offlineHeuristic)
     }
 }
