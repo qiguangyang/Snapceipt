@@ -13,6 +13,9 @@ struct AppLaunch {
     let lockAvailable: Bool
     let tour: Bool
     let tourEmpty: Bool
+    /// `-uiTestActiveType personal|business`: which seeded profile is active on launch
+    /// (quick actions are profile-type-gated, so type-specific tests pick the right one).
+    let activeType: String?
     let cannedNeedsReview: Bool
     /// Test seam (`-uiTestOffline`): the API client throws a transport error on
     /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
@@ -47,6 +50,9 @@ struct AppLaunch {
         lockAvailable = arguments.contains("-uiTestLockAvailable")
         tour = arguments.contains("-uiTestTour")
         tourEmpty = arguments.contains("-uiTestTourEmpty")
+        activeType = arguments.firstIndex(of: "-uiTestActiveType").flatMap {
+            $0 + 1 < arguments.count ? arguments[$0 + 1] : nil
+        }
         cannedNeedsReview = arguments.contains("-uiTestCannedNeedsReview")
         offline = arguments.contains("-uiTestOffline")
         pushReject = arguments.contains("-uiTestPushReject")
@@ -120,6 +126,10 @@ struct AppLaunch {
                          initials: "HB", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
                          sortOrder: 1, isDefault: false)
         context.insert(p1); context.insert(p2)
+        // Quick actions are profile-type-gated, so let a test choose which seeded profile
+        // is active on launch (default = the business p1, matching isDefault). The key is
+        // ProfilesStore's persisted "sc.activeProfile", read in its init below.
+        UserDefaults.standard.set(activeType == "personal" ? p2.id : p1.id, forKey: "sc.activeProfile")
         // Seed a handful of transactions on the business profile so Reports renders
         // a real donut/net/pills under -uiTestSeed. Dates anchored to the current month
         // so the default Month period shows them.
@@ -177,6 +187,21 @@ struct AppLaunch {
                                    brand: "Boarding Pass", subBrand: nil, number: "PDF417DATA12345",
                                    barcodeFormat: "pdf417", pointsLabel: nil,
                                    color1: "#444444", color2: "#222222", sortOrder: 3))
+        // Mirror the loyalty cards (all 4 barcode formats) + a vehicle logbook onto the
+        // PERSONAL profile p2: with strict profile-type gating, Loyalty/Mileage/WFH quick
+        // actions only appear on a personal Home, so those tests run under
+        // `-uiTestActiveType personal` and need their data on p2.
+        for (i, fmt) in [("Everyday Rewards", "5901234123457", "ean13", "1,240 pts", "#1A8A3C", "#0C5C26"),
+                         ("Qantas FF", "QF1234567", "qr", "", "#E40000", "#A30000"),
+                         ("Flybuys", "6011000990139424", "code128", "", "#005EB8", "#003E7E"),
+                         ("Boarding Pass", "PDF417DATA12345", "pdf417", "", "#444444", "#222222")].enumerated() {
+            context.insert(LoyaltyCard(userId: DevAccount.userId, profileId: p2.id,
+                                       brand: fmt.0, subBrand: nil, number: fmt.1,
+                                       barcodeFormat: fmt.2, pointsLabel: fmt.3.isEmpty ? nil : fmt.3,
+                                       color1: fmt.4, color2: fmt.5, sortOrder: i))
+        }
+        context.insert(VehicleYear(userId: DevAccount.userId, profileId: p2.id, vehicleId: "v2",
+                                   fyStartYear: FinancialYear.of(Date(), startMonth: 7).startYear, claimCents: 0))
         // F5: seed a saved client + a draft quote (+ one line item) on p1 (active business).
         let client = Client(userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")

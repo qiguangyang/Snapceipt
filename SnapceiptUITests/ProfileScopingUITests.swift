@@ -45,38 +45,57 @@ final class ProfileScopingUITests: UITestCase {
         switchTo("Studio North")
     }
 
-    /// J24 (cont.): the single-slot overlays (loyalty wallet, quotes list, logbook)
-    /// are also rescoped — a business-only or p1-seeded row never shows on personal p2.
-    func testSwitchRescopesOverlays() {
-        launchSeeded()
-        // p1 (business) holds loyalty cards (the seeded brands) and quotes; open the
-        // wallet and confirm a seeded p1 card is present.
-        app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
+    /// Snapshot the set of loyalty-card-row identifiers (`loyalty.card.row.<id>`)
+    /// currently rendered in the open wallet. Each seeded card carries a unique uuidv7
+    /// id, so two profiles' wallets expose DISJOINT identifier sets — the basis for the
+    /// rescoping assertion below.
+    private func openWalletCardIDs() -> Set<String> {
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen].firstMatch
-                        .waitForExistence(timeout: 10), "Wallet did not open on p1")
-        let p1CardRows = app.descendants(matching: .any)
+                        .waitForExistence(timeout: 10), "Wallet did not open")
+        let rows = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.loyaltyCardRowPrefix))
         // ForEach renders rows asynchronously after the container appears — synchronise
-        // on the first row before snapshot-querying .count (else slow CI sees 0).
-        XCTAssertTrue(p1CardRows.firstMatch.waitForExistence(timeout: 5),
-                      "p1 should have seeded loyalty cards")
-        // Dismiss the wallet overlay via its close affordance (the LbHeader back
-        // button carries logbookClose) — the wallet is a full-screen overlay, not a
-        // swipe-dismiss sheet — and switch to personal p2.
+        // on the first row before snapshot-querying (else slow CI sees 0).
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5), "Wallet rendered no loyalty cards")
+        return Set(rows.allElementsBoundByIndex.map { $0.identifier })
+    }
+
+    /// J24 (cont.): the single-slot loyalty-wallet overlay is rescoped on a profile
+    /// switch — it re-derives its rows from the ACTIVE profile, never showing another
+    /// profile's cards or stale rows from before the switch. Loyalty is a personal-only
+    /// quick action now, so launch with the personal profile active to reach it, then
+    /// round-trip through the business profile (where the action is correctly absent).
+    func testSwitchRescopesOverlays() {
+        launchSeeded(activeType: "personal")   // personal p2 active → loyalty tile present
+        // p2 (personal) holds its own seeded loyalty cards; open the wallet and capture
+        // exactly which card rows it exposes.
+        let loyalty = app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch
+        XCTAssertTrue(loyalty.waitForExistence(timeout: 10), "Loyalty quick action missing on personal Home")
+        loyalty.tap()
+        let p2Cards = openWalletCardIDs()
+        XCTAssertEqual(p2Cards.count, 4, "Personal p2 should expose exactly its 4 seeded loyalty cards")
+        // Dismiss the wallet overlay via its close affordance (the LbHeader back button
+        // carries logbookClose) — the wallet is a full-screen overlay, not a
+        // swipe-dismiss sheet — and switch to the business profile p1.
         app.buttons[AccessibilityID.logbookClose].firstMatch.tap()
         XCTAssertTrue(app.buttons[AccessibilityID.profileSwitcher].firstMatch.waitForExistence(timeout: 5),
                       "Did not return to Home after dismissing the wallet")
+        switchTo("Studio North")
+        // Loyalty is personal-only → its quick action must be ABSENT on the business
+        // profile (the overlay can't even be reached here — strict gating).
+        XCTAssertFalse(app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch.waitForExistence(timeout: 3),
+                       "Loyalty quick action should be hidden on a business profile")
+        // Switch back to personal p2 and reopen the wallet: the single-slot overlay must
+        // re-derive the SAME profile-scoped set — no business-profile cards leaked in and
+        // no stale rows persisted across the switch.
         switchTo("Home Budget")
-        // Quotes is business-only → its quick action is absent on personal (J25 covers
-        // the gating; here the contract is that the p1 loyalty/quotes data does NOT
-        // bleed into p2's wallet).
-        app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
-        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen].firstMatch
-                        .waitForExistence(timeout: 10), "Wallet did not open on p2")
-        let p2CardRows = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.loyaltyCardRowPrefix))
-        XCTAssertEqual(p2CardRows.count, 0,
-                       "p1 loyalty cards leaked into the personal-profile wallet")
+        let loyaltyAgain = app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch
+        XCTAssertTrue(loyaltyAgain.waitForExistence(timeout: 10),
+                      "Loyalty quick action missing after switching back to personal")
+        loyaltyAgain.tap()
+        let p2CardsAgain = openWalletCardIDs()
+        XCTAssertEqual(p2CardsAgain, p2Cards,
+                       "Reopened personal wallet did not rescope to p2's exact card set after the switch")
     }
 
     func testQuotesGatedToBusiness() {

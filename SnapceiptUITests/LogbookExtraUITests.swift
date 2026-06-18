@@ -5,7 +5,8 @@ import XCTest
 /// (adding it is out-of-guardrail new UI); see the deferred-findings log.
 final class LogbookExtraUITests: UITestCase {
     func testTripAddRecomputesClaim() {
-        launchSeeded()
+        // Mileage is a PERSONAL-only Home quick action — seed personal-active.
+        launchSeeded(activeType: "personal")
         // Open mileage via the Home quick action.
         app.buttons[AccessibilityID.homeQuickMileage].firstMatch.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.mileageScreen].firstMatch

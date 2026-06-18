@@ -31,6 +31,14 @@ class UITestCase: XCTestCase {
         app.launch()
     }
 
+    /// Like `launchSeeded()` but makes the seeded profile of `type` active on launch.
+    /// Home quick actions are profile-type-gated (personal: Loyalty/Mileage/WFH;
+    /// business: Quote/Reports/Receipts), so type-specific tests pick the right one.
+    func launchSeeded(activeType: String) {
+        app.launchArguments += ["-uiTestStub", "-uiTestSeed", "-uiTestActiveType", activeType]
+        app.launch()
+    }
+
     /// Launch directly into the BAS fixture: a GST-registered Business profile p1
     /// active + a non-registered Business p2 — for BasUITests.
     func launchBasSeed() {

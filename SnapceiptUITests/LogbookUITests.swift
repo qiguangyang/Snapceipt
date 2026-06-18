@@ -6,7 +6,8 @@ import XCTest
 final class LogbookUITests: UITestCase {
 
     func testMileageAddVehicleLogbookTripCostsClaim() {
-        launchSeeded()
+        // Mileage is a PERSONAL-only Home quick action — seed personal-active.
+        launchSeeded(activeType: "personal")
 
         // Open Mileage from the Home quick action.
         let mileage = app.buttons[AccessibilityID.homeQuickMileage].firstMatch
@@ -53,7 +54,8 @@ final class LogbookUITests: UITestCase {
     }
 
     func testWFHLogHoursShowsFYClaim() {
-        launchSeeded()
+        // WFH is a PERSONAL-only Home quick action — seed personal-active.
+        launchSeeded(activeType: "personal")
 
         let wfh = app.buttons[AccessibilityID.homeQuickWFH].firstMatch
         XCTAssertTrue(wfh.waitForExistence(timeout: 10), "WFH quick action missing")
