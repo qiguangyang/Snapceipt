@@ -5,6 +5,23 @@ import XCTest
 /// (both profiles, pinned clock). Each stop is a `shoot(<screen>-<state>)`.
 final class ScreenshotTourUITests: UITestCase {
 
+    /// Switch the active profile to the seeded PERSONAL one ("Home Budget") via the
+    /// Home profile-switcher → ProfilePickerSheet. Home quick actions are strictly
+    /// profile-type-gated (personal: Loyalty/Mileage/WFH; business: Quote/…), and the
+    /// tour fixture launches business-active, so areas that drive personal-only quick
+    /// actions must flip the active profile first. This is the canonical switch path
+    /// (ProfilePickerSheet's row Button calls store.setActive + dismiss) — the same one
+    /// test_area02_appShell and test_cross_accentReskin already drive.
+    @MainActor private func switchToPersonalProfile() {
+        require(app.descendants(matching: .any)[AccessibilityID.profileSwitcher], "switcher")
+        app.descendants(matching: .any)[AccessibilityID.profileSwitcher].firstMatch.tap()
+        require(app.staticTexts["Home Budget"], "personal profile in picker")
+        app.staticTexts["Home Budget"].tap()
+        // The personal Home re-renders with the Loyalty/Mileage/WFH quick actions.
+        require(app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty],
+                "personal quick actions after switch")
+    }
+
     // Area 1 — Onboarding + Auth. Uses launchStub (signed-out) to reach SignIn,
     // then dev-sign-in to reach Onboarding. Tour fixture is signed-in, so this
     // one method uses the stub/reset path deliberately.
@@ -112,9 +129,15 @@ final class ScreenshotTourUITests: UITestCase {
         shoot(app, "export-sheet")
     }
 
-    // Area 6 — Logbooks (mileage + WFH).
+    // Area 6 — Logbooks (mileage + WFH). Mileage/WFH are PERSONAL-only Home quick
+    // actions now, so switch to the personal profile before tapping them.
     @MainActor func test_area06_logbooks() {
-        launchTour()
+        // Mileage/WFH are PERSONAL-only Home quick actions AND Pro-gated, so launch the
+        // tour with the personal profile active + a Pro plan (no paywall on Add vehicle).
+        // Launch business-active, then switch to personal via the picker — the switcher
+        // header reads "Studio North", so "Home Budget" is unambiguous (picker only).
+        launchTour(pro: true)
+        switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickMileage], "home.quick.mileage")
         app.descendants(matching: .any)[AccessibilityID.homeQuickMileage].firstMatch.tap()
         shoot(app, "mileage-populated")
@@ -152,9 +175,17 @@ final class ScreenshotTourUITests: UITestCase {
         }
     }
 
-    // Area 8 — Loyalty (wallet, add, card detail).
+    // Area 8 — Loyalty (wallet, add, card detail). Loyalty is a PERSONAL-only Home
+    // quick action now, so switch to the personal profile first (p2 seeds its own
+    // Flybuys card so the wallet renders populated under terracotta).
     @MainActor func test_area08_loyalty() {
-        launchTour()
+        // Loyalty is a PERSONAL-only Home quick action, so launch with the personal
+        // profile active. pro:true is harmless (loyalty itself isn't Pro-gated) and
+        // keeps this area paywall-free if the quick action ever becomes gated.
+        // Launch business-active, then switch to personal via the picker — the switcher
+        // header reads "Studio North", so "Home Budget" is unambiguous (picker only).
+        launchTour(pro: true)
+        switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty], "home.quick.loyalty")
         app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen], "wallet")
@@ -190,22 +221,28 @@ final class ScreenshotTourUITests: UITestCase {
         shoot(app, "loyalty-add-number-keyboard")
     }
 
-    // Area 9 — Quotes (list, editor). Business profile is active in the fixture.
+    // Area 9 — Quotes (list, editor). Business profile is active in the tour fixture,
+    // so the Create Quote quick action is present without a profile switch. Drive the
+    // add CTA + client button via the .buttons accessor (the LbFloatingCTA + editor
+    // controls are real Buttons) — the same resolution QuotesUITests uses to reach the
+    // editor reliably.
     @MainActor func test_area09_quotes() {
-        launchTour()
-        require(app.descendants(matching: .any)[AccessibilityID.homeQuickQuote], "home.quick.quote")
-        app.descendants(matching: .any)[AccessibilityID.homeQuickQuote].firstMatch.tap()
+        // Create Quote is a BUSINESS quick action (business is the tour default) AND
+        // Pro-gated, so launch with a Pro plan so the editor opens without the paywall.
+        launchTour(pro: true)
+        require(app.buttons[AccessibilityID.homeQuickQuote], "home.quick.quote")
+        app.buttons[AccessibilityID.homeQuickQuote].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.quotesScreen], "quote list")
         shoot(app, "quotes-list-populated")
-        app.descendants(matching: .any)[AccessibilityID.quotesAdd].firstMatch.tap()
+        app.buttons[AccessibilityID.quotesAdd].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.quoteEditorScreen], "quote editor")
         shoot(app, "quote-editor-new")
         // §5 area 9 "client picker" — ClientPickerSheet (the fixture seeds a Client).
-        app.descendants(matching: .any)[AccessibilityID.quoteEditorClient].firstMatch.tap()
+        app.buttons[AccessibilityID.quoteEditorClient].firstMatch.tap()
         if app.descendants(matching: .any)[AccessibilityID.clientPickerScreen].waitForExistence(timeout: 4) {
             shoot(app, "client-picker-sheet")
             // Inline new-client form (keyboard-up): tapping Add reveals a name field.
-            app.descendants(matching: .any)[AccessibilityID.clientPickerAdd].firstMatch.tap()
+            app.buttons[AccessibilityID.clientPickerAdd].firstMatch.tap()
             shoot(app, "client-picker-new-keyboard")
         }
     }
@@ -213,16 +250,35 @@ final class ScreenshotTourUITests: UITestCase {
     // Area 10 — Email-in + Settings + Profiles. Broadest area: shoot the hub +
     // every reachable sub-screen the spec names.
     @MainActor func test_area10_emailSettingsProfiles() {
-        launchTour()
+        // Email-in is Pro-gated, so launch with a Pro plan so emailInScreen opens
+        // without the paywall. The profile.row.emailin row sits low in the hub
+        // ScrollView — hubRow(_) below already swipes up until it's hittable.
+        launchTour(pro: true)
         require(app.descendants(matching: .any)[AccessibilityID.tabProfile], "tabbar.profile")
         app.descendants(matching: .any)[AccessibilityID.tabProfile].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.profileHubScreen], "profile hub")
         shoot(app, "settings-hub")
+        // Resolve a hub setting row as a Button and bring it on-screen before tapping.
+        // The App-group rows (Email-in, Privacy, …) sit several groups down the hub
+        // ScrollView, so a freshly-resolved element can EXIST but not be `hittable`
+        // (below the fold) — XCUITest's tap() auto-scroll is unreliable that far down.
+        // Swipe up until the row is hittable, then return it for tapping.
+        @discardableResult
+        func hubRow(_ rowID: String) -> XCUIElement {
+            let row = app.buttons[rowID].firstMatch
+            guard row.waitForExistence(timeout: 4) else { return row }
+            var tries = 0
+            while !row.isHittable && tries < 6 {
+                app.descendants(matching: .any)[AccessibilityID.profileHubScreen].firstMatch.swipeUp()
+                tries += 1
+            }
+            return row
+        }
         // Helper: tap a hub row by id, shoot, then pop back to the hub.
         func sub(_ rowID: String, screenID: String, name: String) {
-            let row = app.descendants(matching: .any)[rowID]
+            let row = hubRow(rowID)
             guard row.waitForExistence(timeout: 4) else { return }
-            row.firstMatch.tap()
+            row.tap()
             guard app.descendants(matching: .any)[screenID].waitForExistence(timeout: 6) else { return }
             shoot(app, name)
             // Pop: SheetHeader/LbHeader close (logbook.close), else nav back, else the
@@ -243,8 +299,9 @@ final class ScreenshotTourUITests: UITestCase {
         sub(AccessibilityID.profileRowEmailIn, screenID: AccessibilityID.emailInScreen, name: "emailin-inbox")
         // EmailInReviewView — tap the first email-in row (fixture seeds a failed +
         // a done item under emailInListRowPrefix + transaction.id).
-        if app.descendants(matching: .any)[AccessibilityID.profileRowEmailIn].waitForExistence(timeout: 4) {
-            app.descendants(matching: .any)[AccessibilityID.profileRowEmailIn].firstMatch.tap()
+        let emailInRow = hubRow(AccessibilityID.profileRowEmailIn)
+        if emailInRow.waitForExistence(timeout: 4) {
+            emailInRow.tap()
             _ = app.descendants(matching: .any)[AccessibilityID.emailInScreen].waitForExistence(timeout: 4)
             app.descendants(matching: .any)
                 .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.emailInListRowPrefix))
@@ -269,9 +326,9 @@ final class ScreenshotTourUITests: UITestCase {
         sub(AccessibilityID.profileRowAccount, screenID: AccessibilityID.accountScreen, name: "settings-account")
         sub(AccessibilityID.profileRowPrivacy, screenID: AccessibilityID.privacyScreen, name: "settings-privacy")
         // RuleEditor — from Categories (Smart rules add). Re-enter Categories, tap add.
-        let catRow = app.descendants(matching: .any)[AccessibilityID.profileRowCategories]
+        let catRow = hubRow(AccessibilityID.profileRowCategories)
         if catRow.waitForExistence(timeout: 4) {
-            catRow.firstMatch.tap()
+            catRow.tap()
             if app.descendants(matching: .any)[AccessibilityID.ruleAddButton].waitForExistence(timeout: 4) {
                 app.descendants(matching: .any)[AccessibilityID.ruleAddButton].firstMatch.tap()
                 if app.descendants(matching: .any)[AccessibilityID.ruleEditorScreen].waitForExistence(timeout: 4) {
@@ -285,15 +342,33 @@ final class ScreenshotTourUITests: UITestCase {
     // so the gated card + BasView render. Shoots the card, the spine, and the
     // post-lodge state.
     @MainActor func test_area14_bas() {
-        launchBasSeed()
+        launchBasSeed(pro: true)   // the BAS card is Pro-gated; open it without a paywall
         require(app.buttons[AccessibilityID.tabReports], "tab.reports")
         app.buttons[AccessibilityID.tabReports].tap()
-        require(app.descendants(matching: .any)[AccessibilityID.reportsBasCard], "reports.bas.card")
+        // The BAS card moved FURTHER DOWN the restyled Reports ScrollView (cards
+        // reordered); bind it as a Button (it's a real Button) and swipe the Reports
+        // ScrollView up until it's hittable before tapping, mirroring the working
+        // BasUITests resolution so the tap reliably opens BasView.
+        let basCard = app.buttons[AccessibilityID.reportsBasCard].firstMatch
+        require(basCard, "reports.bas.card")
+        var scrollTries = 0
+        while !basCard.isHittable && scrollTries < 8 {
+            app.descendants(matching: .any)[AccessibilityID.reportsScreen].firstMatch.swipeUp()
+            scrollTries += 1
+        }
         shoot(app, "bas-card-needsreview")
-        app.descendants(matching: .any)[AccessibilityID.reportsBasCard].tap()
+        basCard.tap()
         require(app.descendants(matching: .any)[AccessibilityID.basScreen], "bas.screen")
         shoot(app, "bas-screen-estimated")
-        app.descendants(matching: .any)[AccessibilityID.basMarkLodged].tap()
+        // Mark-as-lodged sits deep in the BasView ScrollView; scroll it into view first.
+        let markLodged = app.descendants(matching: .any)[AccessibilityID.basMarkLodged].firstMatch
+        require(markLodged, "bas.markLodged")
+        var lodgeTries = 0
+        while !markLodged.isHittable && lodgeTries < 8 {
+            app.descendants(matching: .any)[AccessibilityID.basScreen].firstMatch.swipeUp()
+            lodgeTries += 1
+        }
+        markLodged.tap()
         shoot(app, "bas-screen-lodged")
     }
 
@@ -302,22 +377,36 @@ final class ScreenshotTourUITests: UITestCase {
     // EMPTY states: both profiles seeded with NO domain data, so every primary
     // screen renders its empty-state art (§4 "empty AND populated variants").
     @MainActor func test_cross_emptyStates() {
-        launchTourEmpty()
+        // EMPTY tour fixture (so every screen renders its empty-state art) + a Pro
+        // plan: this method drives the Pro-gated quick actions (Create Quote, Mileage)
+        // and the personal Loyalty quick action, all of which paywall for a free user.
+        // launchTourEmpty() takes no flags, so append -uiTestPro inline (the same
+        // arg-building shape test_area01/test_cross_largeType use). Business stays
+        // active at launch so the business empties + Create Quote are captured first,
+        // then switchToPersonalProfile() flips to the personal-only quick actions.
+        app.launchArguments += ["-uiTestStub", "-uiTestTourEmpty", "-uiTestPro"]
+        app.launch()
         require(app.descendants(matching: .any)[AccessibilityID.tabSnap], "shell")
         shoot(app, "home-empty-business")
         app.descendants(matching: .any)[AccessibilityID.tabReports].firstMatch.tap()
         shoot(app, "reports-empty")
         // Back to HOME for the quick actions (tab.home — the Snap FAB opens capture).
+        // Quick actions are profile-type-gated, so capture the BUSINESS-only action
+        // (Create Quote) while the business profile is still active...
         app.descendants(matching: .any)[AccessibilityID.tabHome].firstMatch.tap()
-        require(app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty], "home.quick.loyalty")
-        app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
-        if app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen].waitForExistence(timeout: 4) {
-            shoot(app, "loyalty-wallet-empty")
-            app.descendants(matching: .any)[AccessibilityID.logbookClose].firstMatch.tap()
-        }
+        require(app.descendants(matching: .any)[AccessibilityID.homeQuickQuote], "home.quick.quote")
         app.descendants(matching: .any)[AccessibilityID.homeQuickQuote].firstMatch.tap()
         if app.descendants(matching: .any)[AccessibilityID.quotesScreen].waitForExistence(timeout: 4) {
             shoot(app, "quotes-empty")
+            app.descendants(matching: .any)[AccessibilityID.logbookClose].firstMatch.tap()
+        }
+        // ...then switch to the PERSONAL profile for the personal-only quick actions
+        // (Loyalty / Mileage). The empty fixture seeds no domain data, so each opens
+        // its empty-state art.
+        switchToPersonalProfile()
+        app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
+        if app.descendants(matching: .any)[AccessibilityID.loyaltyWalletScreen].waitForExistence(timeout: 4) {
+            shoot(app, "loyalty-wallet-empty")
             app.descendants(matching: .any)[AccessibilityID.logbookClose].firstMatch.tap()
         }
         app.descendants(matching: .any)[AccessibilityID.homeQuickMileage].firstMatch.tap()

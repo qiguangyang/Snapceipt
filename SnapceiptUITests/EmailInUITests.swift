@@ -6,7 +6,10 @@ import XCTest
 /// (stub alias) -> tap the failed row -> review -> Save -> back to the list -> Rotate.
 final class EmailInUITests: UITestCase {
     func testEmailInAddressCardAndReviewFlow() {
-        launchSeeded()
+        // Email-in is a Pro feature. Launch with pro: true so the app reports a Pro
+        // plan and the screen / review / rotate open WITHOUT the paywall ever
+        // appearing (the StoreKit-test purchase hack can't complete in the stub).
+        launchSeeded(pro: true)
 
         // Navigate to the Profile tab. (The real id is `tab.profile` — the tab-bar
         // button — mirroring how BudgetsUITests reaches Notifications settings.)
@@ -18,6 +21,9 @@ final class EmailInUITests: UITestCase {
         let row = app.buttons[AccessibilityID.profileRowEmailIn].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Email-in row missing")
         row.tap()
+
+        // Pro plan is active (launched with pro: true), so the Pro gate falls away
+        // and no paywall appears as we drive the list / review / rotate.
 
         // Address card renders (stub alias).
         let address = app.staticTexts[AccessibilityID.emailInAddress]

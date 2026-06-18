@@ -13,7 +13,7 @@ private struct TabItem: View {
             VStack(spacing: 4) {
                 Icon(name: iconName, size: 23, color: isActive ? accent.base : Palette.ink3)
                 Text(label)
-                    .font(.ui(10.5, .semibold))
+                    .font(.ui(10.5, .bold))
                     .foregroundStyle(isActive ? accent.base : Palette.ink3)
             }
             .frame(maxWidth: .infinity)
@@ -64,7 +64,7 @@ struct TabBar: View {
                         )
                         .shadow(color: accent.base.opacity(0.55), radius: 12, x: 0, y: 8)
                         .shadow(color: Palette.ink.opacity(0.18), radius: 4, x: 0, y: 3)
-                    Icon(name: "camera", size: 28, color: .white)
+                    Icon(name: "camera", size: 26, color: .white)
                 }
                 // contentShape BEFORE offset so the hit area moves with the
                 // visible button (after offset it leaves a phantom tap zone
@@ -96,7 +96,7 @@ struct TabBar: View {
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Palette.paper.opacity(0.55))
+                    .fill(Palette.paper.opacity(0.78))
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
                     .fill(.regularMaterial)
                 // The border lives in the background stack, NOT .overlay:

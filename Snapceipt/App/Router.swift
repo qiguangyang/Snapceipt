@@ -32,6 +32,7 @@ enum Overlay: Equatable, Identifiable {
     case ruleEditor(id: String?)   // nil = new rule
     case profileDetail(id: String)
     case receiptDetail(id: String)   // view a saved receipt
+    case manual(editId: String?)      // add (nil) or edit an existing transaction manually
     case account
     case privacy
     case changeEmail
@@ -61,6 +62,7 @@ enum Overlay: Equatable, Identifiable {
         case .ruleEditor(let id): return "ruleEditor-\(id ?? "new")"
         case .profileDetail(let id): return "profileDetail-\(id)"
         case .receiptDetail(let id): return "receiptDetail-\(id)"
+        case .manual(let editId): return "manual-\(editId ?? "new")"
         case .account: return "account"
         case .privacy: return "privacy"
         case .changeEmail: return "changeEmail"

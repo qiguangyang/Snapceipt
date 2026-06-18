@@ -51,3 +51,4 @@ artifacts/
 
 # Live-dev journey runner persist dirs (Plan B)
 .e2e-journey-state*/
+.design-ref/

@@ -6,13 +6,18 @@ import XCTest
 /// Real PDF/email is covered by the backend tests + manual QA.
 final class QuotesUITests: UITestCase {
     func testCreateQuotePickClientAddLineSend() {
-        launchSeeded()   // signed-in, business profile p1 active, seeded client + quote
+        // Quotes is a Pro feature. Launch with pro: true so the app reports a Pro
+        // plan and the Quotes list / editor open WITHOUT the paywall ever appearing
+        // (the StoreKit-test purchase hack can't complete in the stub).
+        launchSeeded(pro: true)   // signed-in, business profile p1 active, seeded client + quote
 
         let quick = app.buttons[AccessibilityID.homeQuickQuote].firstMatch
         XCTAssertTrue(quick.waitForExistence(timeout: 10), "Create Quote quick action missing on Home (business profile)")
         quick.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.quotesScreen].waitForExistence(timeout: 5),
                       "Quotes list did not appear")
+        // Pro plan is active (launched with pro: true), so the Pro gate falls away
+        // and no paywall appears over the list.
 
         let seededRow = app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier BEGINSWITH %@", AccessibilityID.quoteRowPrefix)).firstMatch

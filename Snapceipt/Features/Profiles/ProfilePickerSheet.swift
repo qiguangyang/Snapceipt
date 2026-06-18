@@ -15,15 +15,19 @@ struct ProfilePickerSheet: View {
         // and a sheet-within-a-sheet artifact — render straight onto the sheet
         // surface, matching the sibling AddProfileView.
         VStack(spacing: 0) {
-            HStack {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Switch profile")
                     .font(.display(20, .bold))
                     .foregroundStyle(Palette.ink)
-                Spacer()
+                Text("Each profile keeps its own receipts, budgets & tax.")
+                    .font(.ui(13.5))
+                    .foregroundStyle(Palette.ink2)
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 18)
             .padding(.top, 18)
-            .padding(.bottom, 14)
 
             VStack(spacing: 8) {
                 ForEach(store.profiles, id: \.id) { p in
@@ -60,9 +64,15 @@ struct ProfilePickerSheet: View {
                         .font(.ui(12.5, .regular)).foregroundStyle(Palette.ink3)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isActive ? base : Palette.line)
+                ZStack {
+                    if isActive {
+                        Circle().fill(base)
+                        Icon(name: "check", size: 15, color: .white)
+                    } else {
+                        Circle().strokeBorder(Palette.line, lineWidth: 2)
+                    }
+                }
+                .frame(width: 24, height: 24)
             }
             .padding(12)
             .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
@@ -70,28 +80,37 @@ struct ProfilePickerSheet: View {
                 RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
                     .stroke(isActive ? base : Palette.line2, lineWidth: isActive ? 1.5 : 1)
             )
+            .modifier(InactiveCardShadow(active: isActive))
         }
         .buttonStyle(.plain)
     }
 
     private var addRow: some View {
         Button(action: onAddProfile) {
-            HStack(spacing: 12) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold))
+            HStack(spacing: 8) {
+                Icon(name: "plus", size: 19, color: Palette.ink2)
+                Text("Add a profile")
+                    .font(.ui(14.5, .bold))
                     .foregroundStyle(Palette.ink2)
-                    .frame(width: 42, height: 42)
-                Text("Add a profile").font(.ui(15.5, .semibold)).foregroundStyle(Palette.ink2)
-                Spacer(minLength: 0)
+                    .fixedSize()
             }
-            .padding(12)
+            .frame(maxWidth: .infinity)
+            .padding(14)
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
                     .foregroundStyle(Palette.line)
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Applies `.cardShadow()` to inactive rows only; the active (border = accent) row drops it.
+private struct InactiveCardShadow: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        if active { content } else { content.cardShadow() }
     }
 }
 

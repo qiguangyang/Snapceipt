@@ -12,6 +12,9 @@ struct Card<Content: View>: View {
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .strokeBorder(Palette.line2, lineWidth: 1)
+                    // Decorative only — must not hit-test, or the border sits above the
+                    // card's content and swallows taps on interactive rows inside it.
+                    .allowsHitTesting(false)
             )
             .cardShadow()
     }

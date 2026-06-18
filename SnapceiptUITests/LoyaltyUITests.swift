@@ -7,7 +7,7 @@ import XCTest
 /// camera), so this drives the MANUAL add path only.
 final class LoyaltyUITests: UITestCase {
     func testWalletDetailManualAddAndDelete() {
-        launchSeeded()   // signed-in, business profile p1 active, seeded loyalty cards
+        launchSeeded(activeType: "personal")   // signed-in, personal profile p2 active, seeded loyalty cards
 
         // Home loyalty quick action -> wallet.
         let quick = app.buttons[AccessibilityID.homeQuickLoyalty].firstMatch

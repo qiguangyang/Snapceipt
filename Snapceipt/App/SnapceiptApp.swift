@@ -86,6 +86,15 @@ struct SnapceiptApp: App {
         let profiles = ProfilesStore(context: context, sync: sync, userId: userId)
 
         let router = Router()
+#if DEBUG
+        // UI-screenshot seam: `-uiTestTab <home|activity|reports|profile>` lands the
+        // shell on a specific tab so each screen can be captured without tapping.
+        if let i = CommandLine.arguments.firstIndex(of: "-uiTestTab"),
+           i + 1 < CommandLine.arguments.count,
+           let t = Tab(rawValue: CommandLine.arguments[i + 1]) {
+            router.tab = t
+        }
+#endif
 
         // Subscription stack: wire StoreKit → EntitlementStore callbacks before
         // storing, so any launch-time transaction update is handled immediately.

@@ -25,11 +25,16 @@ struct RootView: View {
     /// Live count of non-deleted profiles drives the "needs onboarding" gate.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
 
+    /// Observe the first-run completion flag so RootView re-renders into the shell the
+    /// instant the notifications step calls `OnboardingGate.markComplete()`. Without this
+    /// the gate's UserDefaults read isn't reactive and the shell never appears.
+    @AppStorage(OnboardingGate.key) private var onboardingComplete = false
+
     var body: some View {
         Group {
             switch authVM.state {
             case .signedIn:
-                if OnboardingGate.needsOnboarding() {
+                if !onboardingComplete {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.
@@ -197,6 +202,27 @@ struct ShellView: View {
                           onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent)
                     .transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .manual(editId) = router.overlay {
+                AddManualView(context: profiles.context, sync: sync, userId: profiles.userId,
+                              profileId: profiles.activeProfileId,
+                              isBusiness: profiles.activeProfile?.type == ProfileType.business.rawValue,
+                              editId: editId,
+                              onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            // Receipt detail is a full-screen page (matches the design's TxnDetail,
+            // inset:0). Presenting it as a `.sheet` from a deeply-nested Activity row
+            // didn't reliably fire, so it lives here like the other detail screens.
+            if case let .receiptDetail(id) = router.overlay {
+                ReceiptDetailView(context: profiles.context, sync: sync, transactionId: id,
+                                  onEdit: { router.present(.manual(editId: $0)) },
+                                  onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
             }
         }
         .overlay {
@@ -403,7 +429,8 @@ struct ShellView: View {
             homeStub(accent: accent)
         case .activity:
             ActivityTabView(context: profiles.context, profileId: profiles.activeProfileId,
-                            onOpenReceipt: { router.present(.receiptDetail(id: $0)) })
+                            onOpenReceipt: { router.present(.receiptDetail(id: $0)) },
+                            onSnap: { router.present(.capture) })
         case .reports:
             ReportsView(
                 context: profiles.context,
@@ -452,51 +479,36 @@ struct ShellView: View {
     private func homeStub(accent: AccentPalette) -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                HStack(spacing: 10) {
+                // Top bar — profile switcher + alerts bell (design TopBar)
+                HStack(spacing: 8) {
                     ProfileSwitcherHeader(
                         store: profiles,
                         onTapSwitch: { router.go(.overlay(.profilePicker)) }
                     )
-                    Button { router.present(.alerts) } label: {
-                        ZStack(alignment: .topTrailing) {
-                            IconCircle(name: "bell", tint: accent.base, soft: accent.soft, size: 40, iconSize: 20)
-                            if unreadAlertCount > 0 {
-                                Circle().fill(Palette.alert).frame(width: 10, height: 10).offset(x: 2, y: -2)
-                            }
-                        }
-                    }
+                    Spacer(minLength: 8)
+                    Button { router.present(.alerts) } label: { bellButton(accent: accent) }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier(AccessibilityID.homeAlertsBell)
                 }
                 .padding(.horizontal, 18).padding(.top, 12)
 
-                HStack(spacing: 12) {
-                    quickAction(title: "Mileage", icon: "car", id: AccessibilityID.homeQuickMileage,
-                                accent: accent) { router.present(.mileage) }
-                    quickAction(title: "WFH log", icon: "wfh", id: AccessibilityID.homeQuickWFH,
-                                accent: accent) { router.present(.wfh) }
-                }
-                .padding(.horizontal, 18).padding(.top, 14)
+                // Net-this-month gradient hero
+                HomeSummaryCard(profileId: profiles.activeProfileId,
+                                isBusiness: profiles.activeProfile?.type == ProfileType.business.rawValue)
+                    .padding(.horizontal, 18).padding(.top, 16)
 
-                HStack(spacing: 12) {
-                    quickAction(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
-                                accent: accent) { router.present(.loyalty) }
-                }
-                .padding(.horizontal, 18).padding(.top, 12)
+                // Snap-a-receipt feature CTA
+                HomeSnapCTA { router.present(.capture) }
+                    .padding(.horizontal, 18).padding(.top, 14)
 
-                // BUSINESS-ONLY: the Quotes feature is gated on the active profile type.
-                if profiles.activeProfile?.type == ProfileType.business.rawValue {
-                    HStack(spacing: 12) {
-                        quickAction(title: "Create Quote", icon: "receipt", id: AccessibilityID.homeQuickQuote,
-                                    accent: accent) { router.present(.quotes) }
-                    }
-                    .padding(.horizontal, 18).padding(.top, 12)
-                }
+                // Quick actions — 4 vertical tiles, per profile type
+                quickActionRow(accent: accent)
+                    .padding(.horizontal, 18).padding(.top, 18)
 
                 HomeRecentReceipts(profileId: profiles.activeProfileId,
                                    onSeeAll: { router.go(.activity) },
                                    onOpenReceipt: { router.present(.receiptDetail(id: $0)) })
-                    .padding(.horizontal, 18).padding(.top, 16)
+                    .padding(.horizontal, 18).padding(.top, 20)
 
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
@@ -505,11 +517,11 @@ struct ShellView: View {
                     onTapBudget: { router.openBudget($0) },
                     onAdd: { router.openBudget(nil) }
                 )
-                .padding(.horizontal, 18).padding(.top, 16)
+                .padding(.horizontal, 18).padding(.top, 18)
             }
             // Home a11y CONTAINER: `.contain` lets `shell.home` carry this identifier
-            // WITHOUT flattening the subtree (which would clobber `profile.switcher`,
-            // the bell, the budget-row ids, and the quick-action ids).
+            // WITHOUT flattening the subtree (profile.switcher / bell / budget-row /
+            // quick-action ids all stay queryable).
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(AccessibilityID.shellHome)
             .padding(.bottom, 110)
@@ -534,24 +546,70 @@ struct ShellView: View {
         return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Epoch.now()))
     }
 
-    /// One Home quick-action tile -> opens a logbook overlay.
-    @ViewBuilder
-    private func quickAction(title: String, icon: String, id: String,
-                             accent: AccentPalette, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                IconCircle(name: icon, tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    // Dynamic-Type robustness: shrink slightly before breaking so a
-                    // short label like "Mileage" never splits mid-word at large sizes.
-                    .lineLimit(2).minimumScaleFactor(0.8)
-                Spacer(minLength: 0)
+    /// Home alerts bell — square rounded paper button with an accent unread dot
+    /// (design TopBar bell), replacing the old accent IconCircle.
+    private func bellButton(accent: AccentPalette) -> some View {
+        Icon(name: "bell", size: 21, color: Palette.ink2)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())   // whole 44×44 is the tap target, not just the glyph
+            .background(Palette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+            .overlay(alignment: .topTrailing) {
+                if unreadAlertCount > 0 {
+                    Circle().fill(accent.base).frame(width: 8, height: 8)
+                        .overlay(Circle().strokeBorder(Palette.paper, lineWidth: 2))
+                        .padding(.top, 9).padding(.trailing, 10)
+                }
             }
-            .padding(12)
-            .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .strokeBorder(Palette.line2, lineWidth: 1))
             .cardShadow()
+    }
+
+    /// The 4-across quick-action row. Action set switches on the active profile type
+    /// (business: Quote / Add Manually / Reports / Receipts; personal: Loyalty /
+    /// Add Manually / Mileage / WFH), matching the design's HomeScreen.
+    @ViewBuilder
+    private func quickActionRow(accent: AccentPalette) -> some View {
+        let isBusiness = profiles.activeProfile?.type == ProfileType.business.rawValue
+        HStack(spacing: 6) {
+            if isBusiness {
+                quickTile(title: "Create Quote", icon: "receipt", id: AccessibilityID.homeQuickQuote,
+                          accent: accent) { router.present(.quotes) }
+                quickTile(title: "Add Manually", icon: "plus", id: AccessibilityID.homeQuickManual,
+                          accent: accent) { router.present(.manual(editId: nil)) }
+                quickTile(title: "Reports", icon: "chart", id: AccessibilityID.homeQuickReports,
+                          accent: accent) { router.go(.reports) }
+                quickTile(title: "Receipts", icon: "receipt", id: AccessibilityID.homeQuickReceipts,
+                          accent: accent) { router.go(.activity) }
+            } else {
+                quickTile(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
+                          accent: accent) { router.present(.loyalty) }
+                quickTile(title: "Add Manually", icon: "plus", id: AccessibilityID.homeQuickManual,
+                          accent: accent) { router.present(.manual(editId: nil)) }
+                quickTile(title: "Mileage", icon: "car", id: AccessibilityID.homeQuickMileage,
+                          accent: accent) { router.present(.mileage) }
+                quickTile(title: "WFH log", icon: "wfh", id: AccessibilityID.homeQuickWFH,
+                          accent: accent) { router.present(.wfh) }
+            }
+        }
+    }
+
+    /// One Home quick-action tile — vertical 52×52 paper icon square + label below.
+    @ViewBuilder
+    private func quickTile(title: String, icon: String, id: String,
+                           accent: AccentPalette, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                Icon(name: icon, size: 23, color: accent.base)
+                    .frame(width: 52, height: 52)
+                    .background(Palette.paper, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).strokeBorder(Palette.line, lineWidth: 1)
+                        .allowsHitTesting(false))   // decorative border must not swallow the tile tap
+                    .cardShadow()
+                Text(title).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink2)
+                    .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())   // whole tile column is the hit target
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
@@ -566,7 +624,7 @@ struct ShellView: View {
         Binding(
             get: {
                 switch router.overlay {
-                case .capture, .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+                case .capture, .mileage, .wfh, .manual, .receiptDetail, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
                      .emailIn, .emailInReview,
                      .tax, .categories, .ruleEditor, .profileDetail,
@@ -590,7 +648,8 @@ struct ShellView: View {
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
                    !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview"),
-                   !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail") {
+                   !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail"),
+                   !cur.id.hasPrefix("manual"), !cur.id.hasPrefix("receiptDetail") {
                     router.dismissOverlay()
                 } else if let newValue {
                     router.overlay = newValue
@@ -641,12 +700,7 @@ struct ShellView: View {
             .background(Palette.cream)
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
-        case .receiptDetail(let id):
-            ReceiptDetailView(context: profiles.context, transactionId: id,
-                              onClose: { router.dismissOverlay() })
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Palette.cream)
-        case .mileage, .wfh, .budgets, .budgetEditor, .alerts, .notificationSettings,
+        case .receiptDetail, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .emailIn, .emailInReview,
              .tax, .categories, .ruleEditor, .profileDetail,

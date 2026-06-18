@@ -124,6 +124,11 @@ struct EmailInView: View {
                     }
                 }
             }
+            // Make the WHOLE card (incl. the empty Spacer between the merchant and the
+            // trailing badge/amount, plus the card's own padding) a single hit target,
+            // so a tap anywhere on the row opens the review editor. Without this the
+            // Spacer leaves an un-hittable gap and the row reads as "not hittable".
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.emailInListRowPrefix + txn.id)

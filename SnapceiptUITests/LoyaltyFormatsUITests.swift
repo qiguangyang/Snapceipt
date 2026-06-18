@@ -31,7 +31,7 @@ final class LoyaltyFormatsUITests: UITestCase {
                       "Did not return to Home after card \(index)")
     }
     func testBarcodeRendersPerFormat() {
-        launchSeeded()
+        launchSeeded(activeType: "personal")
         // Open each seeded card (ean13, qr, code128, pdf417) and assert its barcode renders.
         for i in 0..<4 { openNthCardAndAssertBarcode(i) }
     }

@@ -23,12 +23,7 @@ struct HomeRecentReceipts: View {
             if !rows.isEmpty {
                 VStack(spacing: 10) {
                     header
-                    ForEach(rows) { row in
-                        Button { onOpenReceipt(row.id) } label: {
-                            ReceiptRowView(row: row)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    card(rows)
                 }
                 .accessibilityIdentifier(AccessibilityID.homeRecentSection)
             }
@@ -37,12 +32,32 @@ struct HomeRecentReceipts: View {
 
     private var header: some View {
         HStack {
-            Text("Recent receipts").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
+            Text("Recent activity").font(.ui(17, .bold)).foregroundStyle(Palette.ink).tracking(-0.3)
             Spacer()
             Button(action: onSeeAll) {
-                Text("See all").font(.ui(13, .semibold)).foregroundStyle(accent.base)
+                HStack(spacing: 2) {
+                    Text("See all").font(.ui(13, .semibold)).foregroundStyle(accent.base)
+                    Icon(name: "chevR", size: 15, color: accent.base)
+                }
             }
             .accessibilityIdentifier(AccessibilityID.homeRecentSeeAll)
         }
+        .padding(.horizontal, 2)
+    }
+
+    private func card(_ rows: [ReceiptRow]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                Button { onOpenReceipt(row.id) } label: {
+                    ReceiptRowView(row: row, showDivider: idx < rows.count - 1)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        // Non-hit-testing so the decorative border doesn't swallow the row buttons' taps.
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1).allowsHitTesting(false))
+        .cardShadow()
     }
 }

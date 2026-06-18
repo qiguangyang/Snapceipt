@@ -42,16 +42,20 @@ struct ReviewStep: View {
                         aiBanner
                     }
                     fieldsCard
+                    // "Assign to profile" lives in its OWN block AFTER the details card.
+                    profileBlock
                     lineItemsCard
                     disabledChips
-                    saveButton
                 }
-                .padding(18)
+                // Leave room for the fixed bottom save bar.
+                .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 120)
             }
             // Right-aligned "hide keyboard" accessory for the editable fields above.
             .keyboardDismissButton()
         }
         .background(Palette.cream)
+        // Save button pinned to a fixed bottom bar over a cream scrim.
+        .overlay(alignment: .bottom) { saveBar }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
@@ -120,7 +124,11 @@ struct ReviewStep: View {
                 .accessibilityIdentifier(AccessibilityID.captureReviewBanner)
         }
         .padding(14)
-        .background(accent.soft, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+        .background(
+            LinearGradient(colors: [accent.soft, Palette.paper],
+                           startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
                 .stroke(accent.base.opacity(0.35), lineWidth: 1)
@@ -222,11 +230,18 @@ struct ReviewStep: View {
                     }
                 }
             }
-            profileToggle
         }
         .padding(16)
         .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .cardShadow()
+    }
+
+    /// "Assign to profile" + ModeToggle as its own card AFTER the details/fields card.
+    private var profileBlock: some View {
+        profileToggle
+            .padding(16)
+            .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .cardShadow()
     }
 
     // v1: presentation-only. Toggling Personal/Business re-skins the card live but
@@ -312,8 +327,8 @@ struct ReviewStep: View {
 
     private var disabledChips: some View {
         HStack(spacing: 8) {
-            chip("Add to mileage", icon: "plus")
-            chip("Match to bank", icon: "wallet")
+            chip("Add to mileage", icon: "car")
+            chip("Match to bank", icon: "link")
         }
         .opacity(0.45)
     }
@@ -327,7 +342,8 @@ struct ReviewStep: View {
         .background(Palette.paper2, in: Capsule())
     }
 
-    private var saveButton: some View {
+    /// FIXED bottom bar: a clear→cream scrim behind the pinned Save button.
+    private var saveBar: some View {
         VStack(spacing: 8) {
             // Surface a save failure (e.g. no active profile) instead of failing silently.
             if let error = vm.errorMessage {
@@ -341,12 +357,20 @@ struct ReviewStep: View {
                     Icon(name: "check", size: 20, color: .white)
                     Text("Save receipt").font(.ui(16, .bold)).foregroundStyle(.white)
                 }
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+                .frame(maxWidth: .infinity).frame(height: 56)
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: accent.base.opacity(0.4), radius: 12, x: 0, y: 10)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.captureSave)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 28)
+        .padding(.bottom, 18)
+        .background(
+            LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream],
+                           startPoint: .top, endPoint: .bottom)
+        )
     }
 
     @ViewBuilder
