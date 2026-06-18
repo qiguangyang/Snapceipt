@@ -126,7 +126,9 @@ struct ReportsView: View {
     private func netCard(_ vm: ReportsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Net saved · last 5 months").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+                // Period-aware caption (FY → "FY 2025–26", etc.); the net value below is
+                // for the selected period while the BarPair trend always spans 5 months.
+                Text("Net saved · \(vm.headline)").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
                 Text(fmt(vm.netCents)).font(.display(28)).foregroundStyle(Palette.ink)
                     .monospacedDigit()
                     .accessibilityIdentifier(AccessibilityID.reportsNet)
