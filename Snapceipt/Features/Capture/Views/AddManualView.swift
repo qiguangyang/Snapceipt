@@ -26,6 +26,9 @@ struct AddManualView: View {
     @State private var category: CategoryKey = .meals
     @State private var date = Date()
     @State private var note = ""
+    /// Editable GST amount (dollars text); blank = no GST. Read from the receipt on
+    /// edit, saved as a "manual" GST. Not derived from the total (items can be GST-free).
+    @State private var gstText = ""
     @State private var items: [ItemDraft] = []
     @State private var originalItemIds: Set<String> = []
     /// Once the user types into the amount field (or a saved total is loaded), the
@@ -61,6 +64,12 @@ struct AddManualView: View {
         let value = Decimal(string: cleaned) ?? 0
         let cents = NSDecimalNumber(decimal: value * 100).intValue
         return isIncome ? abs(cents) : -abs(cents)
+    }
+    /// GST amount in cents from the editable GST field; nil when blank.
+    private var gstCentsValue: Int? {
+        let cleaned = gstText.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty, let v = Decimal(string: cleaned) else { return nil }
+        return max(0, ReceiptMapper.cents(v))
     }
     private var itemsTotalCents: Int { ManualItemsMapper.totalCents(items) }
     private var hasIncompleteItem: Bool { ManualItemsMapper.hasIncompleteRow(items) }
@@ -159,6 +168,7 @@ struct AddManualView: View {
         merchant = t.merchant
         category = CategoryKey(rawValue: t.catKey) ?? .meals
         note = t.note ?? ""
+        gstText = t.gstCents.map { amountString(fromCents: $0) } ?? ""
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"
         if let d = f.date(from: t.txnDate) { date = d }
 
@@ -287,6 +297,8 @@ struct AddManualView: View {
                 dateRow
                 Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 56)
                 noteRow
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 56)
+                gstRow
             }
         }
     }
@@ -325,6 +337,24 @@ struct AddManualView: View {
         }
         .padding(.vertical, 14).padding(.horizontal, 14)
         .id("row-note")
+    }
+
+    /// Editable GST amount. Optional; read from the receipt on edit and stored as a
+    /// "manual" GST. Deliberately not derived from the total (items can be GST-free).
+    private var gstRow: some View {
+        HStack(spacing: 12) {
+            Icon(name: "shield", size: 19, color: Palette.ink3).frame(width: 32)
+            Text("GST").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+            Spacer(minLength: 8)
+            Text("$").font(.ui(14, .semibold)).foregroundStyle(Palette.ink3)
+            TextField("0.00", text: $gstText)
+                .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 80)
+                .accessibilityIdentifier(AccessibilityID.manualGstField)
+        }
+        .padding(.vertical, 14).padding(.horizontal, 14)
     }
 
     // MARK: - Items
@@ -448,6 +478,8 @@ struct AddManualView: View {
             txn.amountCents = amountCents
             txn.txnDate = f.string(from: date)
             txn.note = cleanNote
+            txn.gstCents = gstCentsValue
+            txn.gstSource = gstCentsValue != nil ? "manual" : nil
             txn.updatedAt = Epoch.nowMs()
             try? context.save()
             sync.enqueue(op: "upsert", entityType: .transaction, entity: txn)
@@ -464,6 +496,8 @@ struct AddManualView: View {
                 deductiblePct: isBusiness && !isIncome ? 100 : nil,
                 isAi: false,
                 note: cleanNote,
+                gstCents: gstCentsValue,
+                gstSource: gstCentsValue != nil ? "manual" : nil,
                 source: "manual"
             )
             context.insert(txn)

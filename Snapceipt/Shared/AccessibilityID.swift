@@ -295,6 +295,7 @@ enum AccessibilityID {
     static let manualScreen      = "manual.screen"
     static let manualMerchant    = "manual.merchant"
     static let manualAmount      = "manual.amount"
+    static let manualGstField    = "manual.gst"
     static let manualSave        = "manual.save"
     // Manual entry — receipt-style line items
     static let manualItemsAdd      = "manual.items.add"
