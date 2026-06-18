@@ -19,7 +19,11 @@ final class AddLoyaltyViewModel {
     var selectedBrand: LoyaltyBrand?
     var customName: String = ""
     var number: String = ""
-    var scannedFormat: LoyaltyCard.BarcodeFormat?
+    /// Barcode symbology to render/store. Defaults to Code 128 (renders any digit
+    /// string + what most AU loyalty cards use) so a manually-entered card ALWAYS
+    /// shows a barcode; the scanner overrides it with the detected symbology, and the
+    /// add form exposes a picker to change it.
+    var format: LoyaltyCard.BarcodeFormat = .code128
     var search: String = ""
 
     init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String) {
@@ -57,7 +61,7 @@ final class AddLoyaltyViewModel {
             brand: isCustom ? customName.trimmingCharacters(in: .whitespaces) : b.name,
             subBrand: isCustom ? nil : b.subBrand,
             number: number.trimmingCharacters(in: .whitespaces),
-            barcodeFormat: scannedFormat?.rawValue,
+            barcodeFormat: format.rawValue,
             color1: b.color1,
             color2: b.color2,
             sortOrder: sortOrder)

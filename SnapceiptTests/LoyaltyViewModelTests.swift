@@ -123,7 +123,7 @@ struct AddLoyaltyViewModelTests {
         let brand = LoyaltyBrand.catalog.first { $0.key == "everydayRewards" }!
         v.selectedBrand = brand
         v.number = "9352999000000"
-        v.scannedFormat = .ean13
+        v.format = .ean13
         let saved = v.save(sortOrder: 3)
         #expect(saved != nil)
         let rows = try ctx.fetch(FetchDescriptor<LoyaltyCard>(predicate: #Predicate { $0.deletedAt == nil }))
@@ -154,6 +154,7 @@ struct AddLoyaltyViewModelTests {
         let row = try ctx.fetch(FetchDescriptor<LoyaltyCard>(predicate: #Predicate { $0.deletedAt == nil }))[0]
         #expect(row.brand == "Local Cafe")
         #expect(row.subBrand == nil)
-        #expect(row.barcodeFormat == nil)   // no scanned format
+        // Manual entry now defaults to Code 128 so a barcode always renders (BUG fix).
+        #expect(row.barcodeFormat == "code128")
     }
 }

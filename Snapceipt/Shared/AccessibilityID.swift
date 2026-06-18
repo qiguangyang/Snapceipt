@@ -161,6 +161,7 @@ enum AccessibilityID {
     static let loyaltyAddScan = "loyalty.add.scan"
     static let loyaltyAddBrandPrefix = "loyalty.add.brand."   // + brand.key
     static let loyaltyAddNumber = "loyalty.add.number"
+    static let loyaltyAddFormat = "loyalty.add.format"
     static let loyaltyAddSave = "loyalty.add.save"
     static let loyaltyDetailScreen = "loyalty.detail.screen"
     static let loyaltyDetailBarcode = "loyalty.detail.barcode"

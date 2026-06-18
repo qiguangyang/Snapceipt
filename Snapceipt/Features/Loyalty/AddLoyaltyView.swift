@@ -40,13 +40,17 @@ struct AddLoyaltyView: View {
             if LoyaltyBarcodeScanner.isAvailable {
                 LoyaltyBarcodeScanner { value, format in
                     vm?.number = value
-                    vm?.scannedFormat = format
+                    // Unsupported symbologies still capture the value — default the type
+                    // to Code 128 so a barcode always renders.
+                    vm?.format = format ?? .code128
                     showScanner = false
                 }
                 .ignoresSafeArea()
             } else {
-                // No camera (e.g. simulator) -> dismiss back to manual entry, no crash.
-                Color.clear.onAppear { showScanner = false }
+                // Camera scanning unavailable (no permission / unsupported / simulator).
+                // Explain it instead of silently dismissing, so the user knows to enter
+                // the number manually or enable camera access.
+                scannerUnavailable
             }
         }
     }
@@ -79,6 +83,7 @@ struct AddLoyaltyView: View {
                 }
                 if vm.selectedBrand != nil {
                     numberField(vm)
+                    formatPicker(vm)
                 }
             }
             .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 160)
@@ -157,6 +162,44 @@ struct AddLoyaltyView: View {
                     .accessibilityIdentifier(AccessibilityID.loyaltyAddNumber)
             }
             .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    /// Barcode-type picker (defaults to Code 128). Lets a manually-added card match the
+    /// physical card's symbology; the scanner sets it automatically.
+    @ViewBuilder private func formatPicker(_ vm: AddLoyaltyViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Barcode type").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+            Menu {
+                ForEach(LoyaltyCard.BarcodeFormat.allCases, id: \.self) { f in
+                    Button(f.displayName) { vm.format = f }
+                }
+            } label: {
+                HStack {
+                    Text(vm.format.displayName).foregroundStyle(Palette.ink)
+                    Spacer(); Icon(name: "chevD", size: 14, color: Palette.ink3)
+                }
+                .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .accessibilityIdentifier(AccessibilityID.loyaltyAddFormat)
+        }
+    }
+
+    /// Shown when live scanning isn't available — explains the fallback instead of the
+    /// previous silent dismiss (which read as "scanning does nothing").
+    private var scannerUnavailable: some View {
+        ZStack {
+            Palette.cream.ignoresSafeArea()
+            VStack(spacing: 12) {
+                Icon(name: "camera", size: 30, color: Palette.ink3)
+                Text("Camera scanning isn't available")
+                    .font(.ui(16, .bold)).foregroundStyle(Palette.ink)
+                Text("Enter the card number manually, or enable camera access for Snapceipt in Settings.")
+                    .font(.ui(13)).foregroundStyle(Palette.ink2)
+                    .multilineTextAlignment(.center).padding(.horizontal, 32)
+                Button("Close") { showScanner = false }
+                    .font(.ui(15, .semibold)).foregroundStyle(accent.base).padding(.top, 4)
+            }
         }
     }
 
