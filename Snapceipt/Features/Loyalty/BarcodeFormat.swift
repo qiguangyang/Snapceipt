@@ -9,6 +9,17 @@ extension LoyaltyCard {
         case qr
         case aztec
         case pdf417
+
+        /// Human label for the add-card barcode-type picker.
+        var displayName: String {
+            switch self {
+            case .code128: return "Code 128"
+            case .ean13: return "EAN-13"
+            case .qr: return "QR code"
+            case .aztec: return "Aztec"
+            case .pdf417: return "PDF417"
+            }
+        }
     }
 
     /// Typed view over the raw `barcodeFormat` storage. Storage stays `String?`
