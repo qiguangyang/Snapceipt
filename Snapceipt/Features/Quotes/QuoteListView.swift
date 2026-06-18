@@ -39,11 +39,13 @@ struct QuoteListView: View {
                                 } label: { rowBody(quote) }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier(AccessibilityID.quoteRowPrefix + quote.id)
+                                    .listRowBackground(Palette.cream)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
                                     .swipeActions {
                                         Button(role: .destructive) { vm.delete(quote) } label: { Text("Delete") }
                                     }
                             }
-                            .listRowBackground(Palette.cream)
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
@@ -66,25 +68,40 @@ struct QuoteListView: View {
     }
 
     @ViewBuilder private func rowBody(_ quote: Quote) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(quote.clientName ?? "No client").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                HStack(spacing: 6) {
-                    // Only show the quote number when one exists; an un-numbered draft
-                    // would otherwise read "Draft  Draft" (placeholder + status badge).
-                    if let number = quote.number {
-                        Text(number).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink3)
+        Card(padding: 14) {
+            HStack(spacing: 12) {
+                clientTile(quote.clientName)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(quote.clientName ?? "No client").font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
+                    HStack(spacing: 6) {
+                        // Only show the quote number when one exists; an un-numbered draft
+                        // would otherwise read "Draft  Draft" (placeholder + status badge).
+                        if let number = quote.number {
+                            Text(number).font(.ui(11.5, .semibold)).foregroundStyle(Palette.ink3)
+                        }
+                        statusBadge(quote)
                     }
-                    statusBadge(quote)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(fmt(quote.totalCents)).font(.ui(15, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
+                    Text(fmtDate(isoDay(quote.createdAt))).font(.ui(11.5)).foregroundStyle(Palette.ink3)
                 }
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(fmt(quote.totalCents)).font(.ui(14, .semibold)).foregroundStyle(Palette.ink).monospacedDigit()
-                Text(fmtDate(isoDay(quote.createdAt))).font(.ui(11.5)).foregroundStyle(Palette.ink3)
-            }
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 6)
+    }
+
+    /// 42×42 accent-soft tile: client initials, or a building glyph for an un-named draft.
+    @ViewBuilder private func clientTile(_ name: String?) -> some View {
+        if let name, let initial = name.trimmingCharacters(in: .whitespaces).first {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(accent.soft)
+                .frame(width: 42, height: 42)
+                .overlay(Text(String(initial).uppercased()).font(.ui(16, .bold)).foregroundStyle(accent.base))
+        } else {
+            IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 42, iconSize: 19)
+        }
     }
 
     @ViewBuilder private func statusBadge(_ quote: Quote) -> some View {

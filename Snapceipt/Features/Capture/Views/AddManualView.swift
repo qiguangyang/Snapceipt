@@ -4,6 +4,11 @@ import SwiftData
 /// Manual transaction entry — the design's "Add manually" flow, reached from the
 /// Home quick-action. Saves a `source: "manual"` Transaction (no scan/image) scoped
 /// to the active profile and enqueues it for sync, mirroring `CaptureViewModel.save`.
+///
+/// Layout matches `manual-page.jsx`: a segmented Expense/Income toggle, a big centered
+/// live amount, a horizontal row of category chips, and a merchant + date card. The
+/// custom keypad in the prototype is replaced by the system decimal keyboard (a custom
+/// keypad is impractical here); everything else follows the design.
 struct AddManualView: View {
     let context: ModelContext
     let sync: any SyncEnqueuing
@@ -21,6 +26,9 @@ struct AddManualView: View {
     @State private var date = Date()
     @State private var note = ""
 
+    /// Income forces the green income tint; expenses use the active accent.
+    private var tint: Color { isIncome ? Palette.income : accent.base }
+
     private var amountCents: Int {
         let cleaned = amount.replacingOccurrences(of: ",", with: "")
         let value = Decimal(string: cleaned) ?? 0
@@ -29,17 +37,25 @@ struct AddManualView: View {
     }
     private var canSave: Bool { amountCents != 0 && !merchant.trimmingCharacters(in: .whitespaces).isEmpty }
 
+    /// Categories shown as chips. Income locks to the single "income" category; expenses
+    /// list every non-income category.
+    private var chipKeys: [CategoryKey] {
+        isIncome ? [.income] : CategoryKey.allCases.filter { $0 != .income }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Palette.cream.ignoresSafeArea()
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
                     typeToggle
-                    amountCard
+                    amountDisplay
+                    categoryChips
                     fieldsCard
                 }
                 .padding(.horizontal, 18).padding(.top, 70).padding(.bottom, 120)
             }
+            .keyboardDismissButton()
             header
             saveBar
         }
@@ -73,6 +89,7 @@ struct AddManualView: View {
                     .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
             }
+            .buttonStyle(.plain)
             Spacer()
             Text(editId == nil ? "Add manually" : "Edit transaction")
                 .font(.ui(16, .bold)).foregroundStyle(Palette.ink)
@@ -82,7 +99,7 @@ struct AddManualView: View {
         .padding(.horizontal, 18).padding(.top, 14)
     }
 
-    // MARK: - Fields
+    // MARK: - Type toggle
 
     private var typeToggle: some View {
         Segmented(
@@ -90,19 +107,31 @@ struct AddManualView: View {
                       SegmentOption(id: "income", label: "Income")],
             selection: Binding(
                 get: { isIncome ? "income" : "expense" },
-                set: { isIncome = ($0 == "income"); if isIncome { category = .income } }
+                set: { newValue in
+                    let wasIncome = isIncome
+                    isIncome = (newValue == "income")
+                    if isIncome {
+                        category = .income
+                    } else if wasIncome {
+                        // Leaving income — restore a sensible expense default.
+                        category = .meals
+                    }
+                }
             )
         )
     }
 
-    private var amountCard: some View {
+    // MARK: - Amount display
+
+    private var amountDisplay: some View {
         VStack(spacing: 6) {
             Text(isIncome ? "Amount received" : "Amount spent")
-                .font(.ui(13)).foregroundStyle(Palette.ink2)
+                .font(.ui(12.5, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
             HStack(spacing: 2) {
-                Text("$").font(.display(30, .bold)).foregroundStyle(Palette.ink3)
+                Text("$").font(.display(34, .bold)).foregroundStyle(amountCents != 0 ? tint : Palette.ink3)
                 TextField("0.00", text: $amount)
-                    .font(.display(34, .bold)).foregroundStyle(isIncome ? Palette.income : Palette.ink)
+                    .numeric(52)
+                    .foregroundStyle(amountCents != 0 ? tint : Palette.ink3)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .fixedSize()
@@ -110,59 +139,75 @@ struct AddManualView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1))
-        .cardShadow()
+        .padding(.vertical, 18)
     }
 
-    private var fieldsCard: some View {
-        VStack(spacing: 0) {
-            field(label: "Merchant") {
-                TextField(isIncome ? "Source" : "Where", text: $merchant)
-                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                    .multilineTextAlignment(.trailing)
-                    .accessibilityIdentifier(AccessibilityID.manualMerchant)
-            }
-            Divider().overlay(Palette.line2)
-            field(label: "Category") {
-                Menu {
-                    ForEach(CategoryKey.allCases, id: \.self) { key in
-                        Button(CATS[key]?.label ?? key.rawValue.capitalized) { category = key }
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(CATS[category]?.label ?? category.rawValue.capitalized)
-                            .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                        Icon(name: "chevD", size: 15, color: Palette.ink3)
+    // MARK: - Category chips
+
+    private var categoryChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chipKeys, id: \.self) { key in
+                    let meta = CATS[key]
+                    Chip(title: meta?.label ?? key.rawValue.capitalized,
+                         isActive: category == key,
+                         iconName: meta?.iconName) {
+                        category = key
                     }
                 }
             }
-            Divider().overlay(Palette.line2)
-            field(label: "Date") {
-                DatePicker("", selection: $date, displayedComponents: .date)
-                    .labelsHidden().tint(accent.base)
-            }
-            Divider().overlay(Palette.line2)
-            field(label: "Note") {
-                TextField("Optional", text: $note)
-                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                    .multilineTextAlignment(.trailing)
-            }
+            .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 16)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1))
-        .cardShadow()
+        // Income locks to the single income chip — make the row read as informational.
+        .disabled(isIncome)
     }
 
-    private func field<Trailing: View>(label: String, @ViewBuilder trailing: () -> Trailing) -> some View {
-        HStack {
-            Text(label).font(.ui(14)).foregroundStyle(Palette.ink2)
-            Spacer(minLength: 12)
-            trailing()
+    // MARK: - Merchant + date card
+
+    private var fieldsCard: some View {
+        Card(padding: 0) {
+            VStack(spacing: 0) {
+                merchantRow
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 56)
+                dateRow
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 56)
+                noteRow
+            }
         }
-        .padding(.vertical, 14)
+    }
+
+    private var merchantRow: some View {
+        HStack(spacing: 12) {
+            Icon(name: isIncome ? "wallet" : "tag", size: 19, color: Palette.ink3)
+                .frame(width: 32)
+            TextField(isIncome ? "Source (e.g. Invoice #1043)" : "Merchant (e.g. Officeworks)",
+                      text: $merchant)
+                .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                .accessibilityIdentifier(AccessibilityID.manualMerchant)
+        }
+        .padding(.vertical, 14).padding(.horizontal, 14)
+    }
+
+    private var dateRow: some View {
+        HStack(spacing: 12) {
+            Icon(name: "calendar", size: 19, color: Palette.ink3)
+                .frame(width: 32)
+            Text("Date").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+            Spacer(minLength: 8)
+            DatePicker("", selection: $date, displayedComponents: .date)
+                .labelsHidden().tint(tint)
+        }
+        .padding(.vertical, 10).padding(.horizontal, 14)
+    }
+
+    private var noteRow: some View {
+        HStack(spacing: 12) {
+            Icon(name: "doc", size: 19, color: Palette.ink3)
+                .frame(width: 32)
+            TextField("Note (optional)", text: $note)
+                .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+        }
+        .padding(.vertical, 14).padding(.horizontal, 14)
     }
 
     // MARK: - Save
@@ -173,12 +218,14 @@ struct AddManualView: View {
             Button(action: save) {
                 HStack(spacing: 8) {
                     Icon(name: "check", size: 20, color: .white)
-                    Text("Save transaction").font(.ui(16, .bold)).foregroundStyle(.white)
+                    Text(isIncome ? "Save income" : "Save expense")
+                        .font(.ui(16, .bold)).foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity).frame(height: 56)
-                .background(canSave ? accent.base : Palette.ink3,
+                .background(canSave ? tint : Palette.line,
                             in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: accent.base.opacity(canSave ? 0.4 : 0), radius: 12, x: 0, y: 10)
+                .foregroundStyle(canSave ? .white : Palette.ink3)
+                .shadow(color: tint.opacity(canSave ? 0.4 : 0), radius: 12, x: 0, y: 10)
             }
             .buttonStyle(.plain)
             .disabled(!canSave)

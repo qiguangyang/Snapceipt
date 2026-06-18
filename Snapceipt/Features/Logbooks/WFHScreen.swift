@@ -97,7 +97,7 @@ struct WFHScreen: View {
                     Text("This week").font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
                     Spacer()
                     Text(String(format: "%.1f hrs", weekTotal))
-                        .font(.ui(13, .semibold)).foregroundStyle(Palette.ink3)
+                        .numeric(13, .semibold).foregroundStyle(Palette.ink3)
                 }
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(0..<7, id: \.self) { i in
@@ -142,7 +142,7 @@ struct WFHScreen: View {
                             }
                             Spacer(minLength: 0)
                             Text(String(format: "%.1f h", Double(log.minutes) / 60))
-                                .font(.ui(15, .bold)).foregroundStyle(Palette.ink)
+                                .numeric(15).foregroundStyle(Palette.ink)
                         }
                         .padding(.vertical, 13).padding(.horizontal, 14)
                         if idx < vm.logs.count - 1 { Rectangle().fill(Palette.line2).frame(height: 1) }

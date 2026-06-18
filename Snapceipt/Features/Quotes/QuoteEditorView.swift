@@ -23,7 +23,7 @@ struct QuoteEditorView: View {
         ZStack(alignment: .bottom) {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                SheetHeader(title: quoteId == nil ? "New quote" : "Quote", onClose: onClose)
+                header
                 if let vm { content(vm) } else { Color.clear }
             }
             // Pin the send bar to the bottom (behind the keyboard) instead of letting
@@ -58,128 +58,167 @@ struct QuoteEditorView: View {
         .sheet(item: shareItem) { item in QuoteActivityView(url: item.url) }
     }
 
+    /// Sub-page chrome: close button | centered title | trailing quote number.
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button(action: onClose) {
+                Icon(name: "close", size: 18, color: Palette.ink2)
+                    .frame(width: 40, height: 40)
+                    .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.chip, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                        .strokeBorder(Palette.line, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.logbookClose)
+            Text(quoteId == nil ? "New quote" : "Quote").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity).lineLimit(1)
+            // Trailing quote number, right-aligned in a slot matching the close button's width.
+            Text(vm?.displayNumber ?? "Draft").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
+                .lineLimit(1).frame(minWidth: 40, alignment: .trailing)
+        }
+        .padding(.top, 12).padding(.horizontal, 18).padding(.bottom, 12)
+    }
+
     @ViewBuilder private func content(_ vm: QuoteEditorViewModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                numberBadge(vm)
-                billToCard(vm)
+                billToSection(vm)
                 lineItemsSection(vm)
-                gstRow(vm)
                 totalsCard(vm)
-                Text("Valid for 14 days. Accepted quotes convert to an invoice.")
-                    .font(.ui(11.5)).foregroundStyle(Palette.ink3)
+                infoNote
             }
-            .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 120)
+            .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 120)
         }
         // The number pad has no return key, and text fields share the same bar:
         // a responder-chain dismiss button works for whichever field is focused.
         .keyboardDismissButton()
     }
 
-    private func numberBadge(_ vm: QuoteEditorViewModel) -> some View {
-        HStack {
-            Text(vm.displayNumber).font(.ui(13, .bold)).foregroundStyle(accent.base)
-                .padding(.vertical, 5).padding(.horizontal, 12)
-                .background(accent.soft, in: Capsule())
-            Spacer()
+    /// Paper-2 info note with a lock glyph (design ref: "Valid for 14 days…").
+    private var infoNote: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Icon(name: "lock", size: 15, color: Palette.ink3)
+            Text("Valid for 14 days. Accepted quotes convert straight into an invoice.")
+                .font(.ui(12.5)).foregroundStyle(Palette.ink2)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+    }
+
+    @ViewBuilder private func billToSection(_ vm: QuoteEditorViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            groupLabel("Bill to")
+            Button { showClientPicker = true } label: {
+                Card(padding: 14) {
+                    HStack(spacing: 12) {
+                        clientInitials(vm.clientName)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(vm.clientName ?? "Choose a client").font(.ui(15, .bold))
+                                .foregroundStyle(vm.clientName == nil ? Palette.ink3 : Palette.ink)
+                            if let email = vm.clientEmail {
+                                Text(email).font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Icon(name: "chevR", size: 14, color: Palette.ink3)
+                    }
+                    .contentShape(Rectangle())
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.quoteEditorClient)
         }
     }
 
-    @ViewBuilder private func billToCard(_ vm: QuoteEditorViewModel) -> some View {
-        Button { showClientPicker = true } label: {
-            HStack(spacing: 12) {
-                IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 40, iconSize: 19)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(vm.clientName ?? "Choose a client").font(.ui(14.5, .semibold))
-                        .foregroundStyle(vm.clientName == nil ? Palette.ink3 : Palette.ink)
-                    if let email = vm.clientEmail {
-                        Text(email).font(.ui(12)).foregroundStyle(Palette.ink3)
-                    }
-                }
-                Spacer()
-                Icon(name: "chevR", size: 14, color: Palette.ink3)
-            }
-            .padding(12)
-            .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .strokeBorder(Palette.line2, lineWidth: 1))
+    /// 42×42 r13 accent-soft tile: initials when a client is chosen, else a building glyph.
+    @ViewBuilder private func clientInitials(_ name: String?) -> some View {
+        if let initials = initials(from: name) {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(accent.soft)
+                .frame(width: 42, height: 42)
+                .overlay(Text(initials).font(.ui(15, .bold)).foregroundStyle(accent.base))
+        } else {
+            IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 42, iconSize: 19)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(AccessibilityID.quoteEditorClient)
+    }
+
+    private func initials(from name: String?) -> String? {
+        guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let parts = name.split(separator: " ").prefix(2)
+        let letters = parts.compactMap { $0.first }.map(String.init).joined()
+        return letters.isEmpty ? nil : letters.uppercased()
+    }
+
+    /// Uppercase group label (12.5/700 ink-3, tracking 0.3).
+    private func groupLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
+            .padding(.bottom, 10)
     }
 
     @ViewBuilder private func lineItemsSection(_ vm: QuoteEditorViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Line items").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
-            ForEach(vm.lineItems) { line in
-                lineRow(vm, line)
-                    .accessibilityIdentifier(AccessibilityID.quoteLineRowPrefix + line.id)
-            }
-            Button { vm.addLine() } label: {
-                HStack(spacing: 8) {
-                    Icon(name: "plus", size: 16, color: accent.base, lineWidth: 2)
-                    Text("Add line item").font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
-                    Spacer()
+            // Label row: "Line items" + trailing "+ Add" accent button.
+            HStack {
+                Text("Line items").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
+                Spacer()
+                Button { vm.addLine() } label: {
+                    HStack(spacing: 4) {
+                        Icon(name: "plus", size: 14, color: accent.base, lineWidth: 2)
+                        Text("Add").font(.ui(13, .bold)).foregroundStyle(accent.base)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .padding(12)
-                .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(accent.base.opacity(0.4), lineWidth: 1))
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorAddLine)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(AccessibilityID.quoteEditorAddLine)
+            Card(padding: 14) {
+                if vm.lineItems.isEmpty {
+                    HStack {
+                        Text("No line items yet").font(.ui(13.5)).foregroundStyle(Palette.ink3)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(vm.lineItems.enumerated()), id: \.element.id) { idx, line in
+                            if idx > 0 { Divider().overlay(Palette.line2).padding(.vertical, 12) }
+                            lineRow(vm, line)
+                                .accessibilityIdentifier(AccessibilityID.quoteLineRowPrefix + line.id)
+                        }
+                    }
+                }
+            }
         }
     }
 
     private func lineRow(_ vm: QuoteEditorViewModel, _ line: QuoteLineItem) -> some View {
         VStack(spacing: 8) {
-            TextField("Description", text: Binding(
-                get: { line.itemDescription }, set: { line.itemDescription = $0 }))
-                .padding(10).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
+            HStack(spacing: 8) {
+                TextField("Description", text: Binding(
+                    get: { line.itemDescription }, set: { line.itemDescription = $0 }))
+                    .font(.ui(14.5, .semibold))
+                Text(fmt(line.lineTotalCents)).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
+                Button { vm.removeLine(line) } label: {
+                    Icon(name: "close", size: 15, color: Palette.ink3)
+                        .frame(width: 24, height: 24).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }
             HStack(spacing: 8) {
                 TextField("Qty", text: Binding(
                     get: { String(line.quantity) },
                     set: { line.quantity = max(1, Int($0.filter(\.isNumber)) ?? 1) }))
                     .keyboardType(.numberPad)
-                    .padding(10).frame(width: 70).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
+                    .padding(8).frame(width: 64).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
+                Text("×").font(.ui(13)).foregroundStyle(Palette.ink3)
                 TextField("Unit $", text: Binding(
                     get: { String(line.unitPriceCents / 100) },
                     set: { line.unitPriceCents = (Int($0.filter(\.isNumber)) ?? 0) * 100 }))
                     .keyboardType(.numberPad)
-                    .padding(10).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
-                Text(fmt(line.lineTotalCents)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2).monospacedDigit()
-                Button { vm.removeLine(line) } label: {
-                    Icon(name: "close", size: 16, color: Palette.ink3)
-                }.buttonStyle(.plain)
+                    .padding(8).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
+                Spacer(minLength: 0)
             }
         }
-        .padding(12)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func gstRow(_ vm: QuoteEditorViewModel) -> some View {
-        VStack(spacing: 0) {
-            Toggle(isOn: Binding(get: { vm.gstEnabled },
-                                 set: { on in withAnimation(.easeInOut(duration: 0.2)) { vm.gstEnabled = on } })) {
-                Text("Add GST (10%)").font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
-            }
-            .tint(accent.base)
-            .accessibilityIdentifier(AccessibilityID.quoteEditorGst)
-
-            // GST-inclusive mode only makes sense once GST is on.
-            if vm.gstEnabled {
-                Divider().overlay(Palette.line2).padding(.vertical, 12)
-                Toggle(isOn: Binding(get: { vm.gstInclusive }, set: { vm.gstInclusive = $0 })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("GST inclusive").font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
-                        Text("Line prices already include GST").font(.ui(11.5)).foregroundStyle(Palette.ink3)
-                    }
-                }
-                .tint(accent.base)
-                .accessibilityIdentifier(AccessibilityID.quoteEditorGstInclusive)
-            }
-        }
-        .padding(12)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func totalsCard(_ vm: QuoteEditorViewModel) -> some View {
@@ -187,55 +226,110 @@ struct QuoteEditorView: View {
         // Inclusive mode relabels the ledger: the subtotal is the ex-GST base and the
         // GST line is the embedded portion (total is unchanged from the entered sum).
         let inclusive = vm.gstEnabled && vm.gstInclusive
-        return VStack(spacing: 8) {
-            totalRow(inclusive ? "Subtotal (ex GST)" : "Subtotal", fmt(t.subtotal), bold: false)
-            // Hairline between each ledger line (design ref: screens.md §9 totals card).
-            Divider().overlay(Palette.line2)
-            if vm.gstEnabled {
-                totalRow(inclusive ? "GST (10%) included" : "GST (10%)", fmt(t.gst), bold: false)
+        return Card(padding: 16) {
+            VStack(spacing: 12) {
+                totalRow(inclusive ? "Subtotal (ex GST)" : "Subtotal", fmt(t.subtotal))
                 Divider().overlay(Palette.line2)
+
+                // "GST (10%)" row carries a compact income-track toggle. Kept as a real
+                // Toggle (XCUI queries app.switches[quoteEditorGst]); .labelsHidden() +
+                // income tint = the design's 42×26 income pill.
+                HStack {
+                    Text(inclusive ? "GST (10%) included" : "GST (10%)")
+                        .font(.ui(13.5)).foregroundStyle(Palette.ink2)
+                    Spacer()
+                    if vm.gstEnabled {
+                        Text(fmt(t.gst)).font(.ui(14, .semibold)).foregroundStyle(Palette.ink).monospacedDigit()
+                    }
+                    Toggle("", isOn: Binding(
+                        get: { vm.gstEnabled },
+                        set: { on in withAnimation(.easeInOut(duration: 0.2)) { vm.gstEnabled = on } }))
+                        .labelsHidden()
+                        .tint(Palette.income)
+                        .scaleEffect(0.85)
+                        .accessibilityIdentifier(AccessibilityID.quoteEditorGst)
+                }
+
+                // GST-inclusive mode only makes sense once GST is on.
+                if vm.gstEnabled {
+                    Divider().overlay(Palette.line2)
+                    Toggle(isOn: Binding(get: { vm.gstInclusive }, set: { vm.gstInclusive = $0 })) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("GST inclusive").font(.ui(13.5, .semibold)).foregroundStyle(Palette.ink)
+                            Text("Line prices already include GST").font(.ui(11.5)).foregroundStyle(Palette.ink3)
+                        }
+                    }
+                    .tint(Palette.income)
+                    .accessibilityIdentifier(AccessibilityID.quoteEditorGstInclusive)
+                }
+
+                Divider().overlay(Palette.line2)
+                HStack {
+                    Text("Total").font(.ui(15.5, .bold)).foregroundStyle(Palette.ink)
+                    Spacer()
+                    Text(fmt(t.total)).font(.ui(22, .bold)).foregroundStyle(accent.base).monospacedDigit()
+                }
             }
-            totalRow("Total", fmt(t.total), bold: true)
         }
-        .padding(14)
-        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
-    private func totalRow(_ label: String, _ value: String, bold: Bool) -> some View {
+    private func totalRow(_ label: String, _ value: String) -> some View {
         HStack {
-            Text(label).font(.ui(bold ? 15 : 13.5, bold ? .bold : .regular)).foregroundStyle(Palette.ink2)
+            Text(label).font(.ui(13.5)).foregroundStyle(Palette.ink2)
             Spacer()
-            Text(value).font(.ui(bold ? 16 : 14, .semibold)).foregroundStyle(Palette.ink).monospacedDigit()
+            Text(value).font(.ui(14, .semibold)).foregroundStyle(Palette.ink).monospacedDigit()
         }
     }
 
     @ViewBuilder private func sendBar(_ vm: QuoteEditorViewModel) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             if let err = vm.errorMessage {
                 Text(err).font(.ui(12.5)).foregroundStyle(Palette.alert)
             }
-            Button {
-                Task {
-                    if await vm.send(api: api) {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { sent = true }
+            HStack(spacing: 12) {
+                // Document button (56×56 r18 paper): shares the quote PDF once one exists.
+                Button { openPDF(vm) } label: {
+                    Icon(name: "doc", size: 22, color: Palette.ink2)
+                        .frame(width: 56, height: 56)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Palette.line, lineWidth: 1))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(vm.pdfUrl == nil)
+                .opacity(vm.pdfUrl == nil ? 0.45 : 1)
+
+                Button {
+                    Task {
+                        if await vm.send(api: api) {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { sent = true }
+                        }
                     }
+                } label: {
+                    HStack(spacing: 8) {
+                        if vm.isSending { ProgressView().tint(.white) }
+                        else { Icon(name: "share", size: 18, color: .white, lineWidth: 2) }
+                        Text(vm.isSending ? "Sending…" : "Send quote").font(.ui(16, .semibold)).foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(accent.base, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: accent.base.opacity(0.45), radius: 12, x: 0, y: 12)
+                    // Disabled = faded accent (house pattern: Onboarding Continue .5, Reports CTA .45),
+                    // not an opaque grey swap.
+                    .opacity(vm.canSend ? 1 : 0.45)
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    if vm.isSending { ProgressView().tint(.white) }
-                    Text(vm.isSending ? "Sending…" : "Send quote").font(.ui(16, .semibold)).foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                // Disabled = faded accent (house pattern: Onboarding Continue .5, Reports CTA .45),
-                // not an opaque grey swap.
-                .opacity(vm.canSend ? 1 : 0.45)
+                .buttonStyle(.plain)
+                .disabled(!vm.canSend || vm.isSending)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorSend)
             }
-            .buttonStyle(.plain)
-            .disabled(!vm.canSend || vm.isSending)
-            .accessibilityIdentifier(AccessibilityID.quoteEditorSend)
         }
-        .padding(.horizontal, 18).padding(.bottom, 26)
+        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 26)
+        .background(
+            LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream],
+                           startPoint: .top, endPoint: .bottom)
+        )
     }
 
     private func successOverlay(_ vm: QuoteEditorViewModel) -> some View {
@@ -243,10 +337,11 @@ struct QuoteEditorView: View {
             Palette.cream.opacity(0.97).ignoresSafeArea()
             VStack(spacing: 14) {
                 ZStack {
-                    Circle().fill(Palette.income).frame(width: 72, height: 72)
-                    Icon(name: "check", size: 34, color: .white, lineWidth: 3)
+                    Circle().fill(Palette.income).frame(width: 92, height: 92)
+                    Icon(name: "check", size: 40, color: .white, lineWidth: 3)
                 }
-                Text(vm.emailed ? "Quote sent!" : "Quote ready!").font(.display(20, .bold)).foregroundStyle(Palette.ink)
+                .shadow(color: Palette.income.opacity(0.4), radius: 16, x: 0, y: 12)
+                Text(vm.emailed ? "Quote sent!" : "Quote ready!").font(.display(23, .bold)).foregroundStyle(Palette.ink)
                 Text("\(vm.displayNumber) · \(fmt(vm.totals.total))").font(.ui(14)).foregroundStyle(Palette.ink2)
                 if !vm.emailed, vm.pdfUrl != nil {
                     Button { openPDF(vm) } label: {

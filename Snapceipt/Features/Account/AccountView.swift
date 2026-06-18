@@ -66,22 +66,23 @@ struct AccountView: View {
         Group {
             groupLabel("Subscription")
             Card {
-                HStack {
+                HStack(spacing: 12) {
+                    IconCircle(name: "star", tint: accent.base, soft: accent.soft,
+                               size: 38, iconSize: 19, filled: entitlement.isPro)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Snapceipt Pro").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                         Text(entitlement.isPro ? "Active" : "Free plan")
-                            .font(.ui(13)).foregroundStyle(entitlement.isPro ? Palette.income : Palette.ink3)
+                            .font(.ui(12)).foregroundStyle(entitlement.isPro ? Palette.income : Palette.ink3)
                     }
-                    Spacer()
+                    Spacer(minLength: 8)
                     if !entitlement.isPro {
                         Button("Upgrade") { showPaywall = true }
                             .font(.ui(13, .semibold)).foregroundStyle(accent.base)
                             .buttonStyle(.plain)
                     } else {
-                        HStack(spacing: 10) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Palette.income)
-                            Link("Manage subscription",
+                        HStack(spacing: 8) {
+                            Icon(name: "check", size: 16, color: Palette.income)
+                            Link("Manage",
                                  destination: URL(string: "itms-apps://apps.apple.com/account/subscriptions")!)
                                 .font(.ui(13, .semibold))
                                 .foregroundStyle(accent.base)
@@ -98,15 +99,19 @@ struct AccountView: View {
     @ViewBuilder private func emailSection(_ vm: AccountViewModel) -> some View {
         groupLabel("Email")
         Card {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("Signed in as").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    Spacer()
-                    Text(vm.email ?? "—").font(.ui(14.5, .regular)).foregroundStyle(Palette.ink2)
-                        .lineLimit(1).truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    IconCircle(name: "user", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signed in as").font(.ui(12, .regular)).foregroundStyle(Palette.ink3)
+                        Text(vm.email ?? "—").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(AccessibilityID.accountEmailRow)
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.vertical, 12)
                 Button(action: onChangeEmail) {
                     HStack {
                         Text("Change email").font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
@@ -133,7 +138,7 @@ struct AccountView: View {
                     ForEach(Array(vm.devices.enumerated()), id: \.element.id) { idx, d in
                         deviceRow(d, isCurrent: d.id == vm.currentDevice)
                         if idx < vm.devices.count - 1 {
-                            Divider().background(Palette.line)
+                            Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 50)
                         }
                     }
                 }
@@ -158,7 +163,8 @@ struct AccountView: View {
     }
 
     @ViewBuilder private func deviceRow(_ d: DeviceDTO, isCurrent: Bool) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            IconCircle(name: "phone", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(deviceTitle(d)).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
@@ -191,7 +197,9 @@ struct AccountView: View {
                         confirmText = ""
                         showDelete = true
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
+                            IconCircle(name: "trash", tint: Palette.alert,
+                                       soft: Palette.alert.opacity(0.12), size: 38, iconSize: 19)
                             Text("Delete account").font(.ui(14.5, .semibold)).foregroundStyle(Palette.alert)
                             Spacer()
                             Icon(name: "chevR", size: 16, color: Palette.alert)
@@ -224,6 +232,9 @@ struct AccountView: View {
                 }
             }
         }
+        if !showDelete {
+            infoNote("Deleting your account is permanent and removes every receipt and image from our servers.")
+        }
     }
 
     // MARK: - Helpers
@@ -240,7 +251,18 @@ struct AccountView: View {
     }
 
     private func groupLabel(_ s: String) -> some View {
-        Text(s).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+        Text(s).font(.ui(12.5, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+    }
+
+    private func infoNote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Icon(name: "info", size: 16, color: Palette.ink3).padding(.top, 1)
+            Text(text).font(.ui(12.5, .regular)).foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
     }
 }

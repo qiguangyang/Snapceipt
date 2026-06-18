@@ -23,12 +23,19 @@ struct ChangeEmailView: View {
                 if let vm {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
+                            groupLabel("New email")
                             newEmailCard(vm)
-                            if vm.codeSent { codeCard(vm) }
+                            if vm.codeSent {
+                                groupLabel("Verify")
+                                codeCard(vm)
+                            }
                             if let err = vm.errorMessage {
                                 Text(err).font(.ui(12.5, .regular)).foregroundStyle(Palette.alert)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            infoNote(vm.codeSent
+                                ? "Enter the 6-digit code we just emailed you. It expires in 10 minutes."
+                                : "We'll email a 6-digit code to confirm the new address before switching.")
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
@@ -50,17 +57,15 @@ struct ChangeEmailView: View {
     @ViewBuilder private func newEmailCard(_ vm: AccountViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("New email").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
-                    TextField("you@example.com", text: Binding(
-                        get: { vm.newEmail }, set: { vm.newEmail = $0 }))
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .disabled(vm.codeSent)
-                        .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityIdentifier(AccessibilityID.changeEmailField)
-                }
+                TextField("you@example.com", text: Binding(
+                    get: { vm.newEmail }, set: { vm.newEmail = $0 }))
+                    .font(.ui(16, .regular))
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .disabled(vm.codeSent)
+                    .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier(AccessibilityID.changeEmailField)
                 Button {
                     Task { await vm.requestCode() }
                 } label: {
@@ -79,14 +84,12 @@ struct ChangeEmailView: View {
     @ViewBuilder private func codeCard(_ vm: AccountViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Enter the 6-digit code").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
-                    TextField("000000", text: Binding(
-                        get: { vm.code }, set: { vm.code = $0 }))
-                        .keyboardType(.numberPad)
-                        .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityIdentifier(AccessibilityID.changeEmailCodeField)
-                }
+                TextField("000000", text: Binding(
+                    get: { vm.code }, set: { vm.code = $0 }))
+                    .font(.ui(16, .regular))
+                    .keyboardType(.numberPad)
+                    .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier(AccessibilityID.changeEmailCodeField)
                 Button {
                     Task { await vm.verifyCode(); if vm.errorMessage == nil && !vm.codeSent { onClose() } }
                 } label: {
@@ -100,5 +103,23 @@ struct ChangeEmailView: View {
                 .accessibilityIdentifier(AccessibilityID.changeEmailVerify)
             }
         }
+    }
+
+    // MARK: - Shared chrome
+
+    private func groupLabel(_ s: String) -> some View {
+        Text(s).font(.ui(12.5, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+    }
+
+    private func infoNote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Icon(name: "info", size: 16, color: Palette.ink3).padding(.top, 1)
+            Text(text).font(.ui(12.5, .regular)).foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
     }
 }
