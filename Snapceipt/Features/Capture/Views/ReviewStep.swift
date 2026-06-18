@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Focus target for the editable Review line-item rows.
+private enum ReviewItemField: Hashable { case name(String), price(String) }
+
 /// The designed editable review card: total + GST pill, the AI-suggestion banner,
 /// the confidence badge (shown iff !needsReview), editable merchant/date/category/
 /// payment/tax-label, a Personal/Business profile toggle that re-skins live, a
@@ -8,11 +11,9 @@ struct ReviewStep: View {
     @Environment(\.accent) private var accent
     @Environment(EntitlementStore.self) private var entitlement
     @Binding var draft: ExtractedReceipt
-    // Presentation-only in v1: re-skins the toggle live but is NOT the save target.
-    // `CaptureViewModel.save()` always persists under `profiles.activeProfile` (the
-    // txn `mode`/`profileId` come from the active profile, per the scope-by-active-
-    // profileId rule). See the toggle comment below.
-    @Binding var mode: String                 // "personal" | "business"
+    /// The profile the receipt will be saved under (Review "Assign to profile"). Drives
+    /// the business-only GST fields via `selectedType`; passed to `save(toProfileId:)`.
+    @Binding var selectedProfileId: String
     /// The view model, read-only here — ReviewStep only reads `smartScanCapped` /
     /// `smartScanCap`; it never mutates the VM directly.
     let vm: CaptureViewModel
@@ -21,11 +22,24 @@ struct ReviewStep: View {
     let onClose: () -> Void
 
     @State private var showPaywall = false
+    /// Editable line-item rows (name + price-as-text), seeded from `draft.lineItems`
+    /// and synced back on every edit so `save()` persists the user's changes.
+    @State private var itemDrafts: [ItemDraft] = []
+    @FocusState private var focusedItem: ReviewItemField?
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
         guard let ck = CategoryKey(rawValue: key) else { return key.capitalized }
         return CATS[ck]?.label ?? key.capitalized
+    }
+
+    /// The selected profile's type — drives the business-only GST fields and the icon.
+    private var selectedType: String {
+        vm.profileOptions.first(where: { $0.id == selectedProfileId })?.type
+            ?? ProfileType.personal.rawValue
+    }
+    private var selectedProfileName: String {
+        vm.profileOptions.first(where: { $0.id == selectedProfileId })?.name ?? "Select profile"
     }
 
     var body: some View {
@@ -41,6 +55,7 @@ struct ReviewStep: View {
                     } else {
                         aiBanner
                     }
+                    diagnosticLine
                     fieldsCard
                     // "Assign to profile" lives in its OWN block AFTER the details card.
                     profileBlock
@@ -135,6 +150,20 @@ struct ReviewStep: View {
         )
     }
 
+    /// Developer diagnostic line: which engine produced this draft + timing/confidence.
+    /// Visible to all users by product decision; reads `vm.diagnostics`.
+    @ViewBuilder
+    private var diagnosticLine: some View {
+        if let d = vm.diagnostics {
+            Text(d.summary)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Palette.ink3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .accessibilityIdentifier(AccessibilityID.captureReviewDiagnostics)
+        }
+    }
+
     /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the free-plan
     /// cap (`vm.smartScanCap`, falling back to 10) as the user's allotment; the Pro
     /// upsell number (500) is always a literal — never derived from the free cap.
@@ -202,7 +231,7 @@ struct ReviewStep: View {
                     get: { draft.taxLabel ?? "" },
                     set: { draft.taxLabel = $0.isEmpty ? nil : $0 }))
             }
-            if mode == "business" {
+            if selectedType == "business" {
                 Toggle("GST-free (no GST)", isOn: Binding(
                     get: { draft.gstFree },
                     set: { isFree in
@@ -244,10 +273,8 @@ struct ReviewStep: View {
             .cardShadow()
     }
 
-    // v1: presentation-only. Toggling Personal/Business re-skins the card live but
-    // does NOT change which profile the txn is saved under — `save()` uses
-    // `profiles.activeProfile` (scope-by-active-profileId). This is intentional for
-    // v1; switching the save target is deferred.
+    // The "Assign to profile" picker drives the real save target: the receipt is saved
+    // under the selected profile via `CaptureViewModel.save(toProfileId:)`.
     private var profileToggle: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Assign to profile")
@@ -258,71 +285,129 @@ struct ReviewStep: View {
         .accessibilityIdentifier(AccessibilityID.captureReviewProfileToggle)
     }
 
-    /// The default ModeToggle Segmented sliding control (spec §2 L152-155): a paper-2
-    /// track with a single white thumb that animates between Personal/Business, each
-    /// option carrying a leading icon tinted to its FIXED per-option color (Personal
-    /// wallet+terracotta, Business building+teal) when selected, else --ink-3.
+    /// Menu picker over ALL the user's profiles by name. Selecting one sets
+    /// `selectedProfileId` (the save target) and drives the business-only GST fields.
     private var segmented: some View {
-        let types = ProfileType.allCases
-        let selectedIndex = types.firstIndex { mode == $0.rawValue } ?? 0
-        return GeometryReader { geo in
-            let thumbW = (geo.size.width - 8) / CGFloat(types.count)
-            ZStack(alignment: .leading) {
-                // Sliding white thumb with a soft shadow.
-                Capsule()
-                    .fill(Palette.paper)
-                    .shadow(color: Palette.ink.opacity(0.18), radius: 3, x: 0, y: 2)
-                    .frame(width: thumbW)
-                    .padding(.vertical, 4)
-                    .offset(x: 4 + CGFloat(selectedIndex) * thumbW)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selectedIndex)
-
-                HStack(spacing: 0) {
-                    ForEach(types) { type in
-                        let selected = mode == type.rawValue
-                        Button { mode = type.rawValue } label: {
-                            HStack(spacing: 6) {
-                                Icon(name: type.iconName, size: 16,
-                                     color: selected ? optionTint(type) : Palette.ink3)
-                                Text(type.label)
-                                    .font(.ui(14, .semibold))
-                                    .foregroundStyle(selected ? Palette.ink : Palette.ink3)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+        Menu {
+            ForEach(vm.profileOptions) { opt in
+                Button { selectedProfileId = opt.id } label: {
+                    if opt.id == selectedProfileId {
+                        Label(opt.name, systemImage: "checkmark")
+                    } else {
+                        Text(opt.name)
                     }
                 }
             }
+        } label: {
+            HStack(spacing: 8) {
+                Icon(name: selectedType == ProfileType.business.rawValue ? "building" : "wallet",
+                     size: 16, color: accent.base)
+                Text(selectedProfileName)
+                    .font(.ui(14, .semibold)).foregroundStyle(Palette.ink)
+                Spacer()
+                Icon(name: "chevD", size: 15, color: Palette.ink3)
+            }
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .padding(.horizontal, 14)
+            .background(Palette.paper2, in: Capsule())
         }
-        .frame(height: 46)
-        .background(Palette.paper2, in: Capsule())
+        .tint(accent.base)
     }
 
-    /// FIXED per-option tint (spec §2 L155): Personal terracotta, Business teal,
-    /// independent of the active accent.
-    private func optionTint(_ type: ProfileType) -> Color {
-        type == .personal ? AccentPalette.personal.base : AccentPalette.business.base
-    }
-
+    /// Editable line items: name + price per row, with remove + add affordances
+    /// (reuses the manual-entry row pattern). Edits sync straight into `draft.lineItems`.
     private var lineItemsCard: some View {
-        Group {
-            if !draft.lineItems.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(Array(draft.lineItems.enumerated()), id: \.offset) { _, li in
-                        HStack {
-                            Text(li.name).font(.ui(13)).foregroundStyle(Palette.ink)
-                            Spacer()
-                            Text(fmt(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
-                        }
-                    }
+        VStack(spacing: 0) {
+            ForEach($itemDrafts) { $item in
+                itemRow($item)
+            }
+            addItemRow
+        }
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .cardShadow()
+        // Seed from the extracted draft once, then keep `draft.lineItems` in sync with
+        // every edit so the saved receipt reflects the user's changes.
+        .onAppear {
+            if itemDrafts.isEmpty {
+                itemDrafts = draft.lineItems.map {
+                    ItemDraft(name: $0.name, priceText: Self.priceText($0.price))
                 }
-                .padding(16)
-                .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                .cardShadow()
             }
         }
+        .onChange(of: itemDrafts) { _, _ in syncItemsToDraft() }
+    }
+
+    private func itemRow(_ item: Binding<ItemDraft>) -> some View {
+        let rowId = item.wrappedValue.id
+        let index = itemDrafts.firstIndex { $0.id == rowId } ?? 0
+        return VStack(spacing: 0) {
+            if index > 0 {
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 52)
+            }
+            HStack(spacing: 10) {
+                Icon(name: "tag", size: 18, color: Palette.ink3).frame(width: 28)
+                TextField("Item name", text: item.name)
+                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                    .focused($focusedItem, equals: .name(rowId))
+                    .accessibilityIdentifier("\(AccessibilityID.captureReviewItemNamePrefix)\(index)")
+                Text("$").font(.ui(14, .semibold)).foregroundStyle(Palette.ink3)
+                TextField("0.00", text: item.priceText)
+                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 66)
+                    .focused($focusedItem, equals: .price(rowId))
+                    .accessibilityIdentifier("\(AccessibilityID.captureReviewItemPricePrefix)\(index)")
+                Button { itemDrafts.removeAll { $0.id == rowId } } label: {
+                    Icon(name: "close", size: 13, color: Palette.ink3)
+                        .frame(width: 26, height: 26)
+                        .background(Palette.cream, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("\(AccessibilityID.captureReviewItemRemovePrefix)\(index)")
+            }
+            .padding(.vertical, 9).padding(.horizontal, 14)
+        }
+        .id("review-row-\(rowId)")
+    }
+
+    private var addItemRow: some View {
+        Button {
+            let newItem = ItemDraft()
+            itemDrafts.append(newItem)
+            // Focus the new row's name field once it renders, like manual entry.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focusedItem = .name(newItem.id)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Icon(name: "plus", size: 17, color: accent.base).frame(width: 28)
+                Text(itemDrafts.isEmpty ? "Add item" : "Add another item")
+                    .font(.ui(15, .semibold)).foregroundStyle(accent.base)
+                Spacer()
+            }
+            .padding(.vertical, 14).padding(.horizontal, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.captureReviewItemsAdd)
+    }
+
+    /// Push the edited rows back into the draft (drop blank-name rows; clamp price ≥ 0).
+    private func syncItemsToDraft() {
+        draft.lineItems = itemDrafts.compactMap { d in
+            let name = d.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let raw = d.priceText.replacingOccurrences(of: ",", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            let price = Decimal(string: raw) ?? 0
+            return ExtractedReceipt.LineItemDraft(name: name, price: max(price, .zero))
+        }
+    }
+
+    /// Format an extracted Decimal price for the editable text field ("" when zero).
+    private static func priceText(_ price: Decimal) -> String {
+        price == 0 ? "" : String(format: "%.2f", NSDecimalNumber(decimal: price).doubleValue)
     }
 
     private var disabledChips: some View {

@@ -30,6 +30,7 @@ struct CaptureViewModelTests {
                          extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         let profile = Profile(userId: "u1", name: "Me", type: activeType,
@@ -159,6 +160,91 @@ struct CaptureViewModelTests {
         #expect(vm.activeMode == "business")
         vm.save()
         // The Saved summary reads the real save target captured in save().
+        #expect(vm.savedMode == "business")
+    }
+
+    @Test("AppSettings.smartScanEnabled defaults to true when the key is unset")
+    func smartScanDefaultsOn() {
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        #expect(AppSettings.smartScanEnabled == true)
+    }
+
+    @Test("ScanDiagnostics.summary renders the DeepSeek engine line")
+    func diagnosticsSummaryDeepseek() {
+        let d = ScanDiagnostics(engine: .deepseek, model: "deepseek-v4-flash",
+                                clientMs: 850, serverMs: 700, attempts: 1,
+                                stub: false, capped: false, confidence: 0.91)
+        #expect(d.summary == "deepseek-v4-flash · 1 try · 700ms srv · 850ms · conf 0.91")
+    }
+
+    @Test("ScanDiagnostics.summary renders the on-device heuristic line")
+    func diagnosticsSummaryHeuristic() {
+        let d = ScanDiagnostics(engine: .onDeviceHeuristic, model: nil,
+                                clientMs: 12, serverMs: nil, attempts: nil,
+                                stub: nil, capped: nil, confidence: 0.55)
+        #expect(d.summary == "on-device heuristic · 12ms · conf 0.55")
+    }
+
+    @Test("Smart Scan OFF -> on-device heuristic, status done, no /extract call, diagnostics onDeviceHeuristic")
+    func smartScanOffUsesHeuristic() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }
+        // The handler must NOT be invoked when Smart Scan is OFF.
+        let (vm, api, _, _) = try fixture { _, _, _ in
+            Issue.record("extract() must not be called when Smart Scan is OFF")
+            throw MockAPIClientError.unscripted
+        }
+        // Set OFF *after* fixture(), which resets the key to default-ON.
+        UserDefaults.standard.set(false, forKey: AppSettings.smartScanEnabledKey)
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        #expect(vm.stage == .review)
+        #expect(api.extractCalls.isEmpty)
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.draft?.needsReview == true)
+        #expect(vm.diagnostics?.engine == .onDeviceHeuristic)
+    }
+
+    @Test("Smart Scan ON success -> diagnostics deepseek with model/attempts from meta, status done")
+    func smartScanOnSuccessDiagnostics() async throws {
+        let (vm, api, _, _) = try fixture { _, _, _ in self.okResponse() }
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
+        #expect(api.extractCalls.count == 1)
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.diagnostics?.engine == .deepseek)
+        #expect(vm.diagnostics?.model == "x")     // okResponse() meta.model == "x"
+        #expect(vm.diagnostics?.attempts == 1)
+    }
+
+    @Test("Smart Scan ON failure -> offline heuristic, status pending, diagnostics offlineHeuristic")
+    func smartScanOnFailureDiagnostics() async throws {
+        struct Boom: Error {}
+        let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
+        await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        #expect(vm.draft?.extractionStatus == "pending")
+        #expect(vm.diagnostics?.engine == .offlineHeuristic)
+    }
+
+    @Test("save(toProfileId:) files the txn under the SELECTED profile, not the active one")
+    func saveUnderSelectedProfile() async throws {
+        UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let p1 = Profile(userId: "u1", name: "Home Budget", type: "personal",
+                         accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)
+        let p2 = Profile(userId: "u1", name: "Studio North", type: "business",
+                         accent1: "#2F6FB0", accent2: "#E2ECF6", accent3: "#1E4E80", isDefault: false)
+        ctx.insert(p1); ctx.insert(p2); try ctx.save()
+        let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u1")
+        store.setActive(p1.id)
+        let api = MockAPIClient(); api.extractHandler = { _, _, _ in self.okResponse() }
+        let vm = CaptureViewModel(api: api, reducer: PassReducer(), sync: SpySync(),
+                                  profiles: store, context: ctx, userId: "u1")
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
+        // Active profile is p1 (personal); explicitly assign the receipt to p2 (business).
+        vm.save(toProfileId: p2.id)
+        let txns = try ctx.fetch(FetchDescriptor<Transaction>())
+        #expect(txns.count == 1)
+        #expect(txns.first?.profileId == p2.id)
+        #expect(txns.first?.mode == "business")
         #expect(vm.savedMode == "business")
     }
 }

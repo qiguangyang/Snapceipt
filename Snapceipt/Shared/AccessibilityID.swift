@@ -38,6 +38,12 @@ enum AccessibilityID {
     /// The "Upgrade" button inside the smart-scan-cap nudge banner.
     static let captureReviewUpgrade = "capture.review.upgrade"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
+    static let captureReviewDiagnostics = "capture.review.diagnostics"
+    /// Editable Review line-item rows (suffixed with the row index).
+    static let captureReviewItemNamePrefix = "capture.review.item.name."
+    static let captureReviewItemPricePrefix = "capture.review.item.price."
+    static let captureReviewItemRemovePrefix = "capture.review.item.remove."
+    static let captureReviewItemsAdd = "capture.review.items.add"
     static let captureSave = "capture.save"
     static let captureSaveError = "capture.save.error"   // surfaced save failure (e.g. no profile)
     static let captureSavedTitle = "capture.saved.title"
@@ -200,6 +206,7 @@ enum AccessibilityID {
     static let profileAddButton = "profile.add"
     static let signOutButton = "profile.signout"
     static let profileAiAutoCategorise = "profile.row.aiAutoCategorise"  // inert visual toggle
+    static let profileSmartScanToggle = "profile.row.smartScan"
     static let profileRowConnectedBanks = "profile.row.connectedBanks"   // Coming-soon placeholder
     static let profileRowHelp = "profile.row.help"                       // opens external URL
     static let profileRowLegal = "profile.row.legal"                    // opens external Terms URL

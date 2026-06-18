@@ -121,6 +121,10 @@ struct ShellView: View {
     @State private var exportPeriod: Period = .month
     /// When set, the next `.export` sheet renders as the BAS-pinned pack (spec §4.7).
     @State private var basExportPinned = false
+    /// Bumped whenever a full-screen overlay closes, so the Activity tab re-fetches.
+    /// The tab is only re-keyed on tab/profile change (not on overlay dismiss), so a
+    /// receipt deleted/edited/added from an overlay wouldn't otherwise disappear/update.
+    @State private var activityReloadToken = 0
 
     var body: some View {
         let accent = profiles.accent
@@ -220,7 +224,7 @@ struct ShellView: View {
                               profileId: profiles.activeProfileId,
                               isBusiness: profiles.activeProfile?.type == ProfileType.business.rawValue,
                               editId: editId,
-                              onClose: { router.dismissOverlay() })
+                              onClose: { router.dismissOverlay(); activityReloadToken += 1 })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -231,7 +235,7 @@ struct ShellView: View {
             if case let .receiptDetail(id) = router.overlay {
                 ReceiptDetailView(context: profiles.context, sync: sync, transactionId: id,
                                   onEdit: { router.present(.manual(editId: $0)) },
-                                  onClose: { router.dismissOverlay() })
+                                  onClose: { router.dismissOverlay(); activityReloadToken += 1 })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -439,6 +443,7 @@ struct ShellView: View {
             homeStub(accent: accent)
         case .activity:
             ActivityTabView(context: profiles.context, profileId: profiles.activeProfileId,
+                            reloadToken: activityReloadToken,
                             onOpenReceipt: { router.present(.receiptDetail(id: $0)) },
                             onSnap: { router.present(.capture) })
         case .reports:
@@ -740,7 +745,7 @@ struct ShellView: View {
             context: profiles.context,
             userId: profiles.userId,
             stub: captureStub,
-            onClose: { router.dismissOverlay() }
+            onClose: { router.dismissOverlay(); activityReloadToken += 1 }
         )
         .environment(\.accent, accent)
         .transition(.opacity)

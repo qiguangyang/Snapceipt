@@ -140,10 +140,12 @@ extension ExtractedReceipt {
         self.extractionStatus = "done"
     }
 
-    /// Build the draft from the on-device heuristic fallback. Status "pending",
+    /// Build the draft from the on-device heuristic. `extractionStatus` defaults to
+    /// "pending" (offline fallback → reconciler re-extracts later); pass "done" for a
+    /// deliberate Smart-Scan-OFF result so the reconciler never overwrites it.
     /// `needsReview = true`, low confidence; category/deductible default to the
     /// server fallback defaults ("office"/100). `date` falls back to `capturedAt`.
-    init(parsed: ParsedReceipt, capturedAt: String) {
+    init(parsed: ParsedReceipt, capturedAt: String, extractionStatus: String = "pending") {
         let iso = ExtractedReceipt.ymd(from: parsed.date) ?? capturedAt
         self.init(
             merchant: parsed.merchant,
@@ -155,7 +157,7 @@ extension ExtractedReceipt {
             lineItems: parsed.lineItems.map { LineItemDraft(name: $0.name, price: $0.price) },
             confidence: parsed.confidence,
             needsReview: true,
-            extractionStatus: "pending"
+            extractionStatus: extractionStatus
         )
     }
 

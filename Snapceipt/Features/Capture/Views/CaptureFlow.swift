@@ -8,7 +8,7 @@ struct CaptureFlow: View {
     @Environment(\.accent) private var accent
     let onClose: () -> Void
 
-    @State private var mode: String = ProfileType.personal.rawValue
+    @State private var selectedProfileId: String = ""
 
     var body: some View {
         ZStack {
@@ -27,7 +27,8 @@ struct CaptureFlow: View {
                 ScanStep(image: vm.capturedImage, draft: vm.draft, onClose: onClose)
             case .review:
                 if let binding = draftBinding {
-                    ReviewStep(draft: binding, mode: $mode, vm: vm, onSave: { vm.save() }, onClose: onClose)
+                    ReviewStep(draft: binding, selectedProfileId: $selectedProfileId, vm: vm,
+                               onSave: { vm.save(toProfileId: selectedProfileId) }, onClose: onClose)
                 }
             case .saved:
                 // The summary names the ACTUAL save target (`vm.savedMode`, captured
@@ -41,14 +42,10 @@ struct CaptureFlow: View {
                           onDone: onClose)
             }
         }
-        // Open the Review toggle on the active profile (the real save target) instead
-        // of the hard-coded "personal" default — the previous self-assignment was a
-        // no-op and always showed Personal even for a Business active profile.
-        .onAppear { mode = vm.activeMode }
-        // v1: the Review Personal/Business toggle is presentation-only — it re-skins
-        // the card but is NOT the save target. `vm.save()` persists under
-        // `profiles.activeProfile`, so `mode` here drives appearance only.
-        .onChange(of: mode) { _, _ in /* re-skin handled by the toggle's accent */ }
+        // Default the "Assign to profile" picker to the active profile; the user can
+        // pick any profile by name and the receipt is saved under that choice
+        // (`vm.save(toProfileId:)`).
+        .onAppear { selectedProfileId = vm.activeProfileId }
     }
 
     /// Non-nil binding to the draft once it exists.

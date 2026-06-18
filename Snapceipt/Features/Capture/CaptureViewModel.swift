@@ -6,6 +6,13 @@ import Observation
 /// The 4-stage capture flow state.
 enum CaptureStage: Equatable { case camera, scanning, review, saved }
 
+/// A pickable profile for the Review "Assign to profile" control.
+struct ProfileOption: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let type: String   // "personal" | "business"
+}
+
 /// Drives snap → OCR → extract → review → save. `@MainActor`; all deps injected as
 /// protocols so it is unit-testable with mocks. Never dead-ends offline: a failed
 /// `/extract` falls back to the on-device `HeuristicParser`.
@@ -14,6 +21,9 @@ enum CaptureStage: Equatable { case camera, scanning, review, saved }
 final class CaptureViewModel {
     private(set) var stage: CaptureStage = .camera
     var draft: ExtractedReceipt?
+    /// Which engine produced the current draft (Smart Scan ON = DeepSeek, OFF =
+    /// on-device heuristic, ON-but-offline = offline heuristic). Read by ReviewStep.
+    var diagnostics: ScanDiagnostics?
     private(set) var capturedImage: UIImage?
     private(set) var rawText: String = ""
     private(set) var recognizedLines: [RecognizedLine] = []
@@ -50,6 +60,14 @@ final class CaptureViewModel {
     /// there is no active profile.
     var activeMode: String { profiles.activeProfile?.type ?? ProfileType.personal.rawValue }
 
+    /// The active profile's id — the default Review "Assign to profile" selection.
+    var activeProfileId: String { profiles.activeProfileId }
+
+    /// All of the user's profiles, by name, for the Review "Assign to profile" picker.
+    var profileOptions: [ProfileOption] {
+        profiles.profiles.map { ProfileOption(id: $0.id, name: $0.name, type: $0.type) }
+    }
+
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let reducer: ImageReducing
     @ObservationIgnored private let sync: any SyncEnqueuing
@@ -79,17 +97,43 @@ final class CaptureViewModel {
         await extract()
     }
 
-    /// Calls `/extract`; on success maps the response, on failure falls back to the
-    /// on-device heuristic. Either way it ends at `.review`.
+    /// ON (Smart Scan): calls `/extract` (DeepSeek); on failure falls back to the
+    /// on-device heuristic (status "pending", queued for re-extract). OFF: runs the
+    /// on-device heuristic directly with status "done" (never re-extracted) and makes
+    /// no network call. Every branch records `diagnostics` and ends at `.review`.
     func extract() async {
         let capturedAt = ExtractedReceipt.ymd(from: Date())
+        let started = Date()
+
+        guard AppSettings.smartScanEnabled else {
+            // Deliberate OFF: on-device heuristic, FINAL ("done") so the reconciler
+            // never re-runs DeepSeek over it. No network, no smart-scan slot.
+            let parsed = HeuristicParser.parse(recognizedLines)
+            draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "",
+                                     extractionStatus: "done")
+            smartScanCapped = false
+            smartScanCap = nil
+            smartScanUsed = nil
+            diagnostics = ScanDiagnostics(
+                engine: .onDeviceHeuristic, model: nil,
+                clientMs: Self.elapsedMs(since: started), serverMs: nil,
+                attempts: nil, stub: nil, capped: nil,
+                confidence: draft?.confidence ?? 0)
+            stage = .review
+            return
+        }
+
         do {
             let resp = try await api.extract(ocrText: rawText, source: "scan", capturedAt: capturedAt)
             draft = ExtractedReceipt(response: resp)
-            // Thread the cap signal onto the VM so ReviewStep can show the upgrade nudge.
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
             smartScanUsed = resp.meta.smartScan?.used
+            diagnostics = ScanDiagnostics(
+                engine: .deepseek, model: resp.meta.model,
+                clientMs: Self.elapsedMs(since: started), serverMs: resp.meta.latencyMs,
+                attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
+                confidence: draft?.confidence ?? 0)
         } catch {
             // Use the stored recognizedLines (with real bounding boxes) so the
             // offline parser benefits from OCR geometry when available.
@@ -99,8 +143,18 @@ final class CaptureViewModel {
             smartScanCapped = false
             smartScanCap = nil
             smartScanUsed = nil
+            diagnostics = ScanDiagnostics(
+                engine: .offlineHeuristic, model: nil,
+                clientMs: Self.elapsedMs(since: started), serverMs: nil,
+                attempts: nil, stub: nil, capped: nil,
+                confidence: draft?.confidence ?? 0)
         }
         stage = .review
+    }
+
+    /// Client-measured wall time in ms (never negative).
+    private static func elapsedMs(since start: Date) -> Int {
+        max(0, Int((Date().timeIntervalSince(start) * 1000).rounded()))
     }
 
     // MARK: Save
@@ -108,9 +162,13 @@ final class CaptureViewModel {
     /// Persist the (possibly edited) draft: insert the txn + line items, enqueue each
     /// for sync, and create a local-only `PendingReceipt` (writing the reduced JPEG to
     /// Application Support). Guards on an active profile.
-    func save() {
+    func save(toProfileId profileId: String? = nil) {
         guard let draft else { return }
-        guard let profile = profiles.activeProfile else {
+        // File under the chosen profile (Review "Assign to profile"); fall back to the
+        // active profile when no explicit target is given (callers/tests that omit it).
+        let targetId = profileId ?? profiles.activeProfileId
+        guard let profile = profiles.profiles.first(where: { $0.id == targetId })
+            ?? profiles.activeProfile else {
             errorMessage = "Select a profile before saving."
             return
         }
@@ -154,6 +212,54 @@ final class CaptureViewModel {
     /// Reset to the camera for "Snap another".
     func reset() {
         draft = nil; capturedImage = nil; rawText = ""; recognizedLines = []; errorMessage = nil
+        diagnostics = nil
         stage = .camera
+    }
+}
+
+/// App-wide persisted settings (UserDefaults-backed, `sc.*` keys).
+enum AppSettings {
+    /// Persisted "Smart Scan AI" toggle key.
+    static let smartScanEnabledKey = "sc.smartScan.enabled"
+
+    /// Whether scans use DeepSeek (`/extract`) vs the on-device heuristic.
+    /// Default ON: `UserDefaults.bool` returns false for a missing key, so read
+    /// the object and fall back to `true`.
+    static var smartScanEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: smartScanEnabledKey) }
+    }
+}
+
+/// Which engine produced the current Review draft, plus timing/confidence, surfaced
+/// on the Review screen so DeepSeek (Smart Scan ON) and the on-device heuristic
+/// (Smart Scan OFF / offline fallback) can be compared back-to-back.
+struct ScanDiagnostics: Equatable {
+    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic }
+    var engine: Engine
+    var model: String?      // meta.model (ON path only)
+    var clientMs: Int       // client-measured wall time (all paths)
+    var serverMs: Int?      // meta.latencyMs (ON path only)
+    var attempts: Int?      // meta.attempts (ON path only)
+    var stub: Bool?         // meta.stub (ON path only)
+    var capped: Bool?       // meta.capped (ON path only)
+    var confidence: Double  // draft.confidence (all paths)
+
+    /// One-line monospaced summary for the Review diagnostic row.
+    var summary: String {
+        var parts: [String] = []
+        switch engine {
+        case .deepseek:          parts.append(model ?? "server")
+        case .onDeviceHeuristic: parts.append("on-device heuristic")
+        case .offlineHeuristic:  parts.append("on-device (offline)")
+        }
+        if let attempts { parts.append("\(attempts) try") }
+        if let serverMs { parts.append("\(serverMs)ms srv") }
+        parts.append("\(clientMs)ms")
+        parts.append(String(format: "conf %.2f", confidence))
+        if stub == true { parts.append("stub") }
+        if capped == true { parts.append("capped") }
+        if engine == .offlineHeuristic { parts.append("queued") }
+        return parts.joined(separator: " · ")
     }
 }
