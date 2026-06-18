@@ -47,8 +47,9 @@ class UITestCase: XCTestCase {
     /// Launch directly into the RICH tour fixture (both profiles populated,
     /// clock pinned) — for ScreenshotTourUITests only. `pro` reports a Pro plan so
     /// Pro-gated areas (Quotes, Email-in, Mileage, WFH) open without the paywall.
-    func launchTour(pro: Bool = false) {
+    func launchTour(activeType: String? = nil, pro: Bool = false) {
         app.launchArguments += ["-uiTestStub", "-uiTestTour"]
+        if let activeType { app.launchArguments += ["-uiTestActiveType", activeType] }
         if pro { app.launchArguments += ["-uiTestPro"] }
         app.launch()
     }

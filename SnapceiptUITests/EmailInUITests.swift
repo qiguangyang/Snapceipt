@@ -6,7 +6,10 @@ import XCTest
 /// (stub alias) -> tap the failed row -> review -> Save -> back to the list -> Rotate.
 final class EmailInUITests: UITestCase {
     func testEmailInAddressCardAndReviewFlow() {
-        launchSeeded()
+        // Email-in is a Pro feature. Launch with pro: true so the app reports a Pro
+        // plan and the screen / review / rotate open WITHOUT the paywall ever
+        // appearing (the StoreKit-test purchase hack can't complete in the stub).
+        launchSeeded(pro: true)
 
         // Navigate to the Profile tab. (The real id is `tab.profile` — the tab-bar
         // button — mirroring how BudgetsUITests reaches Notifications settings.)
@@ -19,11 +22,8 @@ final class EmailInUITests: UITestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5), "Email-in row missing")
         row.tap()
 
-        // Email-in is a Pro feature: the free seed user gets the paywall the moment
-        // the screen opens (and on every gated tap). Subscribe through the StoreKit-
-        // test paywall so entitlement flips to Pro and the gate falls away before we
-        // drive the list / review / rotate. (No-op when already entitled.)
-        subscribeIfPaywallPresented()
+        // Pro plan is active (launched with pro: true), so the Pro gate falls away
+        // and no paywall appears as we drive the list / review / rotate.
 
         // Address card renders (stub alias).
         let address = app.staticTexts[AccessibilityID.emailInAddress]
@@ -37,8 +37,6 @@ final class EmailInUITests: UITestCase {
             format: "identifier BEGINSWITH %@", AccessibilityID.emailInListRowPrefix)).firstMatch
         XCTAssertTrue(failedRow.waitForExistence(timeout: 5), "No email-in rows")
         failedRow.tap()
-        // A residual gate-tap can re-present the paywall on slower CI; clear it again.
-        subscribeIfPaywallPresented()
 
         // Review editor opens; the seeded row pre-fills the form on appear.
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.emailInReviewScreen].waitForExistence(timeout: 5),
@@ -90,20 +88,5 @@ final class EmailInUITests: UITestCase {
         let rotate = app.buttons[AccessibilityID.emailInRotate]
         XCTAssertTrue(rotate.waitForExistence(timeout: 5), "Rotate button missing")
         rotate.tap()
-    }
-
-    /// Email-in is a Pro feature: the seeded (free) user is shown the Pro paywall the
-    /// moment the screen opens (and on every gated tap). Subscribe through the
-    /// StoreKit-test paywall so entitlement flips to Pro and the gate falls away. The
-    /// `.storekit` config completes the purchase locally without a system dialog.
-    /// No-op when the paywall isn't up (e.g. already entitled).
-    private func subscribeIfPaywallPresented() {
-        let title = app.staticTexts[AccessibilityID.paywallTitle].firstMatch
-        guard title.waitForExistence(timeout: 3) else { return }
-        let subscribe = app.buttons[AccessibilityID.paywallSubscribe].firstMatch
-        XCTAssertTrue(subscribe.waitForExistence(timeout: 8), "Paywall subscribe CTA missing")
-        subscribe.tap()
-        // Purchase + entitlement propagation dismisses the sheet; wait it out.
-        XCTAssertTrue(title.waitForNonExistence(timeout: 10), "Paywall did not dismiss after subscribing")
     }
 }

@@ -297,6 +297,8 @@ struct AppLaunch {
                          initials: "HB", accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A",
                          sortOrder: 1, isDefault: false)
         context.insert(p1); context.insert(p2)
+        // Let a tour-area test start on a specific profile type (quick actions are gated).
+        UserDefaults.standard.set(activeType == "personal" ? p2.id : p1.id, forKey: "sc.activeProfile")
 
         let cal: Calendar = {
             var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c

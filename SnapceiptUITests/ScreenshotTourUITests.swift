@@ -132,7 +132,9 @@ final class ScreenshotTourUITests: UITestCase {
     // Area 6 — Logbooks (mileage + WFH). Mileage/WFH are PERSONAL-only Home quick
     // actions now, so switch to the personal profile before tapping them.
     @MainActor func test_area06_logbooks() {
-        launchTour()
+        // Mileage/WFH are PERSONAL-only Home quick actions AND Pro-gated, so launch the
+        // tour with the personal profile active + a Pro plan (no paywall on Add vehicle).
+        launchTour(activeType: "personal", pro: true)
         switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickMileage], "home.quick.mileage")
         app.descendants(matching: .any)[AccessibilityID.homeQuickMileage].firstMatch.tap()
@@ -175,7 +177,10 @@ final class ScreenshotTourUITests: UITestCase {
     // quick action now, so switch to the personal profile first (p2 seeds its own
     // Flybuys card so the wallet renders populated under terracotta).
     @MainActor func test_area08_loyalty() {
-        launchTour()
+        // Loyalty is a PERSONAL-only Home quick action, so launch with the personal
+        // profile active. pro:true is harmless (loyalty itself isn't Pro-gated) and
+        // keeps this area paywall-free if the quick action ever becomes gated.
+        launchTour(activeType: "personal", pro: true)
         switchToPersonalProfile()
         require(app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty], "home.quick.loyalty")
         app.descendants(matching: .any)[AccessibilityID.homeQuickLoyalty].firstMatch.tap()
@@ -218,7 +223,9 @@ final class ScreenshotTourUITests: UITestCase {
     // controls are real Buttons) — the same resolution QuotesUITests uses to reach the
     // editor reliably.
     @MainActor func test_area09_quotes() {
-        launchTour()
+        // Create Quote is a BUSINESS quick action (business is the tour default) AND
+        // Pro-gated, so launch with a Pro plan so the editor opens without the paywall.
+        launchTour(pro: true)
         require(app.buttons[AccessibilityID.homeQuickQuote], "home.quick.quote")
         app.buttons[AccessibilityID.homeQuickQuote].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.quotesScreen], "quote list")
@@ -239,7 +246,10 @@ final class ScreenshotTourUITests: UITestCase {
     // Area 10 — Email-in + Settings + Profiles. Broadest area: shoot the hub +
     // every reachable sub-screen the spec names.
     @MainActor func test_area10_emailSettingsProfiles() {
-        launchTour()
+        // Email-in is Pro-gated, so launch with a Pro plan so emailInScreen opens
+        // without the paywall. The profile.row.emailin row sits low in the hub
+        // ScrollView — hubRow(_) below already swipes up until it's hittable.
+        launchTour(pro: true)
         require(app.descendants(matching: .any)[AccessibilityID.tabProfile], "tabbar.profile")
         app.descendants(matching: .any)[AccessibilityID.tabProfile].firstMatch.tap()
         require(app.descendants(matching: .any)[AccessibilityID.profileHubScreen], "profile hub")
@@ -331,13 +341,14 @@ final class ScreenshotTourUITests: UITestCase {
         launchBasSeed()
         require(app.buttons[AccessibilityID.tabReports], "tab.reports")
         app.buttons[AccessibilityID.tabReports].tap()
-        // The BAS card lives near the top of the restyled Reports ScrollView; bind it as
-        // a Button (it's a real Button) and bring it on-screen before tapping, mirroring
-        // the working BasUITests resolution so the tap reliably opens BasView.
+        // The BAS card moved FURTHER DOWN the restyled Reports ScrollView (cards
+        // reordered); bind it as a Button (it's a real Button) and swipe the Reports
+        // ScrollView up until it's hittable before tapping, mirroring the working
+        // BasUITests resolution so the tap reliably opens BasView.
         let basCard = app.buttons[AccessibilityID.reportsBasCard].firstMatch
         require(basCard, "reports.bas.card")
         var scrollTries = 0
-        while !basCard.isHittable && scrollTries < 6 {
+        while !basCard.isHittable && scrollTries < 8 {
             app.descendants(matching: .any)[AccessibilityID.reportsScreen].firstMatch.swipeUp()
             scrollTries += 1
         }
@@ -362,7 +373,15 @@ final class ScreenshotTourUITests: UITestCase {
     // EMPTY states: both profiles seeded with NO domain data, so every primary
     // screen renders its empty-state art (§4 "empty AND populated variants").
     @MainActor func test_cross_emptyStates() {
-        launchTourEmpty()
+        // EMPTY tour fixture (so every screen renders its empty-state art) + a Pro
+        // plan: this method drives the Pro-gated quick actions (Create Quote, Mileage)
+        // and the personal Loyalty quick action, all of which paywall for a free user.
+        // launchTourEmpty() takes no flags, so append -uiTestPro inline (the same
+        // arg-building shape test_area01/test_cross_largeType use). Business stays
+        // active at launch so the business empties + Create Quote are captured first,
+        // then switchToPersonalProfile() flips to the personal-only quick actions.
+        app.launchArguments += ["-uiTestStub", "-uiTestTourEmpty", "-uiTestPro"]
+        app.launch()
         require(app.descendants(matching: .any)[AccessibilityID.tabSnap], "shell")
         shoot(app, "home-empty-business")
         app.descendants(matching: .any)[AccessibilityID.tabReports].firstMatch.tap()

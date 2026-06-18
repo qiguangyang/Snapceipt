@@ -6,7 +6,8 @@ import XCTest
 final class LogbookExtraUITests: UITestCase {
     func testTripAddRecomputesClaim() {
         // Mileage is a PERSONAL-only Home quick action — seed personal-active.
-        launchSeeded(activeType: "personal")
+        // pro: true reports a Pro plan so Mileage opens without the paywall.
+        launchSeeded(activeType: "personal", pro: true)
         // Open mileage via the Home quick action.
         app.buttons[AccessibilityID.homeQuickMileage].firstMatch.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.mileageScreen].firstMatch
