@@ -153,6 +153,16 @@ struct ShellView: View {
             .frame(maxWidth: .infinity)
             .allowsHitTesting(false)
 
+            // --- Bottom fade scrim (design's gradient behind the tab bar) ---
+            // Scrolling content fades to cream under/around the floating bar, and the
+            // gap beneath the pill fills with cream — so nothing bleeds through below it.
+            LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 150)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+
             // --- Floating raised-center tab bar ---
             // `.accessibilityElement(children: .contain)` makes this an a11y CONTAINER:
             // it carries the `shell.tabbar` identifier WITHOUT overriding the inner tab
