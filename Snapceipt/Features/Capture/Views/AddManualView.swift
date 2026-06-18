@@ -381,7 +381,15 @@ struct AddManualView: View {
     }
 
     private var addItemRow: some View {
-        Button { items.append(ItemDraft()) } label: {
+        Button {
+            let draft = ItemDraft()
+            items.append(draft)
+            // Move focus straight to the new row's name field (after it renders) so the
+            // keyboard comes up with the cursor ready — no extra tap needed.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focusedField = .name(draft.id)
+            }
+        } label: {
             HStack(spacing: 10) {
                 Icon(name: "plus", size: 17, color: tint).frame(width: 28)
                 Text(items.isEmpty ? "Add item" : "Add another item")

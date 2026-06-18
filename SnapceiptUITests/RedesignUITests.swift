@@ -145,6 +145,24 @@ final class RedesignUITests: UITestCase {
                        "Hand-entered amount was overwritten by the items total")
     }
 
+    func testAddItemAutoFocusesNameField() {
+        launchSeeded()
+        app.buttons[AccessibilityID.homeQuickManual].tap()
+        XCTAssertTrue(app.otherElements[AccessibilityID.manualScreen].waitForExistence(timeout: 8),
+                      "Manual entry screen did not appear")
+
+        // Tapping "Add item" should move focus to the new row's name field: the
+        // keyboard appears and the field accepts typing with no further tap.
+        app.buttons[AccessibilityID.manualItemsAdd].tap()
+        XCTAssertTrue(app.keyboards.element.waitForExistence(timeout: 4),
+                      "Adding an item did not raise the keyboard (focus didn't move)")
+        let name0 = app.textFields["\(AccessibilityID.manualItemNamePrefix)0"]
+        XCTAssertTrue(name0.waitForExistence(timeout: 4), "New item name field missing")
+        name0.typeText("Latte")   // no tap first — only works if the field is focused
+        XCTAssertEqual(name0.value as? String, "Latte",
+                       "Item name field wasn't auto-focused after Add item")
+    }
+
     // MARK: - Detail Edit / Delete
 
     func testTransactionDetailHasEditAndDelete() {
