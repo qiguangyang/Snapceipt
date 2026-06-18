@@ -62,6 +62,16 @@ final class BudgetListViewModel {
     /// The active profile's top-3 monthly budgets (cap desc) for the Home tracker.
     func top3() -> [Row] { Array(rows().prefix(3)) }
 
+    /// The active profile's existing budget for a scope, or nil. Used to prevent
+    /// duplicates: at most one whole-profile budget, and at most one per category.
+    /// (`budgets` is already scoped to this profile and excludes soft-deleted rows.)
+    func existingBudget(scopeCategory: Bool, catKey: String) -> Budget? {
+        if scopeCategory {
+            return budgets.first { $0.categoryId != nil && $0.catKey == catKey }
+        }
+        return budgets.first { $0.categoryId == nil }
+    }
+
     /// Create (existing == nil) or update a budget, then enqueue an upsert.
     func save(existing: Budget?, categoryId: String?, catKey: String?, label: String,
               capCents: Int, alertThresholdPct: Int) {
