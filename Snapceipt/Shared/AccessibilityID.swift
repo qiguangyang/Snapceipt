@@ -39,6 +39,11 @@ enum AccessibilityID {
     static let captureReviewUpgrade = "capture.review.upgrade"
     static let captureReviewProfileToggle = "capture.review.profileToggle"
     static let captureReviewDiagnostics = "capture.review.diagnostics"
+    /// Editable Review line-item rows (suffixed with the row index).
+    static let captureReviewItemNamePrefix = "capture.review.item.name."
+    static let captureReviewItemPricePrefix = "capture.review.item.price."
+    static let captureReviewItemRemovePrefix = "capture.review.item.remove."
+    static let captureReviewItemsAdd = "capture.review.items.add"
     static let captureSave = "capture.save"
     static let captureSaveError = "capture.save.error"   // surfaced save failure (e.g. no profile)
     static let captureSavedTitle = "capture.saved.title"

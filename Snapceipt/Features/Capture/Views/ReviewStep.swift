@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Focus target for the editable Review line-item rows.
+private enum ReviewItemField: Hashable { case name(String), price(String) }
+
 /// The designed editable review card: total + GST pill, the AI-suggestion banner,
 /// the confidence badge (shown iff !needsReview), editable merchant/date/category/
 /// payment/tax-label, a Personal/Business profile toggle that re-skins live, a
@@ -19,6 +22,10 @@ struct ReviewStep: View {
     let onClose: () -> Void
 
     @State private var showPaywall = false
+    /// Editable line-item rows (name + price-as-text), seeded from `draft.lineItems`
+    /// and synced back on every edit so `save()` persists the user's changes.
+    @State private var itemDrafts: [ItemDraft] = []
+    @FocusState private var focusedItem: ReviewItemField?
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -307,23 +314,100 @@ struct ReviewStep: View {
         .tint(accent.base)
     }
 
+    /// Editable line items: name + price per row, with remove + add affordances
+    /// (reuses the manual-entry row pattern). Edits sync straight into `draft.lineItems`.
     private var lineItemsCard: some View {
-        Group {
-            if !draft.lineItems.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(Array(draft.lineItems.enumerated()), id: \.offset) { _, li in
-                        HStack {
-                            Text(li.name).font(.ui(13)).foregroundStyle(Palette.ink)
-                            Spacer()
-                            Text(fmt(li.price)).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
-                        }
-                    }
+        VStack(spacing: 0) {
+            ForEach($itemDrafts) { $item in
+                itemRow($item)
+            }
+            addItemRow
+        }
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .cardShadow()
+        // Seed from the extracted draft once, then keep `draft.lineItems` in sync with
+        // every edit so the saved receipt reflects the user's changes.
+        .onAppear {
+            if itemDrafts.isEmpty {
+                itemDrafts = draft.lineItems.map {
+                    ItemDraft(name: $0.name, priceText: Self.priceText($0.price))
                 }
-                .padding(16)
-                .background(Palette.paper, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                .cardShadow()
             }
         }
+        .onChange(of: itemDrafts) { _, _ in syncItemsToDraft() }
+    }
+
+    private func itemRow(_ item: Binding<ItemDraft>) -> some View {
+        let rowId = item.wrappedValue.id
+        let index = itemDrafts.firstIndex { $0.id == rowId } ?? 0
+        return VStack(spacing: 0) {
+            if index > 0 {
+                Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 52)
+            }
+            HStack(spacing: 10) {
+                Icon(name: "tag", size: 18, color: Palette.ink3).frame(width: 28)
+                TextField("Item name", text: item.name)
+                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                    .focused($focusedItem, equals: .name(rowId))
+                    .accessibilityIdentifier("\(AccessibilityID.captureReviewItemNamePrefix)\(index)")
+                Text("$").font(.ui(14, .semibold)).foregroundStyle(Palette.ink3)
+                TextField("0.00", text: item.priceText)
+                    .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 66)
+                    .focused($focusedItem, equals: .price(rowId))
+                    .accessibilityIdentifier("\(AccessibilityID.captureReviewItemPricePrefix)\(index)")
+                Button { itemDrafts.removeAll { $0.id == rowId } } label: {
+                    Icon(name: "close", size: 13, color: Palette.ink3)
+                        .frame(width: 26, height: 26)
+                        .background(Palette.cream, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("\(AccessibilityID.captureReviewItemRemovePrefix)\(index)")
+            }
+            .padding(.vertical, 9).padding(.horizontal, 14)
+        }
+        .id("review-row-\(rowId)")
+    }
+
+    private var addItemRow: some View {
+        Button {
+            let newItem = ItemDraft()
+            itemDrafts.append(newItem)
+            // Focus the new row's name field once it renders, like manual entry.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focusedItem = .name(newItem.id)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Icon(name: "plus", size: 17, color: accent.base).frame(width: 28)
+                Text(itemDrafts.isEmpty ? "Add item" : "Add another item")
+                    .font(.ui(15, .semibold)).foregroundStyle(accent.base)
+                Spacer()
+            }
+            .padding(.vertical, 14).padding(.horizontal, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.captureReviewItemsAdd)
+    }
+
+    /// Push the edited rows back into the draft (drop blank-name rows; clamp price ≥ 0).
+    private func syncItemsToDraft() {
+        draft.lineItems = itemDrafts.compactMap { d in
+            let name = d.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            let raw = d.priceText.replacingOccurrences(of: ",", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            let price = Decimal(string: raw) ?? 0
+            return ExtractedReceipt.LineItemDraft(name: name, price: max(price, .zero))
+        }
+    }
+
+    /// Format an extracted Decimal price for the editable text field ("" when zero).
+    private static func priceText(_ price: Decimal) -> String {
+        price == 0 ? "" : String(format: "%.2f", NSDecimalNumber(decimal: price).doubleValue)
     }
 
     private var disabledChips: some View {
