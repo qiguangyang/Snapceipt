@@ -288,6 +288,12 @@ enum AccessibilityID {
     static let manualMerchant    = "manual.merchant"
     static let manualAmount      = "manual.amount"
     static let manualSave        = "manual.save"
+    // Manual entry — receipt-style line items
+    static let manualItemsAdd      = "manual.items.add"
+    static let manualItemsUseTotal = "manual.items.useTotal"
+    static let manualItemNamePrefix   = "manual.item.name."   // + row index
+    static let manualItemPricePrefix  = "manual.item.price."  // + row index
+    static let manualItemRemovePrefix = "manual.item.remove." // + row index
     // Transaction editor GST fields (F8)
     static let txnGstFreeToggle = "txn.gstFree.toggle"
     static let txnCapitalToggle = "txn.capital.toggle"

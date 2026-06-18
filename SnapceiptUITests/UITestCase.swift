@@ -68,4 +68,12 @@ class UITestCase: XCTestCase {
         XCTAssertTrue(b.waitForExistence(timeout: 10), "Dev sign-in button missing")
         b.tap()
     }
+
+    /// Dismiss the software keyboard via the shared accessory-bar button (present on
+    /// editor screens). No-op if it isn't showing. Tapping a sibling field/button with
+    /// the keyboard up can be swallowed as a dismiss; call this between fields.
+    func dismissKeyboard() {
+        let b = app.buttons[AccessibilityID.keyboardDismiss]
+        if b.waitForExistence(timeout: 1) { b.tap() }
+    }
 }
