@@ -28,8 +28,9 @@ struct ProfileSwitcherHeader: View {
                         chevronPill
                     }
                 }
-                Spacer(minLength: 0)
             }
+            // Sized to its content (no trailing greedy Spacer) so the header's tap
+            // area can't bleed across the row and swallow the adjacent alerts bell.
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -485,6 +485,7 @@ struct ShellView: View {
                         store: profiles,
                         onTapSwitch: { router.go(.overlay(.profilePicker)) }
                     )
+                    Spacer(minLength: 8)
                     Button { router.present(.alerts) } label: { bellButton(accent: accent) }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier(AccessibilityID.homeAlertsBell)
@@ -519,8 +520,8 @@ struct ShellView: View {
                 .padding(.horizontal, 18).padding(.top, 18)
             }
             // Home a11y CONTAINER: `.contain` lets `shell.home` carry this identifier
-            // WITHOUT flattening the subtree (which would clobber `profile.switcher`,
-            // the bell, the budget-row ids, and the quick-action ids).
+            // WITHOUT flattening the subtree (profile.switcher / bell / budget-row /
+            // quick-action ids all stay queryable).
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(AccessibilityID.shellHome)
             .padding(.bottom, 110)
@@ -550,6 +551,7 @@ struct ShellView: View {
     private func bellButton(accent: AccentPalette) -> some View {
         Icon(name: "bell", size: 21, color: Palette.ink2)
             .frame(width: 44, height: 44)
+            .contentShape(Rectangle())   // whole 44×44 is the tap target, not just the glyph
             .background(Palette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
             .overlay(alignment: .topTrailing) {

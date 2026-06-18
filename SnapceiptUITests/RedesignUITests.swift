@@ -9,12 +9,21 @@ final class RedesignUITests: UITestCase {
 
     func testHomeShowsSummaryHeroAndSnapCTA() {
         launchSeeded()
-        XCTAssertTrue(app.otherElements[AccessibilityID.homeSummary].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.homeSummary].waitForExistence(timeout: 10),
                       "Home net-this-month summary hero missing")
         XCTAssertTrue(app.buttons[AccessibilityID.homeSnapCTA].waitForExistence(timeout: 5),
                       "Home Snap-a-receipt CTA missing")
         XCTAssertTrue(app.buttons[AccessibilityID.homeQuickManual].waitForExistence(timeout: 5),
                       "Home 'Add Manually' quick action missing")
+    }
+
+    func testBellOpensAlerts() {
+        launchSeeded()
+        let bell = app.buttons[AccessibilityID.homeAlertsBell]
+        XCTAssertTrue(bell.waitForExistence(timeout: 10), "Bell missing")
+        bell.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.alertsScreen].waitForExistence(timeout: 6),
+                      "Alerts did not open from the Home bell")
     }
 
     // MARK: - Activity controls

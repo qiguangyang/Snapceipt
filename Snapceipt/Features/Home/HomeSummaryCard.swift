@@ -40,7 +40,9 @@ struct HomeSummaryCard: View {
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .shadow(color: accent.base.opacity(0.45), radius: 13, x: 0, y: 12)
-        .accessibilityElement(children: .contain)
+        // NB: no `.accessibilityElement(children: .contain)` here — the decorative
+        // circles' clipped overflow made the contain frame spill over the alerts bell
+        // and off-screen, swallowing the bell tap. The plain identifier is enough.
         .accessibilityIdentifier(AccessibilityID.homeSummary)
     }
 
@@ -48,12 +50,15 @@ struct HomeSummaryCard: View {
         ZStack {
             LinearGradient(colors: [accent.base, accent.deep],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
-            // Decorative translucent circles, clipped to the card.
+            // Decorative translucent circles. `.clipped()` keeps their offset overflow
+            // from extending the card's hit-test bounds up over the alerts bell.
             Circle().fill(.white.opacity(0.08)).frame(width: 150, height: 150)
                 .offset(x: 150, y: -90)
             Circle().fill(.white.opacity(0.06)).frame(width: 120, height: 120)
                 .offset(x: 110, y: 95)
         }
+        .clipped()
+        .allowsHitTesting(false)
     }
 
     /// Net / income / expense (in cents) for the active profile this calendar month.
