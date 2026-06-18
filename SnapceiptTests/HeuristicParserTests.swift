@@ -159,4 +159,25 @@ struct HeuristicParserTests {
         #expect(r.merchant == "WOOLWORTHS METRO")
         #expect(r.total == Decimal(string: "44.00"))
     }
+
+    /// Real Vision OCR splits an item's name (left) and its price (right column)
+    /// into two separate observations on the same visual row. The parser must pair
+    /// them by geometry so line items are recognised when Smart Scan AI is OFF.
+    @Test func pairsSplitNamePriceByRow() {
+        let ls = [
+            line("The Coffee Club", x: 0.1, y: 0.92,  w: 0.6,  h: 0.03),
+            line("Flat White",      x: 0.1, y: 0.60,  w: 0.4,  h: 0.02),
+            line("4.50",            x: 0.8, y: 0.605, w: 0.15, h: 0.02),
+            line("Muffin",          x: 0.1, y: 0.50,  w: 0.4,  h: 0.02),
+            line("5.50",            x: 0.8, y: 0.505, w: 0.15, h: 0.02),
+            line("TOTAL",           x: 0.1, y: 0.30,  w: 0.3,  h: 0.02),
+            line("10.00",           x: 0.8, y: 0.305, w: 0.15, h: 0.02),
+        ]
+        let r = HeuristicParser.parse(ls)
+        #expect(r.lineItems.count == 2)
+        #expect(r.lineItems.first?.name == "Flat White")
+        #expect(r.lineItems.first?.price == Decimal(string: "4.50"))
+        #expect(r.lineItems.last?.name == "Muffin")
+        #expect(r.lineItems.last?.price == Decimal(string: "5.50"))
+    }
 }
