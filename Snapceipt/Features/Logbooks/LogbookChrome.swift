@@ -78,6 +78,11 @@ struct LbHero: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
+            // Decorative translucent circle, top-right (clipped by the card).
+            Circle().fill(Color.white.opacity(0.12))
+                .frame(width: 130, height: 130)
+                .offset(x: 44, y: -52)
+                .allowsHitTesting(false)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     Icon(name: icon, size: 20, color: .white)

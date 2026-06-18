@@ -136,6 +136,7 @@ struct MileageScreen: View {
                     Spacer(minLength: 0)
                     Icon(name: "chevR", size: 18, color: Palette.ink3)
                 }
+                .contentShape(Rectangle())   // whole row tappable
             }
         }
         .buttonStyle(.plain)
@@ -152,8 +153,9 @@ struct MileageScreen: View {
                     Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
                 }
                 Spacer(minLength: 0)
+                // MiniSwitch (OFF / placeholder): 46x28 pill, white 22px knob.
                 Capsule().fill(Palette.line).frame(width: 46, height: 28)
-                    .overlay(Circle().fill(Palette.paper).frame(width: 22).padding(3), alignment: .leading)
+                    .overlay(Circle().fill(.white).frame(width: 22).padding(3), alignment: .leading)
             }
         }
         .opacity(0.7)
@@ -185,6 +187,7 @@ struct MileageScreen: View {
                     Spacer(minLength: 0)
                     Icon(name: "chevR", size: 18, color: Palette.ink3)
                 }
+                .contentShape(Rectangle())   // whole row tappable
             }
         }
         .buttonStyle(.plain)
@@ -227,7 +230,7 @@ struct MileageScreen: View {
                             Spacer(minLength: 0)
                             VStack(alignment: .trailing, spacing: 1) {
                                 Text(String(format: "%.1f km", Double(t.distanceM) / 1000))
-                                    .font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
+                                    .numeric(14.5).foregroundStyle(Palette.ink)
                                 Text(t.isBusiness ? "Business" : "Personal")
                                     .font(.ui(11, .bold))
                                     .foregroundStyle(t.isBusiness ? accent.base : Palette.ink3)

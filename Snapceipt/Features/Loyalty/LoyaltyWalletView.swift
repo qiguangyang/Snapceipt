@@ -30,10 +30,10 @@ struct LoyaltyWalletView: View {
                         Spacer()
                     } else {
                         List {
-                            Text("Tap a card to show its barcode at the checkout")
-                                .font(.ui(13)).foregroundStyle(Palette.ink2)
+                            Text("Tap a card to show its barcode at the checkout — no app-switching at the register.")
+                                .font(.ui(13)).foregroundStyle(Palette.ink2).lineSpacing(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .listRowInsets(EdgeInsets(top: 8, leading: 18, bottom: 4, trailing: 18))
+                                .listRowInsets(EdgeInsets(top: 8, leading: 18, bottom: 6, trailing: 18))
                                 .listRowBackground(Palette.cream)
                                 .listRowSeparator(.hidden)
                             // Swipe a row left to reveal Delete (soft-delete via the VM),
@@ -46,9 +46,15 @@ struct LoyaltyWalletView: View {
                                         Button(role: .destructive) { vm.delete(card) } label: { Text("Delete") }
                                     }
                             }
-                            .listRowInsets(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 18))
+                            .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
                             .listRowBackground(Palette.cream)
                             .listRowSeparator(.hidden)
+
+                            sparklesNote
+                                .listRowInsets(EdgeInsets(top: 10, leading: 18, bottom: 6, trailing: 18))
+                                .listRowBackground(Palette.cream)
+                                .listRowSeparator(.hidden)
+
                             // Clear the bottom-pinned floating CTA so the last card scrolls free.
                             Color.clear.frame(height: 100)
                                 .listRowInsets(EdgeInsets())
@@ -70,13 +76,26 @@ struct LoyaltyWalletView: View {
         }
     }
 
+    /// Sparkles info note (paper-2 box): the loyalty-points pitch.
+    private var sparklesNote: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Icon(name: "sparkles", size: 18, color: accent.base).padding(.top, 1)
+            Text("We'll match loyalty points to your receipts so every shop counts toward what you save.")
+                .font(.ui(12.5)).foregroundStyle(Palette.ink2).lineSpacing(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: Radius.inner, style: .continuous))
+    }
+
     @ViewBuilder private func tile(_ card: LoyaltyCard) -> some View {
+        // 145deg gradient (c1 -> c2): a UnitPoint pair tilted just past the diagonal.
         let c1 = Color(hex: LoyaltyBrand.hex(card.color1))
         let c2 = Color(hex: LoyaltyBrand.hex(card.color2))
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(card.brand).font(.ui(16, .bold)).foregroundStyle(.white)
+                    Text(card.brand).font(.display(17, .bold)).foregroundStyle(.white)
                     if let sub = card.subBrand {
                         Text(sub).font(.ui(12, .semibold)).foregroundStyle(.white.opacity(0.85))
                     }
@@ -92,21 +111,23 @@ struct LoyaltyWalletView: View {
                 .frame(height: 40)
                 .frame(maxWidth: .infinity)
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            Text(card.number).font(.ui(13, .semibold)).monospacedDigit()
+            Text(card.number).font(.ui(12.5, .semibold)).monospacedDigit().kerning(1)
                 .foregroundStyle(.white.opacity(0.95))
                 .lineLimit(1)
         }
         .padding(16)
         .background(
-            LinearGradient(colors: [c1, c2], startPoint: .topLeading, endPoint: .bottomTrailing)
+            LinearGradient(colors: [c1, c2],
+                           startPoint: UnitPoint(x: 0.1, y: 0), endPoint: UnitPoint(x: 0.9, y: 1))
                 .overlay(alignment: .topTrailing) {
                     Circle().fill(Color.white.opacity(0.08))
                         .frame(width: 110, height: 110)
                         .offset(x: 28, y: -28)
                 }
         )
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .shadow(color: c2.opacity(0.4), radius: 12, x: 0, y: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // sh: 0 12px 26px -14px c1.
+        .shadow(color: c1.opacity(0.45), radius: 13, x: 0, y: 12)
     }
 
     /// A small rendered barcode (or evenly-spaced stripes when rendering fails).

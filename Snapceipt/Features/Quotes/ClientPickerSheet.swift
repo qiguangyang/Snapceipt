@@ -28,10 +28,17 @@ struct ClientPickerSheet: View {
                         searchField
                         newClientButton
                         if showNew { newClientForm(vm) }
-                        ForEach(vm.filtered(search: search)) { client in
-                            Button { onPick(client.name, client.email) } label: { row(client) }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                        let clients = vm.filtered(search: search)
+                        if !clients.isEmpty {
+                            Text("CLIENTS").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
+                                .padding(.top, 8)
+                            VStack(spacing: 10) {
+                                ForEach(clients) { client in
+                                    Button { onPick(client.name, client.email) } label: { row(client) }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 40)
@@ -51,8 +58,13 @@ struct ClientPickerSheet: View {
     }
 
     private var searchField: some View {
-        TextField("Search clients", text: $search)
-            .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
+        HStack(spacing: 8) {
+            Icon(name: "search", size: 17, color: Palette.ink3)
+            TextField("Search clients", text: $search)
+        }
+        .padding(12)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line2, lineWidth: 1))
     }
 
     private var newClientButton: some View {
@@ -100,17 +112,31 @@ struct ClientPickerSheet: View {
     }
 
     private func row(_ client: Client) -> some View {
-        HStack(spacing: 12) {
-            IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 38, iconSize: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(client.name).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                if let email = client.email {
-                    Text(email).font(.ui(12)).foregroundStyle(Palette.ink3)
+        Card(padding: 14) {
+            HStack(spacing: 12) {
+                clientTile(client.name)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(client.name).font(.ui(15, .bold)).foregroundStyle(Palette.ink)
+                    if let email = client.email {
+                        Text(email).font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                    }
                 }
+                Spacer(minLength: 0)
+                Icon(name: "chevR", size: 14, color: Palette.ink3)
             }
-            Spacer()
-            Icon(name: "chevR", size: 14, color: Palette.ink3)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 6)
+    }
+
+    /// 42×42 accent-soft tile showing the client's first initial.
+    @ViewBuilder private func clientTile(_ name: String) -> some View {
+        if let initial = name.trimmingCharacters(in: .whitespaces).first {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(accent.soft)
+                .frame(width: 42, height: 42)
+                .overlay(Text(String(initial).uppercased()).font(.ui(16, .bold)).foregroundStyle(accent.base))
+        } else {
+            IconCircle(name: "building", tint: accent.base, soft: accent.soft, size: 42, iconSize: 19)
+        }
     }
 }

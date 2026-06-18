@@ -40,7 +40,7 @@ struct RuleEditorView: View {
     ]
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottom) {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
                 SheetHeader(title: ruleId == nil ? "New smart rule" : "Edit smart rule", onClose: onClose)
@@ -50,13 +50,13 @@ struct RuleEditorView: View {
                             matchSection
                             actionSection
                             optionsSection
-                            saveButton
                         }
-                        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
+                        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 110)
                     }
                     .keyboardDismissButton()   // matcher + deductible text fields
                 } else { Color.clear }
             }
+            if rulesVM != nil { saveBar }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.ruleEditorScreen)
@@ -131,9 +131,15 @@ struct RuleEditorView: View {
         groupLabel("Options")
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                Toggle("Enabled", isOn: $enabled)
-                    .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                    .tint(accent.base)
+                Toggle(isOn: $enabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enabled").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                        Text("Auto-file matching receipts")
+                            .font(.ui(12)).foregroundStyle(Palette.ink3)
+                    }
+                }
+                .toggleStyle(MiniSwitchToggleStyle())
+                Rectangle().fill(Palette.line2).frame(height: 1)
                 HStack {
                     Text("Priority").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                     Spacer()
@@ -146,17 +152,28 @@ struct RuleEditorView: View {
 
     // MARK: - Save
 
-    @ViewBuilder private var saveButton: some View {
-        Button(action: save) {
-            Text("Save rule").font(.ui(15, .semibold)).foregroundStyle(Palette.paper)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    /// Fixed bottom action bar: a clear -> cream scrim behind a tall accent button.
+    @ViewBuilder private var saveBar: some View {
+        let isDisabled = matcher.trimmingCharacters(in: .whitespaces).isEmpty
+        VStack(spacing: 0) {
+            LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 24)
+                .allowsHitTesting(false)
+            Button(action: save) {
+                Text("Save rule").font(.ui(16, .bold)).foregroundStyle(Palette.paper)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(accent.base, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .cardShadow()
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
+            .opacity(isDisabled ? 0.5 : 1)
+            .accessibilityIdentifier(AccessibilityID.ruleEditorSave)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+            .background(Palette.cream)
         }
-        .buttonStyle(.plain)
-        .disabled(matcher.trimmingCharacters(in: .whitespaces).isEmpty)
-        .opacity(matcher.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
-        .accessibilityIdentifier(AccessibilityID.ruleEditorSave)
-        .padding(.top, 6)
     }
 
     private func save() {
@@ -204,7 +221,7 @@ struct RuleEditorView: View {
     // MARK: - Helpers
 
     private func groupLabel(_ s: String) -> some View {
-        Text(s).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+        Text(s.uppercased()).font(.ui(12.5, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
     }
 
@@ -222,3 +239,5 @@ struct RuleEditorView: View {
         }
     }
 }
+
+// `MiniSwitchToggleStyle` is shared (declared in TaxSettingsView.swift) and reused here.

@@ -88,29 +88,27 @@ struct ProfileDetailView: View {
 
     @ViewBuilder private func hero(_ p: Profile) -> some View {
         let pal = palette(p)
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(spacing: 16) {
+            HStack(spacing: 14) {
                 Text(initials(p.name))
-                    .font(.display(20, .bold)).foregroundStyle(.white)
-                    .frame(width: 54, height: 54)
-                    .background(
-                        LinearGradient(colors: [pal.base, pal.deep],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    )
+                    .font(.display(21, .bold)).foregroundStyle(pal.deep)
+                    .frame(width: 56, height: 56)
+                    .background(.white.opacity(0.92),
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(p.name.isEmpty ? "Untitled profile" : p.name)
-                        .font(.display(20, .bold)).foregroundStyle(.white).lineLimit(1)
+                        .font(.display(21, .bold)).foregroundStyle(.white).lineLimit(1)
                     Text("\(p.type.capitalized) profile")
-                        .font(.ui(12.5, .regular)).foregroundStyle(.white.opacity(0.8))
+                        .font(.ui(13, .regular)).foregroundStyle(.white.opacity(0.82))
                 }
                 Spacer(minLength: 0)
                 if isActive {
-                    Text("Active")
-                        .font(.ui(11.5, .bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.white.opacity(0.22),
-                                    in: Capsule(style: .continuous))
+                    HStack(spacing: 4) {
+                        Icon(name: "check", size: 13, color: .white, lineWidth: 2.4)
+                        Text("Currently active").font(.ui(11.5, .bold)).foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(.white.opacity(0.22), in: Capsule(style: .continuous))
                 }
             }
             if !isActive {
@@ -119,19 +117,26 @@ struct ProfileDetailView: View {
                     onClose()
                 } label: {
                     Text("Switch to this profile")
-                        .font(.ui(15, .bold)).foregroundStyle(pal.base)
+                        .font(.ui(15, .bold)).foregroundStyle(pal.deep)
                         .frame(maxWidth: .infinity).frame(height: 46)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.profileDetailSwitch)
             }
         }
-        .padding(16)
+        .padding(20)
         .background(
-            LinearGradient(colors: [pal.base, pal.deep],
-                           startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+            ZStack(alignment: .topTrailing) {
+                LinearGradient(colors: [pal.base, pal.deep],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                Circle().fill(.white.opacity(0.08))
+                    .frame(width: 150, height: 150)
+                    .offset(x: 50, y: -60)
+                    .allowsHitTesting(false)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         )
         .cardShadow()
     }
@@ -152,12 +157,14 @@ struct ProfileDetailView: View {
                         .onSubmit { commitName(p) }
                         .accessibilityIdentifier(AccessibilityID.profileDetailNameField)
                 }
+                divider
                 HStack {
-                    Text("Type").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                    Text("Type").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
                     Spacer()
-                    Text(p.type.capitalized).font(.ui(14.5, .regular)).foregroundStyle(Palette.ink2)
+                    Text(p.type.capitalized).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
                 }
                 if p.type == ProfileType.business.rawValue {
+                    divider
                     VStack(alignment: .leading, spacing: 6) {
                         Text("ABN").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
                         TextField("12 345 678 901", text: $abnText)
@@ -167,12 +174,14 @@ struct ProfileDetailView: View {
                             .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
                             .onSubmit { commitAbn(p) }
                     }
+                    divider
                     Toggle("Registered for GST", isOn: Binding(
                         get: { p.gstRegistered },
                         set: { newValue in profiles.update(p) { $0.gstRegistered = newValue } }))
-                        .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
-                        .tint(palette(p).base)
+                        .toggleStyle(MiniSwitchToggleStyle())
+                        .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
                 }
+                divider
                 accentPicker(p)
             }
         }
@@ -206,28 +215,31 @@ struct ProfileDetailView: View {
 
     @ViewBuilder private func stats(_ p: Profile) -> some View {
         let s = computeStats(for: p.id)
+        let pal = palette(p)
         groupLabel("This profile")
-        Card {
-            HStack(spacing: 0) {
-                statTile("Receipts", "\(s.count)")
-                divider
-                statTile("Spent", fmt(s.spentCents, showCents: false))
-                divider
-                statTile("Deductible", fmt(s.deductibleCents, showCents: false))
-            }
+        HStack(spacing: 12) {
+            statPill(icon: "receipt", tint: pal.base, soft: pal.soft,
+                     value: "\(s.count)", caption: "Receipts")
+            statPill(icon: "shield", tint: Palette.income, soft: Palette.incomeSoft,
+                     value: fmt(s.deductibleCents, showCents: false), caption: "Deductible YTD")
         }
     }
 
-    private func statTile(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value).font(.display(20, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
-            Text(label).font(.ui(12, .regular)).foregroundStyle(Palette.ink3)
+    private func statPill(icon: String, tint: Color, soft: Color, value: String, caption: String) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                IconCircle(name: icon, tint: tint, soft: soft, size: 38, iconSize: 19)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(value).numeric(20).foregroundStyle(Palette.ink)
+                    Text(caption).font(.ui(12, .regular)).foregroundStyle(Palette.ink3)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var divider: some View {
-        Rectangle().fill(Palette.line).frame(width: 1, height: 34)
+        Rectangle().fill(Palette.line2).frame(height: 1)
     }
 
     /// Real per-profile stats from non-deleted `Transaction` rows scoped to `profileId`:
@@ -257,11 +269,12 @@ struct ProfileDetailView: View {
             VStack(spacing: 0) {
                 Button(action: onExport) {
                     HStack(spacing: 12) {
-                        IconCircle(name: "arrowRight", tint: palette(p).base, soft: palette(p).soft, size: 38, iconSize: 19)
+                        IconCircle(name: "download", tint: palette(p).base, soft: palette(p).soft, size: 38, iconSize: 19)
                         Text("Export this profile").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
                         Spacer(); Icon(name: "chevR", size: 16, color: Palette.ink3)
                     }
                     .padding(14)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 Rectangle().fill(Palette.line2).frame(height: 1).padding(.leading, 64)
@@ -270,11 +283,12 @@ struct ProfileDetailView: View {
                     showDeleteConfirm = true
                 } label: {
                     HStack(spacing: 12) {
-                        IconCircle(name: "info", tint: Palette.alert, soft: Palette.alert.opacity(0.12), size: 38, iconSize: 19)
+                        IconCircle(name: "trash", tint: Palette.alert, soft: Palette.alert.opacity(0.12), size: 38, iconSize: 19)
                         Text("Delete profile").font(.ui(14.5, .semibold)).foregroundStyle(Palette.alert)
                         Spacer()
                     }
                     .padding(14)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.profileDetailDelete)
@@ -321,7 +335,7 @@ struct ProfileDetailView: View {
     // MARK: - Helpers
 
     private func groupLabel(_ s: String) -> some View {
-        Text(s).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+        Text(s.uppercased()).font(.ui(12.5, .bold)).tracking(0.3).foregroundStyle(Palette.ink3)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
     }
 
