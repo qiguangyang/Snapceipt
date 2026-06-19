@@ -14,6 +14,7 @@ struct ReceiptDetailView: View {
     @Environment(\.accent) private var accent
     @State private var vm: ReceiptDetailViewModel?
     @State private var confirmingDelete = false
+    @State private var showImageViewer = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -23,7 +24,12 @@ struct ReceiptDetailView: View {
                     VStack(spacing: 16) {
                         summary(row, txn)
                         detailsCard(row, txn)
-                        if let image = vm.image { imageCard(image) }
+                        if let image = vm.image {
+                            imageCard(image)
+                                .contentShape(Rectangle())
+                                .onTapGesture { showImageViewer = true }
+                                .accessibilityIdentifier(AccessibilityID.receiptImageTap)
+                        }
                         if !vm.lineItems.isEmpty { lineItemsCard(vm.lineItems, currency: txn.currency) }
                         actions
                     }
@@ -40,6 +46,11 @@ struct ReceiptDetailView: View {
         .confirmationDialog("Delete this transaction?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { deleteReceipt() }
             Button("Cancel", role: .cancel) {}
+        }
+        .fullScreenCover(isPresented: $showImageViewer) {
+            if let image = vm?.image {
+                ReceiptImageViewer(image: image) { showImageViewer = false }
+            }
         }
     }
 
@@ -139,6 +150,12 @@ struct ReceiptDetailView: View {
             .background(Palette.paper)
             .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(Palette.line2, lineWidth: 1))
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                    .padding(7).background(.black.opacity(0.45), in: Circle())
+                    .padding(10)
+            }
     }
 
     private func lineItemsCard(_ items: [LineItem], currency: String) -> some View {
