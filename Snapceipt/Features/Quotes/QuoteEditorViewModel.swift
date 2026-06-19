@@ -272,11 +272,23 @@ final class QuoteEditorViewModel {
         do {
             let r = try await api.quoteShareLink(qid)
             pdfUrl = r.url
-            // Apply the server-minted number immediately so the editor shows "Quote #N"
-            // without waiting for a sync pull (spec §4: link issues the quote).
-            if let n = r.number, number == nil {
-                number = n
-                if let q = fetchQuote(qid) { q.number = n; try? context.save() }
+            // Sharing the link issues the quote (spec §4): apply the server-minted number
+            // AND move it out of Draft → Sent so it becomes eligible to convert to an invoice.
+            let now = Epoch.nowMs()
+            if let n = r.number, number == nil { number = n }
+            if statusValue == .draft {
+                status = QuoteStatus.sent.rawValue
+                if sentAt == nil { sentAt = now }
+            }
+            if let q = fetchQuote(qid) {
+                if let n = r.number, q.number == nil { q.number = n }
+                if QuoteStatus(rawValue: q.status) == .draft {
+                    q.status = QuoteStatus.sent.rawValue
+                    if q.sentAt == nil { q.sentAt = now }
+                }
+                q.updatedAt = now
+                try? context.save()
+                sync.enqueue(op: "upsert", entityType: .quote, entity: q)
             }
             return r.url
         } catch let e as APIError {

@@ -31,7 +31,7 @@ struct QuoteConvertTests {
         return v2
     }
 
-    @Test("shareLink saves, calls /quotes/:id/link, applies url/number, leaves status draft")
+    @Test("shareLink saves, calls /quotes/:id/link, applies url/number, and issues (draft→sent)")
     func shareLink() async throws {
         let (ctx, sync) = try makeFixture()
         let mock = MockAPIClient()
@@ -43,15 +43,18 @@ struct QuoteConvertTests {
         v.setClient(name: "Acme", email: nil)
         v.addLine(); v.lineItems[0].unitPriceCents = 100_00
         #expect(v.canGeneratePdf == true)
+        #expect(v.canConvert == false)              // draft: not convertible yet
         let url = await v.shareLink(api: mock)
         #expect(url == "https://api.snapceipt.cc/q/tok")
         #expect(mock.quoteShareLinkCalls.count == 1)
         #expect(v.pdfUrl == "https://api.snapceipt.cc/q/tok")
         #expect(v.number == "SN-0007")
-        #expect(v.statusValue == .draft)            // status unchanged
+        #expect(v.statusValue == .sent)             // sharing issues the quote
+        #expect(v.canConvert == true)               // now convertible
         let q = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.deletedAt == nil }))[0]
         #expect(q.number == "SN-0007")
-        #expect(q.status == "draft")
+        #expect(q.status == "sent")
+        #expect(q.sentAt != nil)
     }
 
     @Test("convertToInvoice clones client + GST flags + line items into a draft invoice (due +14d)")
