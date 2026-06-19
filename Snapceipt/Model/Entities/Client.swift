@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 
 /// A saved client in the per-profile address book (Business). Mirrors D1 `clients`.
-/// Picking a Client copies its name/email onto the quote (no FK), keeping a sent
-/// quote stable. v1 carries only name + email (no phone/address/ABN).
+/// Picking a Client copies its name/email/address onto the quote (no FK), keeping a
+/// sent quote stable. Carries name + email + freeform multiline address.
 @Model
 final class Client: Syncable {
     @Attribute(.unique) var id: String
@@ -12,6 +12,8 @@ final class Client: Syncable {
 
     var name: String
     var email: String?
+    /// Freeform multiline address (optional). Mirrors D1 `clients.address`.
+    var address: String?
 
     var createdAt: Int
     var updatedAt: Int
@@ -27,6 +29,7 @@ final class Client: Syncable {
         profileId: String?,
         name: String,
         email: String? = nil,
+        address: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -38,6 +41,7 @@ final class Client: Syncable {
         self.profileId = profileId
         self.name = name
         self.email = email
+        self.address = address
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

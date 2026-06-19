@@ -38,6 +38,7 @@ interface QuoteRenderRow {
   number: string | null;
   client_name: string | null;
   client_email: string | null;
+  client_address: string | null;
   gst_enabled: number;
   gst_inclusive: number;
   gst_rate_bp: number | null;
@@ -83,7 +84,7 @@ export async function loadQuoteForRender(
   userId: string,
 ): Promise<QuoteHtmlData | null> {
   const quote = await env.DB.prepare(
-    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive,
+    `SELECT id, profile_id, number, client_name, client_email, client_address, gst_enabled, gst_inclusive,
             gst_rate_bp, valid_until, created_at
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<QuoteRenderRow>();
@@ -118,6 +119,7 @@ export async function loadQuoteForRender(
     validUntil: quote.valid_until,
     clientName: quote.client_name,
     clientEmail: quote.client_email,
+    clientAddress: quote.client_address,
     gstEnabled,
     gstInclusive,
     gstRateBp: quote.gst_rate_bp,

@@ -8,6 +8,7 @@ function data(overrides: Partial<QuoteHtmlData> = {}): QuoteHtmlData {
     validUntil: "2026-07-04",
     clientName: "Jane Roe",
     clientEmail: "jane@example.com",
+    clientAddress: "9 Client Rd\nMelbourne VIC 3000",
     gstEnabled: true,
     gstInclusive: false,
     gstRateBp: 1500,
@@ -54,6 +55,17 @@ describe("renderQuoteHtml", () => {
     expect(html).toContain("SN-0001");
     expect(html).toContain("Jane Roe");
     expect(html).toContain("$115.00"); // total 11500c
+  });
+
+  it("renders the client address (multiline -> <br>) in the To block when set", () => {
+    const html = renderQuoteHtml(data());
+    expect(html).toContain("9 Client Rd<br>Melbourne VIC 3000");
+  });
+
+  it("omits the client address when null", () => {
+    const html = renderQuoteHtml(data({ clientAddress: null }));
+    expect(html).not.toContain("9 Client Rd");
+    expect(html).not.toContain("Melbourne VIC 3000");
   });
 
   it("inlines the logo data-URI in an <img>", () => {

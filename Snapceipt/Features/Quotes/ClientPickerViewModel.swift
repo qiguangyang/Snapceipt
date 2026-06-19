@@ -42,15 +42,18 @@ final class ClientPickerViewModel {
     }
 
     /// Create a client scoped to the active profile (+ enqueue an upsert). Trims
-    /// name/email; an empty email becomes nil. Returns nil for a blank name.
+    /// name/email/address; an empty email/address becomes nil. Returns nil for a blank
+    /// name. Address is freeform multiline (whitespace+newlines trimmed at the edges).
     @discardableResult
-    func create(name: String, email: String?) -> Client? {
+    func create(name: String, email: String?, address: String? = nil) -> Client? {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard !trimmedName.isEmpty else { return nil }
         let trimmedEmail = email?.trimmingCharacters(in: .whitespaces)
         let normalizedEmail = (trimmedEmail?.isEmpty ?? true) ? nil : trimmedEmail
+        let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAddress = (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress
         let client = Client(userId: userId, profileId: profileId,
-                            name: trimmedName, email: normalizedEmail)
+                            name: trimmedName, email: normalizedEmail, address: normalizedAddress)
         context.insert(client)
         try? context.save()
         reload()

@@ -11,6 +11,9 @@ final class Quote: Syncable {
     var number: String?
     var clientName: String?
     var clientEmail: String?
+    /// Snapshot of the picked client's freeform address at save (mirrors clientName/
+    /// clientEmail; no FK). Mirrors D1 `quotes.client_address`.
+    var clientAddress: String?
     var gstEnabled: Bool
     /// When true (and `gstEnabled`), entered line prices already include GST: the
     /// grand total is the entered sum and GST is the embedded 1/11 portion. Default
@@ -46,6 +49,7 @@ final class Quote: Syncable {
         number: String? = nil,
         clientName: String? = nil,
         clientEmail: String? = nil,
+        clientAddress: String? = nil,
         gstEnabled: Bool = true,
         gstInclusive: Bool = false,
         subtotalCents: Int = 0,
@@ -70,6 +74,7 @@ final class Quote: Syncable {
         self.number = number
         self.clientName = clientName
         self.clientEmail = clientEmail
+        self.clientAddress = clientAddress
         self.gstEnabled = gstEnabled
         self.gstInclusive = gstInclusive
         self.subtotalCents = subtotalCents

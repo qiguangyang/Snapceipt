@@ -41,7 +41,8 @@ struct InvoiceEditorView: View {
         .sheet(isPresented: $showClientPicker) {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
-                                  onPick: { name, email in vm.setClient(name: name, email: email); showClientPicker = false },
+                                  // clientAddress is scoped to QUOTES only — invoices ignore the address arg.
+                                  onPick: { name, email, _ in vm.setClient(name: name, email: email); showClientPicker = false },
                                   onClose: { showClientPicker = false })
                     .environment(\.accent, accent)
             }

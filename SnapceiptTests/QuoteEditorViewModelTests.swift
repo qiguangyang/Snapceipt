@@ -147,6 +147,24 @@ struct QuoteEditorViewModelTests {
         #expect(sync.calls.contains { $0.entityType == .quoteLineItem && $0.op == "delete" })
     }
 
+    @Test("setClient snapshots clientAddress; saveDraft persists it and reload restores it")
+    func clientAddressSnapshots() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com", address: "9 Client Rd\nMelbourne VIC 3000")
+        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        #expect(v.clientAddress == "9 Client Rd\nMelbourne VIC 3000")
+        v.saveDraft()
+        let id = v.quoteId!
+        let stored = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id }))[0]
+        #expect(stored.clientAddress == "9 Client Rd\nMelbourne VIC 3000")
+
+        let v2 = vm(ctx, sync)
+        v2.load(id: id)
+        #expect(v2.clientAddress == "9 Client Rd\nMelbourne VIC 3000")
+    }
+
     @Test("load(id) reopens a saved quote with its lines + client + gst")
     func reload() throws {
         let (ctx, sync) = try makeFixture()

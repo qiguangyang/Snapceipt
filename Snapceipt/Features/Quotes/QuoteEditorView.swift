@@ -51,8 +51,8 @@ struct QuoteEditorView: View {
         .sheet(isPresented: $showClientPicker) {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
-                                  onPick: { name, email in
-                                      vm.setClient(name: name, email: email)
+                                  onPick: { name, email, address in
+                                      vm.setClient(name: name, email: email, address: address)
                                       showClientPicker = false
                                   },
                                   onClose: { showClientPicker = false })
@@ -166,6 +166,9 @@ struct QuoteEditorView: View {
                                 .foregroundStyle(vm.clientName == nil ? Palette.ink3 : Palette.ink)
                             if let email = vm.clientEmail {
                                 Text(email).font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                            }
+                            if let address = vm.clientAddress, !address.isEmpty {
+                                Text(address).font(.ui(12.5)).foregroundStyle(Palette.ink3).lineLimit(2)
                             }
                         }
                         Spacer(minLength: 0)

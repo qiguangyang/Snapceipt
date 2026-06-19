@@ -392,6 +392,79 @@ describe("POST /sync/push", () => {
     expect(row.logo_r2_key).toBe("u/x/profiles/p/logo");
   });
 
+  it("persists the new client address column through a push upsert (migration 0011)", async () => {
+    const clientId = uuidv7();
+    const now = Date.now();
+    const mutation = {
+      mutationId: uuidv7(),
+      entityType: "client",
+      entityId: clientId,
+      op: "upsert" as const,
+      updatedAt: now,
+      payload: {
+        id: clientId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "client",
+        name: "Jane Roe",
+        email: "jane@example.com",
+        address: "9 Client Rd\nMelbourne VIC 3000",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+      } as Record<string, unknown>,
+    };
+    const res = await push({ deviceId: DEVICE_ID, mutations: [mutation] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT name, email, address FROM clients WHERE id = ?`,
+    ).bind(clientId).first<any>();
+    expect(row.name).toBe("Jane Roe");
+    expect(row.email).toBe("jane@example.com");
+    expect(row.address).toBe("9 Client Rd\nMelbourne VIC 3000");
+  });
+
+  it("persists the snapshotted quote client_address column through a push upsert (migration 0011)", async () => {
+    const quoteId = uuidv7();
+    const now = Date.now();
+    const mutation = {
+      mutationId: uuidv7(),
+      entityType: "quote",
+      entityId: quoteId,
+      op: "upsert" as const,
+      updatedAt: now,
+      payload: {
+        id: quoteId,
+        userId: USER_ID,
+        profileId: PROFILE_ID,
+        type: "quote",
+        clientName: "Jane Roe",
+        clientEmail: "jane@example.com",
+        clientAddress: "9 Client Rd\nMelbourne VIC 3000",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+      } as Record<string, unknown>,
+    };
+    const res = await push({ deviceId: DEVICE_ID, mutations: [mutation] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT client_name, client_email, client_address FROM quotes WHERE id = ?`,
+    ).bind(quoteId).first<any>();
+    expect(row.client_name).toBe("Jane Roe");
+    expect(row.client_address).toBe("9 Client Rd\nMelbourne VIC 3000");
+  });
+
   it("persists transaction gst_free/capital/gst_source to D1", async () => {
     const txnId = uuidv7();
     const m = txnMutation({ entityId: txnId });
@@ -792,6 +865,13 @@ describe("syncable table map", () => {
   it("maps the new quote + invoice gstRateBp columns (migration 0010)", () => {
     expect(tableForEntityType("quote")!.columns.gstRateBp).toBe("gst_rate_bp");
     expect(tableForEntityType("invoice")!.columns.gstRateBp).toBe("gst_rate_bp");
+  });
+
+  it("maps the new client address + quote client_address columns, NOT invoice (migration 0011)", () => {
+    expect(tableForEntityType("client")!.columns.address).toBe("address");
+    expect(tableForEntityType("quote")!.columns.clientAddress).toBe("client_address");
+    // Scoped to quotes only — invoices must NOT carry clientAddress.
+    expect(tableForEntityType("invoice")!.columns.clientAddress).toBeUndefined();
   });
 
   it("maps the new mileageTrip logbook columns", () => {

@@ -179,6 +179,7 @@ export const quoteEntity = baseEnvelope.extend({
   number: z.string().nullable().optional(),
   clientName: z.string().nullable().optional(),
   clientEmail: z.string().nullable().optional(),
+  clientAddress: z.string().nullable().optional(),
   gstEnabled: z.boolean().optional(),
   gstInclusive: z.boolean().optional(),
   subtotalCents: cents.optional(),

@@ -536,6 +536,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         if let v = env.string("number") { row.number = v }
         if let v = env.string("clientName") { row.clientName = v }
         if let v = env.string("clientEmail") { row.clientEmail = v }
+        if let v = env.string("clientAddress") { row.clientAddress = v }
         if let v = env.bool("gstEnabled") { row.gstEnabled = v }
         if let v = env.bool("gstInclusive") { row.gstInclusive = v }
         if let v = env.int("subtotalCents") { row.subtotalCents = v }
@@ -555,6 +556,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         f["number"] = str(r.number)
         f["clientName"] = str(r.clientName)
         f["clientEmail"] = str(r.clientEmail)
+        f["clientAddress"] = str(r.clientAddress)
         f["gstEnabled"] = boolv(r.gstEnabled)
         f["gstInclusive"] = boolv(r.gstInclusive)
         f["subtotalCents"] = num(r.subtotalCents)
@@ -842,12 +844,14 @@ private struct ClientSyncMapper: SyncRowMapper {
         row.profileId = env.profileId
         if let v = env.string("name") { row.name = v }
         if let v = env.string("email") { row.email = v }
+        if let v = env.string("address") { row.address = v }
     }
 
     func payload(_ r: Client) -> [String: JSONValue] {
         var f = sharedFields(r)
         f["name"] = .string(r.name)
         f["email"] = str(r.email)
+        f["address"] = str(r.address)
         return f
     }
 }
