@@ -9,6 +9,28 @@ struct BasScheduleTests {
         f.timeZone = TimeZone(identifier: "Australia/Sydney"); f.dateFormat = "yyyy-MM-dd"
         return f.date(from: s)!
     }
+    /// UTC window builder (Period windows are UTC) for the due-date tests.
+    private func utc(_ s: String) -> Date {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: s)!
+    }
+
+    @Test("dueDate maps each quarter window to its ATO lodge deadline")
+    func quarterlyDueDates() {
+        func q(_ nowS: String) -> Period.Window { Period.quarter.window(now: utc(nowS), startMonth: 7) }
+        #expect(BasSchedule.dueDate(for: q("2025-08-15"), period: .quarterly) == date("2025-10-28")) // Jul–Sep
+        #expect(BasSchedule.dueDate(for: q("2025-11-15"), period: .quarterly) == date("2026-02-28")) // Oct–Dec
+        #expect(BasSchedule.dueDate(for: q("2026-02-15"), period: .quarterly) == date("2026-04-28")) // Jan–Mar
+        #expect(BasSchedule.dueDate(for: q("2026-05-15"), period: .quarterly) == date("2026-07-28")) // Apr–Jun
+    }
+
+    @Test("dueDate maps a month window to the 21st of the following month")
+    func monthlyDueDate() {
+        let w = Period.month.window(now: utc("2026-07-10"), startMonth: 7)   // July 2026
+        #expect(BasSchedule.dueDate(for: w, period: .monthly) == date("2026-08-21"))
+    }
+
     @Test("quarterly next-due is the earliest ATO BAS deadline on/after the date")
     func quarterly() {
         // 15 Aug 2026 → next deadline is 28 Oct 2026 (Q1 Jul–Sep).
