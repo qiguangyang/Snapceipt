@@ -61,4 +61,12 @@ enum BasSchedule {
             return candidates.min()!
         }
     }
+
+    /// The lodge/pay due date for a *specific* period window: the first ATO deadline
+    /// on/after the period's end. `window.end` is exclusive (the first instant of the
+    /// next period), so `nextDue` resolves to that period's own deadline
+    /// (e.g. Apr–Jun window.end = 1 Jul → 28 Jul).
+    static func dueDate(for window: Period.Window, period: BasPeriod) -> Date {
+        nextDue(period, on: window.end)
+    }
 }

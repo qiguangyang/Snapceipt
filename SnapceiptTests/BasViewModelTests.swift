@@ -31,6 +31,69 @@ struct BasViewModelTests {
         return (vm, ctx, api, store)
     }
 
+    /// Seed the canonical current-quarter txns PLUS one prior-quarter (Jan–Mar 2026 =
+    /// 2025Q3) purchase, so the cursor has somewhere to go back to.
+    private func setupTwoPeriods()
+        throws -> (BasViewModel, ModelContext, BasLocalStore) {
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let store = BasLocalStore(defaults: UserDefaults(suiteName: "sc.test.basvm.\(UUID().uuidString)")!)
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
+        let now = f.date(from: "2026-05-15")!
+        ctx.insert(Transaction(userId: "u1", profileId: "p1", catKey: "income",
+                               amountCents: 1_100_000, txnDate: "2026-05-01", gstSource: "manual"))   // 2025Q4
+        ctx.insert(Transaction(userId: "u1", profileId: "p1", catKey: "office",
+                               amountCents: -110_000, txnDate: "2026-02-10", gstSource: "derived"))   // 2025Q3
+        try ctx.save()
+        let vm = BasViewModel(context: ctx, api: MockAPIClient(), store: store, userId: "u1",
+                              profileId: "p1", gstRegistered: true, basPeriod: .quarterly,
+                              startMonth: 7, now: now)
+        return (vm, ctx, store)
+    }
+
+    @Test("cursor starts at the current period; cannot step into the future")
+    func cursorStartsCurrent() throws {
+        let (vm, _, _) = try setupTwoPeriods()
+        #expect(vm.periodOffset == 0)
+        #expect(vm.periodKey == "2025Q4")
+        #expect(vm.canGoForward == false)   // no future
+        #expect(vm.canGoBack == true)       // prior-quarter data exists
+    }
+
+    @Test("goToPrevious moves the window + key to the prior period and recomputes")
+    func goPrevious() throws {
+        let (vm, _, _) = try setupTwoPeriods()
+        vm.goToPrevious()
+        #expect(vm.periodOffset == -1)
+        #expect(vm.periodKey == "2025Q3")
+        #expect(vm.result.oneB == 10_000)       // the 110k purchase
+        #expect(vm.result.g1 == 0)              // income is in the next quarter, not this one
+        #expect(vm.canGoForward == true)
+        #expect(vm.canGoBack == false)          // 2025Q3 is the earliest with data
+        vm.goToNext()
+        #expect(vm.periodOffset == 0)
+        #expect(vm.periodKey == "2025Q4")
+        #expect(vm.result.g1 == 1_100_000)      // back to the current quarter
+    }
+
+    @Test("navigating reloads that period's PAYG + lodged snapshot")
+    func reloadsPerPeriodState() throws {
+        let (vm, _, store) = try setupTwoPeriods()
+        store.setPaygInstalmentCents(25_000, profileId: "p1", periodKey: "2025Q3")
+        vm.goToPrevious()
+        #expect(vm.paygInstalmentCents == 25_000)
+        vm.goToNext()
+        #expect(vm.paygInstalmentCents == 0)    // current period has no PAYG set
+    }
+
+    @Test("history lists the current + prior period, most-recent first")
+    func historyRows() throws {
+        let (vm, _, _) = try setupTwoPeriods()
+        let rows = vm.history()
+        #expect(rows.map(\.periodKey) == ["2025Q4", "2025Q3"])
+    }
+
     @Test("computes the canonical worksheet for a registered profile")
     func registered() throws {
         let (vm, _, _, _) = try setup(gstRegistered: true, confirmedIncome: true)

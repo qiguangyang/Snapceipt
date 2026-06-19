@@ -254,6 +254,8 @@ enum AccessibilityID {
     static let reportsBasCard = "reports.bas.card"
     static let basScreen = "bas.screen"
     static let basPeriodStepper = "bas.period.stepper"
+    static let basPeriodPrev = "bas.period.prev"
+    static let basPeriodNext = "bas.period.next"
     static let basCopyG1 = "bas.copy.g1"
     static let basCopy1A = "bas.copy.1a"
     static let basCopy1B = "bas.copy.1b"
@@ -263,6 +265,9 @@ enum AccessibilityID {
     static let basFullWorksheetToggle = "bas.fullWorksheet.toggle"
     static let basMarkLodged = "bas.markLodged"
     static let basExport = "bas.export"
+    static let basHistoryLink = "bas.history.link"
+    static let basHistoryScreen = "bas.history.screen"
+    static let basHistoryRowPrefix = "bas.history.row."   // + periodKey
     // Paywall (Workstream 6)
     static let paywallTitle      = "paywall.title"
     static let paywallBuyMonthly = "paywall.buy.monthly"

@@ -85,4 +85,39 @@ final class BasUITests: UITestCase {
         XCTAssertFalse(app.descendants(matching: .any)[AccessibilityID.reportsBasCard].exists,
                        "BAS card must be hidden for a non-registered profile")
     }
+
+    @MainActor func test_basPeriodStepperAndHistoryDrillIn() {
+        launchBasSeed(pro: true)
+        app.buttons[AccessibilityID.tabReports].tap()
+        let reportsScroll = app.descendants(matching: .any)[AccessibilityID.reportsScreen].firstMatch
+        XCTAssertTrue(reportsScroll.waitForExistence(timeout: 8), "Reports never appeared")
+        let card = app.buttons[AccessibilityID.reportsBasCard].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 8), "BAS card missing")
+        XCTAssertTrue(scrollToHittable(card, within: reportsScroll), "BAS card not hittable")
+        card.tap()
+
+        let basScroll = app.descendants(matching: .any)[AccessibilityID.basScreen].firstMatch
+        XCTAssertTrue(basScroll.waitForExistence(timeout: 8), "BAS screen never appeared")
+
+        // The period stepper controls exist (◀ may be disabled if the seed has no prior data).
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.basPeriodNext].waitForExistence(timeout: 4),
+                      "period next control missing")
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.basPeriodPrev].exists,
+                      "period prev control missing")
+
+        // Open the Past-BAS history sheet.
+        let historyLink = app.descendants(matching: .any)[AccessibilityID.basHistoryLink]
+        XCTAssertTrue(scrollToHittable(historyLink, within: basScroll, timeout: 4), "Past BAS link not reachable")
+        historyLink.tap()
+        let historyScreen = app.descendants(matching: .any)[AccessibilityID.basHistoryScreen].firstMatch
+        XCTAssertTrue(historyScreen.waitForExistence(timeout: 5), "history sheet did not open")
+
+        // At least the current period row exists; tapping a row returns to the BAS screen.
+        let firstRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.basHistoryRowPrefix))
+            .firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "no history rows")
+        firstRow.tap()
+        XCTAssertTrue(basScroll.waitForExistence(timeout: 5), "did not return to the BAS screen after drill-in")
+    }
 }
