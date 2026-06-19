@@ -11,6 +11,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Snapceipt uses your camera to capture receipts and read the total, GST and category for you.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Snapceipt saves a receipt image to your photo library when you tap Save to Photos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Snapceipt uses Face ID to unlock the app when 'Require Face ID' is turned on.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

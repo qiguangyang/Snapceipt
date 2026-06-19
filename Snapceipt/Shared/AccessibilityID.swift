@@ -303,6 +303,10 @@ enum AccessibilityID {
     static let receiptDetailClose  = "receipt.detail.close"
     static let receiptDetailEdit   = "receipt.detail.edit"
     static let receiptDetailDelete = "receipt.detail.delete"
+    static let receiptImageTap     = "receipt.image.tap"
+    static let receiptImageViewer  = "receipt.image.viewer"
+    static let receiptImageViewerClose = "receipt.image.viewer.close"
+    static let receiptImageSave    = "receipt.image.save"
     // Activity filters / search (design parity)
     static let activitySearch    = "activity.search"
     static let activityFilterAll = "activity.filter.all"
