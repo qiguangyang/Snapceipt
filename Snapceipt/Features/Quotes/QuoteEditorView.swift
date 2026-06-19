@@ -90,6 +90,7 @@ struct QuoteEditorView: View {
                 billToSection(vm)
                 lineItemsSection(vm)
                 totalsCard(vm)
+                businessDetailsSection(vm)
                 infoNote
             }
             .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 120)
@@ -97,6 +98,48 @@ struct QuoteEditorView: View {
         // The number pad has no return key, and text fields share the same bar:
         // a responder-chain dismiss button works for whichever field is focused.
         .keyboardDismissButton()
+    }
+
+    /// Read-only preview of the business header + payment details that appear on the
+    /// hosted quote (edited in Tax & GST settings). Each line/block shown only when set.
+    @ViewBuilder private func businessDetailsSection(_ vm: QuoteEditorViewModel) -> some View {
+        if vm.hasBusinessContact || vm.bankDetails != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("On this quote").font(.ui(13, .bold)).foregroundStyle(Palette.ink3)
+                Card(padding: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if vm.hasBusinessContact {
+                            VStack(alignment: .leading, spacing: 3) {
+                                if let name = vm.businessName {
+                                    Text(name).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink)
+                                }
+                                detailLine("ABN", vm.businessAbn)
+                                detailLine(nil, vm.businessEmail)
+                                detailLine(nil, vm.businessPhone)
+                                detailLine(nil, vm.businessWebsite)
+                                detailLine(nil, vm.businessAddress)
+                            }
+                        }
+                        if let bank = vm.bankDetails {
+                            if vm.hasBusinessContact { Divider().overlay(Palette.line2) }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Payment details").font(.ui(12, .bold)).foregroundStyle(Palette.ink3)
+                                Text(bank).font(.ui(13.5)).foregroundStyle(Palette.ink2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func detailLine(_ label: String?, _ value: String?) -> some View {
+        if let value {
+            Text(label != nil ? "\(label!): \(value)" : value)
+                .font(.ui(13)).foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// Paper-2 info note with a lock glyph (design ref: "Valid for 14 days…").

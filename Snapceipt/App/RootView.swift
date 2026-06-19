@@ -34,7 +34,10 @@ struct RootView: View {
         Group {
             switch authVM.state {
             case .signedIn:
-                if !onboardingComplete {
+                // Gate the shell behind onboarding AND having at least one profile: a
+                // first-run user, or one who somehow has no profile (e.g. all deleted /
+                // a fresh device with the flag already set), is guided to create one first.
+                if !onboardingComplete || profileRows.isEmpty {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.

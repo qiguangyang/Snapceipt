@@ -26,6 +26,25 @@ final class QuoteEditorViewModel {
         return (try? context.fetch(d))?.first
     }
 
+    /// Active profile, fetched once — backs the read-only business/bank preview shown on
+    /// the quote (the same details the client sees on the hosted quote). Edited in Tax & GST.
+    @ObservationIgnored private lazy var activeProfile: Profile? = fetchProfile(profileId)
+    private func clean(_ s: String?) -> String? {
+        let t = (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+    var businessName: String? { clean(activeProfile?.name) }
+    var businessAbn: String? { clean(activeProfile?.abn) }
+    var businessEmail: String? { clean(activeProfile?.businessEmail) }
+    var businessPhone: String? { clean(activeProfile?.phone) }
+    var businessWebsite: String? { clean(activeProfile?.website) }
+    var businessAddress: String? { clean(activeProfile?.addressText) }
+    var bankDetails: String? { clean(activeProfile?.bankDetails) }
+    /// Any business-contact field set (name alone doesn't count — it always exists).
+    var hasBusinessContact: Bool {
+        [businessAbn, businessEmail, businessPhone, businessWebsite, businessAddress].contains { $0 != nil }
+    }
+
     private(set) var quoteId: String?
     /// The quote's snapshotted GST rate (basis points), loaded from storage. nil until
     /// the first save snapshots `profileGstRateBp` onto the quote. (spec §3)
@@ -218,12 +237,11 @@ final class QuoteEditorViewModel {
     /// ≥1 line item) — NOT gated on an existing pdfUrl (spec §3).
     var canGeneratePdf: Bool { canSend }
 
-    /// Convert is offered on any valid quote (client + ≥1 line item), or whenever an
-    /// invoice already exists (re-open it). Relaxed from the original sent/accepted gate
-    /// (spec §4.2) so "Convert to invoice" is available directly from the quote view.
+    /// Convert is offered once a quote is sent/accepted (hidden while it's still a Draft),
+    /// or whenever an invoice already exists (re-open it). (spec §4.2)
     var canConvert: Bool {
         if invoiceId != nil { return true }
-        return canSend
+        return statusValue == .sent || statusValue == .accepted
     }
 
     /// Mint (or re-mint) the hosted HTML quote link for the Share action (spec §4).
