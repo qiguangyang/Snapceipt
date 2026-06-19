@@ -39,10 +39,9 @@ struct AddLoyaltyView: View {
         .sheet(isPresented: $showScanner) {
             if LoyaltyBarcodeScanner.isAvailable {
                 LoyaltyBarcodeScanner { value, format in
-                    vm?.number = value
-                    // Unsupported symbologies still capture the value — default the type
-                    // to Code 128 so a barcode always renders.
-                    vm?.format = format ?? .code128
+                    // Fills number + symbology, and defaults to Custom if no brand is
+                    // chosen yet so a direct scan isn't a silent dead-end.
+                    vm?.applyScan(value: value, format: format)
                     showScanner = false
                 }
                 .ignoresSafeArea()

@@ -49,6 +49,16 @@ final class AddLoyaltyViewModel {
         return true
     }
 
+    /// Apply a scanned barcode: set the number + symbology, and — if no brand has been
+    /// picked yet — default to Custom so the scanned number is shown and the card is
+    /// immediately addable. (Previously, scanning before picking a brand left the number
+    /// in a hidden field with Save disabled, so it looked like the scan exited and failed.)
+    func applyScan(value: String, format: LoyaltyCard.BarcodeFormat?) {
+        number = value
+        self.format = format ?? .code128
+        if selectedBrand == nil { selectedBrand = LoyaltyBrand.custom }
+    }
+
     /// Create the card (profileId = active) + enqueue an upsert. Returns the new row,
     /// or nil if not savable.
     @discardableResult
