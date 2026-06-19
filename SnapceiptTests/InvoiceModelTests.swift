@@ -64,7 +64,7 @@ struct InvoiceModelTests {
 
     // MARK: - Sync mappers (spec §4.1 wire keys)
 
-    @Test("InvoiceSyncMapper payload round-trips the invoice wire keys + shared envelope")
+    @Test("InvoiceSyncMapper payload carries invoice wire keys but OMITS server-owned pdfR2Key")
     func invoiceMapperRoundTrip() throws {
         let c = try ctx()
         let registry = SyncEntityRegistry()
@@ -93,7 +93,10 @@ struct InvoiceModelTests {
         #expect(fields["issueDate"]?.stringValue == "2026-06-19")
         #expect(fields["dueDate"]?.stringValue == "2026-07-03")
         #expect(fields["issuedAt"]?.intValue == 1_790_000_000_000)
-        #expect(fields["pdfR2Key"]?.stringValue == "u/u1/inv.pdf")
+        // pdfR2Key is server-owned (set on POST /invoices/:id/issue and /invoices/:id/pdf):
+        // pull-only, so the push payload must NOT carry it — a follow-up push would otherwise
+        // clobber the server value to NULL under last-writer-wins.
+        #expect(fields["pdfR2Key"] == nil)
         #expect(fields["profileId"]?.stringValue == "p1")
         #expect(fields["rev"]?.intValue == 4)
     }

@@ -73,10 +73,15 @@ struct QuoteSyncTests {
     }
 
     /// The quote→PDF→invoice link columns added in backend migration 0009
-    /// (`quotes.pdf_r2_key` + `quotes.invoice_id`) must round-trip both ways using the
-    /// camelCase wire keys `pdfR2Key`/`invoiceId` the backend `rowToEntity` emits.
-    @Test("quote payload carries pdfR2Key + invoiceId; pull restores them")
-    func quoteRoundTripsPdfR2KeyAndInvoiceId() async throws {
+    /// (`quotes.pdf_r2_key` + `quotes.invoice_id`) use the camelCase wire keys
+    /// `pdfR2Key`/`invoiceId` the backend `rowToEntity` emits.
+    ///
+    /// `pdfR2Key` is **server-owned** (the backend sets it on `POST /quotes/:id/pdf`), so it
+    /// is **pull-only** on the client: the push payload must NOT carry it (a last-writer-wins
+    /// follow-up push would otherwise clobber the server value to NULL), but a pull MUST still
+    /// restore it. `invoiceId` is client-written on convert, so it round-trips BOTH ways.
+    @Test("quote push omits server-owned pdfR2Key but keeps invoiceId; pull restores both")
+    func quotePdfR2KeyPullOnlyInvoiceIdRoundTrips() async throws {
         let (engine, context, api) = try makeEngine()
         let q = Quote(userId: "u1", profileId: "p1")
         q.pdfR2Key = "r2/key.pdf"
@@ -84,8 +89,9 @@ struct QuoteSyncTests {
         context.insert(q)
         engine.enqueue(op: "upsert", entityType: .quote, entity: q)
         let json = try context.fetch(FetchDescriptor<OutboxMutation>())[0].payloadJSON
-        // JSONEncoder escapes the forward slash in the R2 key as `\/`.
-        #expect(json.contains(#""pdfR2Key":"r2\/key.pdf""#))
+        // pdfR2Key is pull-only: it must NOT appear in the push payload at all.
+        #expect(!json.contains("pdfR2Key"))
+        // invoiceId is client-written, so it stays on the push side.
         #expect(json.contains(#""invoiceId":"inv1""#))
 
         let id = ID.uuidv7()
@@ -97,6 +103,7 @@ struct QuoteSyncTests {
             nextCursor: "C3", hasMore: false, serverTime: 2000)]
         await engine.pull()
         let row = try context.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id })).first!
+        // pull still surfaces the server-owned key down to the model.
         #expect(row.pdfR2Key == "r2/x.pdf")
         #expect(row.invoiceId == "inv9")
     }
