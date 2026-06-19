@@ -106,6 +106,22 @@ final class StubAPIClient: APIClient {
                           subtotalCents: 40_000, gstCents: 4_000, totalCents: 44_000,
                           pdfUrl: "/quotes/dl/stub-token", expiresAt: 1_790_000_000_000, emailed: false)
     }
+    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
+        GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/stub-token", number: "SN-0001",
+                                 expiresAt: 1_790_000_000_000)
+    }
+    func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
+        IssueInvoiceResponse(pdfUrl: "/invoices/dl/stub-token", number: "INV-0001",
+                             status: "issued", issueDate: "2026-06-19", dueDate: "2026-07-03",
+                             issuedAt: 1_790_000_000_000, subtotalCents: 50_000, gstCents: 5_000,
+                             totalCents: 55_000, expiresAt: 1_790_000_000_000)
+    }
+    func sendInvoice(_ id: String) async throws -> SendInvoiceResponse {
+        SendInvoiceResponse(pdfUrl: "/invoices/dl/stub-token", emailed: false)
+    }
+    func invoicePdf(_ id: String) async throws -> InvoicePdfResponse {
+        InvoicePdfResponse(pdfUrl: "/invoices/dl/stub-token", expiresAt: 1_790_000_000_000)
+    }
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {
         InboxAddressResponse(profileId: profileId, token: "stubtokeninitial",
                              address: "r.stubtokeninitial@in.snapceipt.cc")

@@ -39,6 +39,10 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var exportBasHandler: ((_ profileId: String, _ from: String, _ to: String, _ paygInstalmentCents: Int, _ toEmail: String?) async throws -> ExportResult)?
     var updateDeviceHandler: ((UpdateDeviceBody) async throws -> UpdateDeviceResponse)?
     var sendQuoteHandler: ((String) async throws -> SendQuoteResponse)?
+    var generateQuotePdfHandler: ((String) async throws -> GenerateQuotePdfResponse)?
+    var issueInvoiceHandler: ((String) async throws -> IssueInvoiceResponse)?
+    var sendInvoiceHandler: ((String) async throws -> SendInvoiceResponse)?
+    var invoicePdfHandler: ((String) async throws -> InvoicePdfResponse)?
     var profileInboxHandler: ((String) async throws -> InboxAddressResponse)?
     var rotateProfileInboxHandler: ((String) async throws -> InboxAddressResponse)?
 
@@ -57,6 +61,10 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     private(set) var exportBasCalls: [(profileId: String, from: String, to: String, paygInstalmentCents: Int, toEmail: String?)] = []
     private(set) var updateDeviceCalls: [UpdateDeviceBody] = []
     private(set) var sendQuoteCalls: [String] = []
+    private(set) var generateQuotePdfCalls: [String] = []
+    private(set) var issueInvoiceCalls: [String] = []
+    private(set) var sendInvoiceCalls: [String] = []
+    private(set) var invoicePdfCalls: [String] = []
     private(set) var profileInboxCalls: [String] = []
     private(set) var rotateProfileInboxCalls: [String] = []
 
@@ -172,6 +180,27 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         sendQuoteCalls.append(id)
         guard let h = sendQuoteHandler else { throw MockAPIClientError.unscripted }
+        return try await h(id)
+    }
+
+    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
+        generateQuotePdfCalls.append(id)
+        guard let h = generateQuotePdfHandler else { throw MockAPIClientError.unscripted }
+        return try await h(id)
+    }
+    func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
+        issueInvoiceCalls.append(id)
+        guard let h = issueInvoiceHandler else { throw MockAPIClientError.unscripted }
+        return try await h(id)
+    }
+    func sendInvoice(_ id: String) async throws -> SendInvoiceResponse {
+        sendInvoiceCalls.append(id)
+        guard let h = sendInvoiceHandler else { throw MockAPIClientError.unscripted }
+        return try await h(id)
+    }
+    func invoicePdf(_ id: String) async throws -> InvoicePdfResponse {
+        invoicePdfCalls.append(id)
+        guard let h = invoicePdfHandler else { throw MockAPIClientError.unscripted }
         return try await h(id)
     }
 
