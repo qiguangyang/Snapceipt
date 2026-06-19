@@ -106,6 +106,15 @@ export const profileEntity = baseEnvelope.extend({
   gstRegistered: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
   isDefault: z.boolean().optional(),
+  // Configurable GST rate (basis points) + business details + logo (migration 0010).
+  // logoR2Key is server-owned (pull-only on iOS) but is mapped/validated like any column.
+  gstRateBp: z.number().int().nonnegative().nullable().optional(),
+  businessEmail: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  bankDetails: z.string().nullable().optional(),
+  logoR2Key: z.string().nullable().optional(),
 });
 
 /** budget — per category/profile/month; cap in cents, spent is computed (never stored). */
@@ -163,6 +172,27 @@ export const vehicleYearEntity = baseEnvelope.extend({
   claimCents: cents.nullable().optional(),
 });
 
+/** quote — issued estimate (spec §4). Money in cents, dates date-only. gstRateBp is the
+ *  snapshotted GST rate (basis points; null ⇒ treated as 1000 = 10%). */
+export const quoteEntity = baseEnvelope.extend({
+  type: z.literal("quote"),
+  number: z.string().nullable().optional(),
+  clientName: z.string().nullable().optional(),
+  clientEmail: z.string().nullable().optional(),
+  gstEnabled: z.boolean().optional(),
+  gstInclusive: z.boolean().optional(),
+  subtotalCents: cents.optional(),
+  gstCents: cents.optional(),
+  totalCents: cents.optional(),
+  currency: z.string().length(3).optional(),
+  status: z.enum(["draft", "sent", "accepted", "declined", "expired"]).optional(),
+  validUntil: isoDate.nullable().optional(),
+  sentAt: epochMs.nullable().optional(),
+  pdfR2Key: z.string().nullable().optional(),
+  invoiceId: uuid.nullable().optional(),
+  gstRateBp: z.number().int().nonnegative().nullable().optional(),
+});
+
 /** invoice — issued tax invoice (spec §4.1). Money in cents, dates date-only. */
 export const invoiceEntity = baseEnvelope.extend({
   type: z.literal("invoice"),
@@ -181,6 +211,7 @@ export const invoiceEntity = baseEnvelope.extend({
   dueDate: isoDate.nullable().optional(),
   issuedAt: epochMs.nullable().optional(),
   pdfR2Key: z.string().nullable().optional(),
+  gstRateBp: z.number().int().nonnegative().nullable().optional(),
 });
 
 /** invoiceLineItem — child of an invoice; a clone of quoteLineItem (profileId nil). */
@@ -235,6 +266,7 @@ const SPECIALIZED: Partial<Record<SyncableType, z.ZodTypeAny>> = {
   loyaltyCard: loyaltyCardEntity,
   vehicle: vehicleEntity,
   vehicleYear: vehicleYearEntity,
+  quote: quoteEntity,
   invoice: invoiceEntity,
   invoiceLineItem: invoiceLineItemEntity,
   payment: paymentEntity,
