@@ -12,6 +12,8 @@ struct QuoteEditorView: View {
     let profileId: String
     let quoteId: String?          // nil = new
     let onClose: () -> Void
+    /// Routes to the invoice editor after a convert (the new/existing invoice id). (spec §4.2)
+    let onConvert: (String) -> Void
 
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
@@ -286,9 +288,35 @@ struct QuoteEditorView: View {
             if let err = vm.errorMessage {
                 Text(err).font(.ui(12.5)).foregroundStyle(Palette.alert)
             }
+            if vm.canConvert {
+                Button {
+                    if let invId = vm.convertToInvoice() { onConvert(invId) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Icon(name: "receipt", size: 15, color: accent.base, lineWidth: 2)
+                        Text(vm.invoiceId == nil ? "Convert to invoice" : "Open invoice")
+                            .font(.ui(14, .semibold)).foregroundStyle(accent.base)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(accent.soft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorConvert)
+            }
             HStack(spacing: 12) {
-                // Document button (56×56 r18 paper): shares the quote PDF once one exists.
-                Button { openPDF(vm) } label: {
+                // Generate / Share PDF (56×56 r18 paper): enabled whenever the quote is
+                // valid (client + ≥1 line). Builds the PDF on tap (always reflecting the
+                // latest edits) then shares; no status change. (spec §3)
+                Button {
+                    Task {
+                        if vm.pdfUrl == nil {
+                            if await vm.generatePdf(api: api) { openPDF(vm) }
+                        } else {
+                            openPDF(vm)
+                        }
+                    }
+                } label: {
                     Icon(name: "doc", size: 22, color: Palette.ink2)
                         .frame(width: 56, height: 56)
                         .background(Palette.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -297,8 +325,9 @@ struct QuoteEditorView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(vm.pdfUrl == nil)
-                .opacity(vm.pdfUrl == nil ? 0.45 : 1)
+                .disabled(!vm.canGeneratePdf || vm.isSending)
+                .opacity(vm.canGeneratePdf ? 1 : 0.45)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorGeneratePdf)
 
                 Button {
                     Task {

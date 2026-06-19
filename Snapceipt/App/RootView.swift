@@ -324,7 +324,8 @@ struct ShellView: View {
                 QuoteEditorView(context: profiles.context, sync: sync, api: captureAPI,
                                 userId: profiles.userId, profileId: profiles.activeProfileId,
                                 quoteId: id,
-                                onClose: { router.dismissOverlay() })
+                                onClose: { router.dismissOverlay() },
+                                onConvert: { _ in })   // Task 13: route to the invoice editor
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
