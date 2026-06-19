@@ -20,7 +20,11 @@ final class Profile: Syncable {
     /// GST rate in basis points (1000 = 10%, 1500 = 15%). Device-region default at
     /// business-profile creation; the default rate for NEW documents (snapshotted onto
     /// each quote/invoice). Mirrors D1 `profiles.gst_rate_bp`. (spec §3)
-    var gstRateBp: Int
+    /// NOTE: the `= 1000` default is REQUIRED for SwiftData lightweight migration — adding
+    /// a non-optional attribute to an existing model without a default makes the on-disk
+    /// store fail to open (which silently fell back to an empty in-memory store, wiping
+    /// the profile on every relaunch).
+    var gstRateBp: Int = 1000
     /// Business contact + payment details rendered on the HTML quote (each shown only
     /// when set). All freeform/optional; `addressText` + `bankDetails` are multiline. (spec §5)
     var businessEmail: String?
