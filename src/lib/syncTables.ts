@@ -164,6 +164,49 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       sortOrder: "sort_order",
     },
   },
+  invoice: {
+    table: "invoices",
+    hasProfileId: true,
+    columns: {
+      number: "number",
+      quoteId: "quote_id",
+      clientName: "client_name",
+      clientEmail: "client_email",
+      gstEnabled: "gst_enabled",
+      gstInclusive: "gst_inclusive",
+      subtotalCents: "subtotal_cents",
+      gstCents: "gst_cents",
+      totalCents: "total_cents",
+      currency: "currency",
+      status: "status",
+      issueDate: "issue_date",
+      dueDate: "due_date",
+      issuedAt: "issued_at",
+      pdfR2Key: "pdf_r2_key",
+    },
+  },
+  invoiceLineItem: {
+    table: "invoice_line_items",
+    hasProfileId: false,
+    columns: {
+      invoiceId: "invoice_id",
+      itemDescription: "description",
+      quantity: "quantity",
+      unitPriceCents: "unit_price_cents",
+      sortOrder: "sort_order",
+    },
+  },
+  payment: {
+    table: "payments",
+    hasProfileId: false,
+    columns: {
+      invoiceId: "invoice_id",
+      amountCents: "amount_cents",
+      paidOn: "paid_on",
+      method: "method",
+      note: "note",
+    },
+  },
   mileageTrip: {
     table: "mileage_trips",
     hasProfileId: true,
@@ -253,6 +296,7 @@ export const PROFILE_ID_REQUIRED: ReadonlySet<string> = new Set([
   "vehicle",
   "vehicleYear",
   "quote",
+  "invoice",
   "taxSettings",
 ]);
 
