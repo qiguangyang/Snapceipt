@@ -11,6 +11,7 @@ struct ProfileOption: Identifiable, Equatable {
     let id: String
     let name: String
     let type: String   // "personal" | "business"
+    let gstRateBp: Int  // the profile's GST rate (basis points) for capture-GST derivation
 }
 
 /// Drives snap → OCR → extract → review → save. `@MainActor`; all deps injected as
@@ -65,7 +66,7 @@ final class CaptureViewModel {
 
     /// All of the user's profiles, by name, for the Review "Assign to profile" picker.
     var profileOptions: [ProfileOption] {
-        profiles.profiles.map { ProfileOption(id: $0.id, name: $0.name, type: $0.type) }
+        profiles.profiles.map { ProfileOption(id: $0.id, name: $0.name, type: $0.type, gstRateBp: $0.gstRateBp) }
     }
 
     @ObservationIgnored private let api: APIClient
