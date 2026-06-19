@@ -66,7 +66,7 @@ struct RecordPaymentSheet: View {
     @Environment(\.accent) private var accent
     @State private var vm: RecordPaymentViewModel?
 
-    private func fmt(_ cents: Int) -> String { "$\(cents / 100)" }
+    private func fmt(_ cents: Int) -> String { String(format: "$%.2f", Double(cents) / 100) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -76,10 +76,11 @@ struct RecordPaymentSheet: View {
                 Card(padding: 14) {
                     HStack(spacing: 8) {
                         Text("Amount $").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
-                        TextField("0", text: Binding(
-                            get: { String(vm.amountCents / 100) },
-                            set: { vm.amountCents = (Int($0.filter(\.isNumber)) ?? 0) * 100 }))
-                            .keyboardType(.numberPad)
+                        // Decimal entry (dollars.cents) defaulting to the full outstanding
+                        // amount — was whole-dollar, which dropped the cents (e.g. 14.30 → 14).
+                        LinePriceField(cents: Binding(
+                            get: { vm.amountCents },
+                            set: { vm.amountCents = $0 }))
                             .accessibilityIdentifier(AccessibilityID.recordPaymentAmount)
                     }
                 }

@@ -260,8 +260,21 @@ final class InvoiceEditorViewModel {
             source: "invoice"
         )
         context.insert(txn)
+
+        // Carry the invoice's line items onto the income transaction so it shows the same
+        // breakdown (priceCents is the line total, matching how receipt line items read).
+        var items: [LineItem] = []
+        for (idx, li) in lineItems.enumerated() {
+            let item = LineItem(userId: userId, transactionId: txn.id,
+                                name: li.itemDescription,
+                                priceCents: li.unitPriceCents * li.quantity,
+                                quantity: li.quantity, sortOrder: idx)
+            context.insert(item)
+            items.append(item)
+        }
         try? context.save()
         sync.enqueue(op: "upsert", entityType: .transaction, entity: txn)
+        for item in items { sync.enqueue(op: "upsert", entityType: .lineItem, entity: item) }
     }
 
     /// Email the issued invoice's tax-invoice PDF to the client (POST /invoices/:id/send).

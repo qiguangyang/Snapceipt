@@ -110,7 +110,10 @@ struct InvoiceEditorViewModelTests {
         }
         let v = vm(ctx, sync); v.load(id: nil)
         v.setClient(name: "Acme", email: "a@acme.com")
-        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        v.addLine()
+        v.lineItems[0].itemDescription = "Widget"
+        v.lineItems[0].quantity = 2
+        v.lineItems[0].unitPriceCents = 25_00
         _ = await v.issue(api: mock)
 
         let income = try ctx.fetch(FetchDescriptor<Transaction>(
@@ -120,6 +123,16 @@ struct InvoiceEditorViewModelTests {
         #expect(income.first?.catKey == CategoryKey.income.rawValue)
         #expect(income.first?.note == "Invoice INV-0010")
         #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .transaction })
+
+        // The income transaction carries the invoice's line items (line total, qty).
+        let txnId = try #require(income.first?.id)
+        let items = try ctx.fetch(FetchDescriptor<LineItem>(
+            predicate: #Predicate { $0.transactionId == txnId && $0.deletedAt == nil }))
+        #expect(items.count == 1)
+        #expect(items.first?.name == "Widget")
+        #expect(items.first?.quantity == 2)
+        #expect(items.first?.priceCents == 50_00)         // 2 × $25 line total
+        #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .lineItem })
     }
 
     @Test("issue failure keeps the invoice a draft + sets errorMessage")
