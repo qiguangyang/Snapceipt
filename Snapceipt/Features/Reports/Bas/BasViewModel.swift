@@ -61,7 +61,6 @@ final class BasViewModel {
     var fromISO: String { ExportDateFormatter.shared.string(from: window.start) }
     var toISO: String { ExportDateFormatter.shared.string(from: window.end.addingTimeInterval(-86_400)) }
 
-    var nextDue: Date { BasSchedule.nextDue(basPeriod, on: now) }
     var isHeadlineEstimated: Bool { BasReconciliation.isHeadlineEstimated(reconcileItems) }
     var estimatedGstCount: Int { BasReconciliation.estimatedGstCount(reconcileItems) }
     var incomeToConfirmCount: Int { BasReconciliation.incomeToConfirmCount(reconcileItems) }
