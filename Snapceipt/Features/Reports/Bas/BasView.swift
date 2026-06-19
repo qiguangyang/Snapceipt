@@ -58,6 +58,10 @@ struct BasView: View {
                 vm = model
             }
         }
+        .onChange(of: vm?.periodOffset) { _, _ in
+            guard let vm else { return }
+            paygText = vm.paygInstalmentCents == 0 ? "" : String(vm.paygInstalmentCents / 100)
+        }
     }
 
     // MARK: Headline
@@ -72,7 +76,6 @@ struct BasView: View {
                     periodStepper(vm)
                 }
                 Text(netHeadline(vm)).font(.display(30)).foregroundStyle(Palette.ink).monospacedDigit()
-                Text("Due \(fmtBasDue(vm.nextDue))").font(.ui(13.5)).foregroundStyle(Palette.ink2)
                 if let lodgedAtMs = vm.lodgedAtMs {
                     Text("Lodged \(fmtBasDue(Date(timeIntervalSince1970: Double(lodgedAtMs) / 1000)))")
                         .font(.ui(12.5, .semibold)).foregroundStyle(accent.base)
@@ -80,6 +83,12 @@ struct BasView: View {
                         Text("Figures changed since you lodged — corrections belong on your next BAS as an adjustment.")
                             .font(.ui(12)).foregroundStyle(Palette.alert)
                     }
+                } else if vm.isPastDue {
+                    Text("Not marked as lodged · was due \(fmtBasDue(vm.periodDueDate))")
+                        .font(.ui(12.5, .semibold)).foregroundStyle(Palette.warn)
+                } else {
+                    Text("Due \(fmtBasDue(vm.periodDueDate))")
+                        .font(.ui(13.5)).foregroundStyle(Palette.ink2)
                 }
             }
         }
@@ -90,11 +99,25 @@ struct BasView: View {
         return net < 0 ? "ATO owes you \(fmt(-net))" : "\(fmt(net)) to pay"
     }
 
-    // The stepper is a non-functional placeholder in v1 (Period has no prior-period
-    // API; the default window is the current in-progress period). Present for a11y.
+    // Interactive period cursor: ◀ / label / ▶, bounded by the VM (no future; back to
+    // the earliest period with data, capped at ~3 years).
     @ViewBuilder private func periodStepper(_ vm: BasViewModel) -> some View {
-        Text(vm.window.label).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
-            .accessibilityIdentifier(AccessibilityID.basPeriodStepper)
+        HStack(spacing: 8) {
+            Button { vm.goToPrevious() } label: {
+                Icon(name: "chevL", size: 14, color: vm.canGoBack ? accent.base : Palette.ink3)
+            }
+            .buttonStyle(.plain).disabled(!vm.canGoBack)
+            .accessibilityIdentifier(AccessibilityID.basPeriodPrev)
+
+            Text(vm.window.label).font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
+                .accessibilityIdentifier(AccessibilityID.basPeriodStepper)
+
+            Button { vm.goToNext() } label: {
+                Icon(name: "chevR", size: 14, color: vm.canGoForward ? accent.base : Palette.ink3)
+            }
+            .buttonStyle(.plain).disabled(!vm.canGoForward)
+            .accessibilityIdentifier(AccessibilityID.basPeriodNext)
+        }
     }
 
     // MARK: Simpler BAS spine

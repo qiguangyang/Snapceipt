@@ -26,6 +26,7 @@ enum Palette {
     static let income = Color(hex: 0x1F9D6B)
     static let incomeSoft = Color(hex: 0xDEF3E9)
     static let alert = Color(hex: 0xD6452B)
+    static let warn = Color(hex: 0x9A7314)   // soft amber for "not marked as lodged" — never the alert red
 }
 
 // MARK: - Radii
