@@ -25,6 +25,8 @@ enum Overlay: Equatable, Identifiable {
     case quotes
     case bas
     case quoteEditor(id: String?)   // nil id = create a new quote
+    case invoices
+    case invoiceEditor(id: String?)   // nil id = create a new invoice
     case emailIn
     case emailInReview(id: String)
     case tax
@@ -55,6 +57,8 @@ enum Overlay: Equatable, Identifiable {
         case .quotes: return "quotes"
         case .bas: return "bas"
         case .quoteEditor(let id): return "quoteEditor-\(id ?? "new")"
+        case .invoices: return "invoices"
+        case .invoiceEditor(let id): return "invoiceEditor-\(id ?? "new")"
         case .emailIn: return "emailIn"
         case .emailInReview(let id): return "emailInReview-\(id)"
         case .tax: return "tax"
@@ -115,6 +119,9 @@ enum Route: Equatable {
 
     /// Open the quote editor for `id` (nil = create a new quote).
     func openQuote(_ id: String?) { overlay = .quoteEditor(id: id) }
+
+    /// Open the invoice editor for `id` (nil = create a new invoice).
+    func openInvoice(_ id: String?) { overlay = .invoiceEditor(id: id) }
 
     /// Parse `snapceipt://budget/<id>` -> the budget id, or nil for any other URL.
     static func parseBudgetDeepLink(_ url: URL) -> String? {
