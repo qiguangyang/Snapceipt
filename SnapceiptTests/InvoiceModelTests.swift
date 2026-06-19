@@ -224,11 +224,11 @@ struct InvoiceModelTests {
         #expect(r.totalCents == 55000)
     }
 
-    @Test("GenerateQuotePdfResponse decodes a null number")
-    func quotePdfResponseDecodes() throws {
-        let json = #"{"pdfUrl":"/quotes/dl/tok","number":null,"expiresAt":null}"#
-        let r = try JSONDecoder().decode(GenerateQuotePdfResponse.self, from: Data(json.utf8))
-        #expect(r.pdfUrl == "/quotes/dl/tok")
+    @Test("QuoteShareLinkResponse decodes a null number")
+    func quoteShareLinkResponseDecodes() throws {
+        let json = #"{"url":"https://api.snapceipt.cc/q/tok","number":null}"#
+        let r = try JSONDecoder().decode(QuoteShareLinkResponse.self, from: Data(json.utf8))
+        #expect(r.url == "https://api.snapceipt.cc/q/tok")
         #expect(r.number == nil)
     }
 }

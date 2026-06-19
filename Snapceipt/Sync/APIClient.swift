@@ -40,12 +40,13 @@ protocol APIClient {
     /// PUT /devices/me — upsert this device's apns token / quiet-hours / timezone /
     /// push_enabled. Keyed by the X-Device-Id header (attached by makeRequest). (§4.2)
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse
-    /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), render the
-    /// PDF, email the client; returns the applied number/status/sentAt/totals. (§4.5)
+    /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), email the
+    /// client the hosted HTML quote; returns the link + email status + minted number. (§4.5)
     func sendQuote(_ id: String) async throws -> SendQuoteResponse
-    /// POST /quotes/:id/pdf — build/store the quote PDF, persist pdf_r2_key, mint
-    /// number if absent. No email, no status change. (spec §3)
-    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse
+    /// POST /quotes/:id/link — mint (or re-mint) the hosted HTML quote link + number. (spec §4)
+    func quoteShareLink(_ id: String) async throws -> QuoteShareLinkResponse
+    /// POST /profile/logo — upload the profile logo PNG; returns the stored R2 key. (spec §5)
+    func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse
     /// POST /invoices/:id/issue — mint number, build tax-invoice PDF → R2, set
     /// issued + dates + pdf_r2_key. (spec §4.2)
     func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse
@@ -207,7 +208,7 @@ final class LiveAPIClient: APIClient {
         var items = [URLQueryItem(name: "width", value: String(width)),
                      URLQueryItem(name: "height", value: String(height))]
         if let transactionId { items.append(URLQueryItem(name: "transactionId", value: transactionId)) }
-        let data = try await performRawJPEG("/images", query: items, jpeg: jpeg)
+        let data = try await performRawImage("/images", query: items, bytes: jpeg, contentType: "image/jpeg")
         do { return try decoder.decode(UploadedImage.self, from: data) }
         catch { throw APIError.decoding }
     }
@@ -244,8 +245,16 @@ final class LiveAPIClient: APIClient {
         try await send("POST", "/quotes/\(id)/send", body: NoBody(), authenticated: true)
     }
 
-    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
-        try await send("POST", "/quotes/\(id)/pdf", body: NoBody(), authenticated: true)
+    func quoteShareLink(_ id: String) async throws -> QuoteShareLinkResponse {
+        try await send("POST", "/quotes/\(id)/link", body: NoBody(), authenticated: true)
+    }
+
+    func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse {
+        let data = try await performRawImage("/profile/logo",
+                                             query: [URLQueryItem(name: "profileId", value: profileId)],
+                                             bytes: png, contentType: "image/png")
+        do { return try decoder.decode(UploadProfileLogoResponse.self, from: data) }
+        catch { throw APIError.decoding }
     }
 
     func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
@@ -342,8 +351,10 @@ final class LiveAPIClient: APIClient {
         return try validate(data, http)
     }
 
-    /// POST a raw `image/jpeg` body (no JSON encoding); refresh-on-401 like `perform`.
-    private func performRawJPEG(_ path: String, query: [URLQueryItem], jpeg: Data) async throws -> Data {
+    /// POST a raw image body (no JSON encoding) with the given `contentType`; refresh-on-401
+    /// like `perform`. Shared by the JPEG receipt upload + the PNG profile-logo upload.
+    private func performRawImage(_ path: String, query: [URLQueryItem], bytes: Data,
+                                 contentType: String) async throws -> Data {
         func makeImageRequest() throws -> URLRequest {
             var components = URLComponents(url: baseURL.appendingPathComponent(path),
                                            resolvingAgainstBaseURL: false)
@@ -352,12 +363,12 @@ final class LiveAPIClient: APIClient {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
             request.setValue(auth.deviceId, forHTTPHeaderField: "X-Device-Id")
             if let bearer = auth.bearer() {
                 request.setValue(bearer, forHTTPHeaderField: "Authorization")
             }
-            request.httpBody = jpeg
+            request.httpBody = bytes
             return request
         }
         let (data, response) = try await dataResponse(for: try makeImageRequest())
