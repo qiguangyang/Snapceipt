@@ -46,14 +46,19 @@ export interface QuoteHtmlData {
 
 const DEFAULT_GST_RATE_BP = 1000;
 
+/** Dollars with a leading sign, e.g. "$40.00". */
 function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** Bare 2-dp amount (no sign), e.g. "40.00" — used for the Unit Price column. */
+function amount(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
 /** Format a basis-point rate as a percent string ("15", "12.5", "10"). */
 function ratePct(bp: number | null): string {
-  const v = (bp ?? DEFAULT_GST_RATE_BP) / 100;
-  return Number.isInteger(v) ? String(v) : String(v);
+  return String((bp ?? DEFAULT_GST_RATE_BP) / 100);
 }
 
 /** HTML-escape a string (text + attribute safe). null/undefined ⇒ "". */
@@ -72,6 +77,10 @@ function escMultiline(s: string | null | undefined): string {
   return esc(s).replace(/\n/g, "<br>");
 }
 
+function metaRow(k: string, v: string): string {
+  return `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+}
+
 export function renderQuoteHtml(data: QuoteHtmlData): string {
   const b = data.business;
   const inclusive = data.gstEnabled && data.gstInclusive;
@@ -80,22 +89,35 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
     ? `<img class="logo" src="${esc(data.logoDataUri)}" alt="${esc(b.name)} logo">`
     : "";
 
-  const contactLines: string[] = [];
-  if (b.abn) contactLines.push(`ABN ${esc(b.abn)}`);
-  if (b.businessEmail) contactLines.push(esc(b.businessEmail));
-  if (b.phone) contactLines.push(esc(b.phone));
-  if (b.website) contactLines.push(esc(b.website));
-  const contactHtml = contactLines.length ? `<div class="muted">${contactLines.join(" &middot; ")}</div>` : "";
-  const addressHtml = b.address ? `<div class="muted">${escMultiline(b.address)}</div>` : "";
+  // Company contact lines under the name (each only when set).
+  const companyLines: string[] = [];
+  if (b.address) companyLines.push(escMultiline(b.address));
+  const contactBits: string[] = [];
+  if (b.businessEmail) contactBits.push(esc(b.businessEmail));
+  if (b.phone) contactBits.push(esc(b.phone));
+  if (b.website) contactBits.push(esc(b.website));
+  if (contactBits.length) companyLines.push(contactBits.join(" &middot; "));
+  if (b.abn) companyLines.push(`ABN ${esc(b.abn)}`);
+  const companyMeta = companyLines.map((l) => `<div class="muted">${l}</div>`).join("");
+
+  // Bill-to lines (client has name + email in our model; no separate address).
+  const toLines: string[] = [];
+  if (data.clientEmail) toLines.push(`<div class="muted">${esc(data.clientEmail)}</div>`);
+
+  // Right-hand meta rows.
+  const metaRows: string[] = [];
+  if (data.number) metaRows.push(metaRow("Quote #", esc(data.number)));
+  metaRows.push(metaRow("Quote date", esc(data.issuedDate)));
+  if (data.validUntil) metaRows.push(metaRow("Due date", esc(data.validUntil)));
 
   const rows = data.lineItems
     .map((li) => {
-      const amount = li.quantity * li.unitPriceCents;
+      const lineAmount = li.quantity * li.unitPriceCents;
       return `<tr>
+        <td class="qty">${li.quantity}</td>
         <td>${esc(li.description)}</td>
-        <td class="num">${li.quantity}</td>
-        <td class="num">${dollars(li.unitPriceCents)}</td>
-        <td class="num">${dollars(amount)}</td>
+        <td class="num">${amount(li.unitPriceCents)}</td>
+        <td class="num">${dollars(lineAmount)}</td>
       </tr>`;
     })
     .join("");
@@ -104,16 +126,15 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
     ? `<tr><td>GST (${esc(ratePct(data.gstRateBp))}%)${inclusive ? " incl." : ""}</td><td class="num">${dollars(data.gstCents)}</td></tr>`
     : "";
 
-  const validNote = data.validUntil
-    ? `<p class="muted small">Valid until ${esc(data.validUntil)}. Accepted quotes convert to a tax invoice.</p>`
-    : `<p class="muted small">Accepted quotes convert to a tax invoice.</p>`;
-
-  const paymentBlock = b.bankDetails
-    ? `<section class="card">
-        <h2>Payment details</h2>
-        <div class="muted">${escMultiline(b.bankDetails)}</div>
-      </section>`
-    : "";
+  // Terms & conditions: validity note + payment/bank details.
+  const termsLines: string[] = [];
+  termsLines.push(
+    data.validUntil
+      ? `Valid until ${esc(data.validUntil)}. Accepted quotes convert to a tax invoice.`
+      : `Accepted quotes convert to a tax invoice.`
+  );
+  if (b.bankDetails) termsLines.push(`Payment details: ${escMultiline(b.bankDetails)}`);
+  const termsHtml = termsLines.map((l) => `<p class="terms-line">${l}</p>`).join("");
 
   return `<!doctype html>
 <html lang="en">
@@ -122,70 +143,115 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quote ${esc(data.number ?? "")} — ${esc(b.name)}</title>
 <style>
-  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --brand:#0E7C72; }
-  * { box-sizing: border-box; }
+  :root { --ink:#1f2937; --muted:#6b7280; --line:#dfe3e0; --brand:#4f7a63; --brand-soft:#eaf1ec; }
+  * { box-sizing:border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-         color:var(--ink); background:#f3f4f6; line-height:1.5; }
-  .page { max-width:760px; margin:24px auto; background:#fff; padding:40px;
-          border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
-  .head { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; }
-  .logo { max-height:64px; max-width:200px; object-fit:contain; }
-  h1 { font-size:22px; margin:0 0 2px; }
-  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 8px; }
+         color:var(--ink); background:#eceeec; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .page { max-width:820px; margin:24px auto; background:#fff; padding:56px 56px 40px;
+          border-radius:8px; box-shadow:0 1px 6px rgba(0,0,0,.07); }
+
+  .head { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  .company h1 { font-size:26px; font-weight:600; margin:0 0 6px; }
   .muted { color:var(--muted); font-size:14px; }
-  .small { font-size:12px; }
-  .meta { text-align:right; }
-  .meta .big { font-size:20px; font-weight:600; }
-  .card { margin-top:28px; padding-top:20px; border-top:1px solid var(--line); }
-  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:14px; }
-  th, td { padding:8px 6px; text-align:left; border-bottom:1px solid var(--line); }
-  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  .logo { max-height:96px; max-width:240px; object-fit:contain; }
+
+  .title { text-align:right; font-size:48px; font-weight:800; letter-spacing:.14em;
+           color:var(--brand); margin:24px 0 36px; }
+
+  .parties { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  .label { color:var(--brand); font-weight:700; font-size:13px; }
+  .to .name { font-size:22px; font-weight:500; margin:2px 0 6px; }
+  .meta { border-collapse:collapse; }
+  .meta td { padding:3px 0; font-size:14px; }
+  .meta .k { color:var(--brand); font-weight:700; text-align:right; padding-right:22px; white-space:nowrap; }
+  .meta .v { text-align:right; white-space:nowrap; }
+
+  table.items { width:100%; border-collapse:collapse; margin-top:40px; font-size:15px; }
+  table.items thead th { background:var(--brand); color:#fff; font-weight:700; font-size:13px;
+                         padding:11px 14px; text-align:left; }
+  table.items thead th.num { text-align:right; }
+  table.items tbody td { padding:13px 14px; border:none; }
+  .qty { white-space:nowrap; }
   .num { text-align:right; white-space:nowrap; }
-  .totals { width:100%; max-width:280px; margin-left:auto; margin-top:12px; font-size:14px; }
-  .totals td { border:none; padding:4px 6px; }
-  .totals tr.total td { border-top:2px solid var(--ink); font-weight:700; font-size:16px; padding-top:8px; }
-  .badge { margin-top:32px; text-align:center; }
-  .badge a { color:var(--brand); text-decoration:none; font-size:12px; }
-  @media print { body { background:#fff; } .page { box-shadow:none; margin:0; max-width:none; border-radius:0; } }
+
+  .totals-wrap { display:flex; justify-content:flex-end; margin-top:6px; }
+  table.totals { border-collapse:collapse; min-width:320px; }
+  table.totals td { padding:9px 14px; font-size:15px; }
+  table.totals td.num { text-align:right; }
+  table.totals tr.first td { border-top:1px solid var(--brand); }
+  table.totals tr.total td { background:var(--brand-soft); color:var(--brand); font-weight:700; }
+
+  .terms { margin-top:40px; }
+  .terms h2 { color:var(--brand); font-weight:700; font-size:15px; margin:0 0 10px; }
+  .terms-line { margin:0 0 8px; font-size:14px; }
+
+  .sign { margin-top:64px; display:flex; justify-content:flex-end; }
+  .sign-box { width:260px; text-align:right; }
+  .sign-line { border-top:1px solid var(--brand); margin-bottom:6px; }
+  .sign-label { color:var(--brand); font-size:13px; }
+
+  .badge { margin-top:28px; text-align:center; }
+  .badge a { color:var(--muted); text-decoration:none; font-size:11px; letter-spacing:.02em; }
+
+  @media print {
+    body { background:#fff; }
+    .page { box-shadow:none; margin:0; max-width:none; border-radius:0; padding:32px; }
+  }
+  @media (max-width:600px) {
+    .page { padding:28px 22px; }
+    .head, .parties { flex-direction:column; }
+    .title { font-size:38px; text-align:left; }
+    .meta .k, .meta .v { text-align:left; }
+  }
 </style>
 </head>
 <body>
   <div class="page">
     <header class="head">
-      <div>
-        ${logo}
+      <div class="company">
         <h1>${esc(b.name)}</h1>
-        ${contactHtml}
-        ${addressHtml}
+        ${companyMeta}
       </div>
-      <div class="meta">
-        <div class="big">Quote ${esc(data.number ?? "")}</div>
-        <div class="muted">Issued ${esc(data.issuedDate)}</div>
-      </div>
+      <div>${logo}</div>
     </header>
 
-    <section class="card">
-      <h2>Bill to</h2>
-      <div>${esc(data.clientName ?? "")}</div>
-      ${data.clientEmail ? `<div class="muted">${esc(data.clientEmail)}</div>` : ""}
+    <div class="title">QUOTE</div>
+
+    <section class="parties">
+      <div class="to">
+        <div class="label">To</div>
+        <div class="name">${esc(data.clientName ?? "")}</div>
+        ${toLines.join("")}
+      </div>
+      <table class="meta"><tbody>${metaRows.join("")}</tbody></table>
     </section>
 
-    <section class="card">
-      <h2>Items</h2>
-      <table>
-        <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <table class="totals">
-        <tr><td>${inclusive ? "Subtotal (ex GST)" : "Subtotal"}</td><td class="num">${dollars(data.subtotalCents)}</td></tr>
+    <table class="items">
+      <thead>
+        <tr><th class="qty">QTY</th><th>Description</th><th class="num">Unit Price</th><th class="num">Amount</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <table class="totals"><tbody>
+        <tr class="first"><td>${inclusive ? "Subtotal (ex GST)" : "Subtotal"}</td><td class="num">${dollars(data.subtotalCents)}</td></tr>
         ${gstLine}
-        <tr class="total"><td>Total</td><td class="num">${dollars(data.totalCents)}</td></tr>
-      </table>
-      ${inclusive ? `<p class="muted small">Prices include GST.</p>` : ""}
-      ${validNote}
+        <tr class="total"><td>Total (AUD)</td><td class="num">${dollars(data.totalCents)}</td></tr>
+      </tbody></table>
+    </div>
+
+    <section class="terms">
+      <h2>Terms and Conditions</h2>
+      ${termsHtml}
     </section>
 
-    ${paymentBlock}
+    <div class="sign">
+      <div class="sign-box">
+        <div class="sign-line"></div>
+        <div class="sign-label">customer signature</div>
+      </div>
+    </div>
 
     <div class="badge"><a href="${esc(data.appUrl)}">Made with Snapceipt</a></div>
   </div>

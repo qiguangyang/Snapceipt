@@ -88,4 +88,37 @@ describe("renderQuoteHtml", () => {
     const html = renderQuoteHtml(data({ gstEnabled: false, gstCents: 0, totalCents: 10000 }));
     expect(html).not.toContain("GST (");
   });
+
+  it("renders the redesigned layout (QUOTE title, table headers, terms, signature)", () => {
+    const html = renderQuoteHtml(data());
+    expect(html).toContain(">QUOTE<");
+    expect(html).toContain(">QTY<");
+    expect(html).toContain(">Description<");
+    expect(html).toContain(">Unit Price<");
+    expect(html).toContain(">Amount<");
+    expect(html).toContain("Terms and Conditions");
+    expect(html).toContain("customer signature");
+    expect(html).toContain("Total (AUD)");
+  });
+
+  it("shows the To label + Quote # / Quote date / Due date meta rows", () => {
+    const html = renderQuoteHtml(data());
+    expect(html).toContain(">To<");
+    expect(html).toContain("Quote #");
+    expect(html).toContain("Quote date");
+    expect(html).toContain("Due date");
+    expect(html).toContain("2026-06-20"); // quote date
+    expect(html).toContain("2026-07-04"); // due date (validUntil)
+  });
+
+  it("omits the Due date row when there is no validUntil", () => {
+    const html = renderQuoteHtml(data({ validUntil: null }));
+    expect(html).not.toContain("Due date");
+  });
+
+  it("renders the unit price bare and the line amount with a $ sign", () => {
+    const html = renderQuoteHtml(data()); // 1 × $100.00
+    expect(html).toContain(">100.00<"); // unit price column, no $
+    expect(html).toContain("$100.00");  // amount column, with $
+  });
 });
