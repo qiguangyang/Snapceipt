@@ -242,7 +242,7 @@ struct ShellView: View {
             if router.overlay == .budgets {
                 BudgetListView(context: profiles.context, sync: sync, userId: profiles.userId,
                                profileId: profiles.activeProfileId,
-                               onClose: { router.dismissOverlay() },
+                               onClose: { router.dismissOverlay(); activityReloadToken += 1 },
                                onEdit: { router.openBudget($0) })
                     .environment(\.accent, accent).transition(.opacity)
             }
@@ -251,7 +251,7 @@ struct ShellView: View {
             if case let .budgetEditor(id) = router.overlay {
                 BudgetEditorView(context: profiles.context, sync: sync, userId: profiles.userId,
                                  profileId: profiles.activeProfileId, budgetId: id,
-                                 onClose: { router.dismissOverlay() })
+                                 onClose: { router.dismissOverlay(); activityReloadToken += 1 })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -541,6 +541,7 @@ struct ShellView: View {
                 BudgetTrackerView(
                     context: profiles.context, sync: sync,
                     userId: profiles.userId, profileId: profiles.activeProfileId,
+                    reloadToken: activityReloadToken,
                     onEdit: { router.present(.budgets) },
                     onTapBudget: { router.openBudget($0) },
                     onAdd: { router.openBudget(nil) }

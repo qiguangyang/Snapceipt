@@ -9,6 +9,9 @@ struct BudgetTrackerView: View {
     let sync: any SyncEnqueuing
     let userId: String
     let profileId: String
+    /// Bumped by the shell when a budget overlay closes (e.g. after a delete) so the Home
+    /// tracker re-fetches — its vm is a one-time `.task` snapshot, not re-keyed on dismiss.
+    let reloadToken: Int
     let onEdit: () -> Void
     let onTapBudget: (String) -> Void
     let onAdd: () -> Void
@@ -49,6 +52,9 @@ struct BudgetTrackerView: View {
                                          userId: userId, profileId: profileId)
             }
         }
+        // A budget overlay (list/editor) just closed — re-fetch so a deleted/edited budget
+        // is reflected here on Home.
+        .onChange(of: reloadToken) { _, _ in vm?.reload() }
     }
 
     @ViewBuilder private func rowBody(_ row: BudgetListViewModel.Row) -> some View {
