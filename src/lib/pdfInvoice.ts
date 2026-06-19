@@ -40,6 +40,11 @@ export interface InvoicePdfData {
   amountPaidCents: number;
 }
 
+/** Compliance-critical literals — exported so tests can assert verbatim wording. */
+export const INVOICE_HEADING = "Tax invoice";
+export const GST_REGISTERED_LABEL = "Registered for GST";
+export const GST_INCLUSIVE_NOTE = "Total price includes GST";
+
 const PAGE_W = 595.28; // A4 portrait points
 const PAGE_H = 841.89;
 const MARGIN = 48;
@@ -72,13 +77,13 @@ export async function buildInvoicePdf(
   };
 
   // Heading — ATO "Tax invoice".
-  draw("Tax invoice", bold, 18);
+  draw(INVOICE_HEADING, bold, 18);
   y -= LINE / 2;
 
   // Seller (Business profile) — name + ABN + GST registration line.
   draw(sender.name, bold, 14);
   if (sender.abn) draw(`ABN: ${sender.abn}`, font, 11);
-  if (sender.gstRegistered) draw("Registered for GST", font, 11);
+  if (sender.gstRegistered) draw(GST_REGISTERED_LABEL, font, 11);
   y -= LINE / 2;
 
   // Meta — number + issue/due dates.
@@ -116,7 +121,7 @@ export async function buildInvoicePdf(
     draw(`GST (10%)${inclusive ? " included" : ""}: ${dollars(invoice.gstCents)}`, font, 12);
   }
   draw(`Total: ${dollars(invoice.totalCents)}`, bold, 14);
-  if (inclusive) draw(`Total price includes GST ${dollars(invoice.gstCents)}.`, font, 9);
+  if (inclusive) draw(`${GST_INCLUSIVE_NOTE} ${dollars(invoice.gstCents)}.`, font, 9);
 
   // Accounts-receivable ledger — only when something has been paid.
   if (invoice.amountPaidCents > 0) {

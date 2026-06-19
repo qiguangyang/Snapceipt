@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import {
   buildInvoicePdf,
+  INVOICE_HEADING,
+  GST_REGISTERED_LABEL,
+  GST_INCLUSIVE_NOTE,
   type InvoicePdfData,
   type InvoiceLineItemRow,
   type InvoiceSender,
@@ -27,6 +30,20 @@ const invoice: InvoicePdfData = {
   dueDate: "2026-07-03",
   amountPaidCents: 0,
 };
+
+describe("tax-invoice compliance strings", () => {
+  it("INVOICE_HEADING contains the ATO-mandated wording", () => {
+    expect(INVOICE_HEADING).toContain("Tax invoice");
+  });
+
+  it("GST_REGISTERED_LABEL contains the required registration notice", () => {
+    expect(GST_REGISTERED_LABEL).toContain("Registered for GST");
+  });
+
+  it("GST_INCLUSIVE_NOTE contains the GST-inclusive disclosure", () => {
+    expect(GST_INCLUSIVE_NOTE).toContain("Total price includes GST");
+  });
+});
 
 describe("buildInvoicePdf", () => {
   it("returns a real %PDF Uint8Array that opens to >=1 page", async () => {
