@@ -335,9 +335,10 @@ struct InvoiceEditorView: View {
                     primaryButton(title: "Send invoice", icon: "share", busy: false, enabled: true,
                                   a11y: AccessibilityID.invoiceEditorSend) {
                         Task {
-                            if let iid = vm.invoiceId, let r = try? await api.sendInvoice(iid) {
-                                if let url = r.pdfUrl { openURL(url) }
-                            }
+                            // Route through the VM so a backend failure (e.g. 400 "no
+                            // client email") surfaces via vm.errorMessage instead of
+                            // being swallowed.
+                            if await vm.send(api: api), let url = vm.pdfUrl { openURL(url) }
                         }
                     }
                 }

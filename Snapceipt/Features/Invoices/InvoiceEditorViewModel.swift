@@ -32,6 +32,7 @@ final class InvoiceEditorViewModel {
     private(set) var quoteId: String?
     private(set) var pdfUrl: String?
     private(set) var issuedAt: Int?
+    private(set) var emailed = false
 
     private(set) var isIssuing = false
     var errorMessage: String?
@@ -200,6 +201,26 @@ final class InvoiceEditorViewModel {
             return false
         } catch {
             errorMessage = "Couldn’t issue the invoice. Try again."
+            return false
+        }
+    }
+
+    /// Email the issued invoice's tax-invoice PDF to the client (POST /invoices/:id/send).
+    /// Mirrors `issue(api:)`'s error handling so a backend failure (e.g. 400 "no client
+    /// email") surfaces via `errorMessage` instead of silently no-oping.
+    func send(api: APIClient) async -> Bool {
+        guard let iid = invoiceId else { return false }
+        errorMessage = nil
+        do {
+            let r = try await api.sendInvoice(iid)
+            if let url = r.pdfUrl { pdfUrl = url }
+            emailed = r.emailed
+            return true
+        } catch let e as APIError {
+            errorMessage = e.message
+            return false
+        } catch {
+            errorMessage = "Couldn’t send the invoice. Try again."
             return false
         }
     }

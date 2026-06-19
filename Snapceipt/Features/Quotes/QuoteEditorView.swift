@@ -310,11 +310,9 @@ struct QuoteEditorView: View {
                 // latest edits) then shares; no status change. (spec §3)
                 Button {
                     Task {
-                        if vm.pdfUrl == nil {
-                            if await vm.generatePdf(api: api) { openPDF(vm) }
-                        } else {
-                            openPDF(vm)
-                        }
+                        // Always (re)build from the current quote state so edits made
+                        // after a first generate are reflected, then share. (spec §3)
+                        if await vm.generatePdf(api: api) { openPDF(vm) }
                     }
                 } label: {
                     Icon(name: "doc", size: 22, color: Palette.ink2)
