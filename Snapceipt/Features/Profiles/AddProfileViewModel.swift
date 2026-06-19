@@ -55,6 +55,17 @@ final class AddProfileViewModel {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Device-region GST default in basis points: AU → 1000 (10%), NZ → 1500 (15%),
+    /// else 1000. (spec §3). `nonisolated` so it stays a pure, synchronously
+    /// callable function (the class is `@MainActor`).
+    nonisolated static func defaultGstRateBp(regionCode: String?) -> Int {
+        switch regionCode {
+        case "NZ": return 1500
+        case "AU": return 1000
+        default: return 1000
+        }
+    }
+
     /// Up to two uppercase initials derived from the entered name.
     var derivedInitials: String {
         let words = name.split(separator: " ").prefix(2)
@@ -69,6 +80,9 @@ final class AddProfileViewModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Epoch.nowMs()
         let isBusiness = type == .business
+        let gstRateBp = isBusiness
+            ? Self.defaultGstRateBp(regionCode: Locale.current.region?.identifier)
+            : 1000
 
         let p = Profile(
             userId: userId,
@@ -81,6 +95,7 @@ final class AddProfileViewModel {
             // ABN/GST are Business-only (personal profiles hide tax identity, §3.2).
             abn: isBusiness ? abn.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil,
             gstRegistered: isBusiness ? gstRegistered : false,
+            gstRateBp: gstRateBp,
             sortOrder: store.profiles.count,
             isDefault: store.profiles.isEmpty,
             createdAt: now,
