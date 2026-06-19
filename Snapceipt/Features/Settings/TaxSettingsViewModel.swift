@@ -1,5 +1,19 @@
 import Foundation
 import SwiftData
+import UIKit
+
+/// GST-rate presets for the Tax & GST settings control. (spec §3)
+enum GstRatePreset: String, CaseIterable, Identifiable {
+    case au, nz, custom
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .au: return "10% (Australia)"
+        case .nz: return "15% (New Zealand)"
+        case .custom: return "Custom %"
+        }
+    }
+}
 
 /// Edits the active profile's tax_settings (+ the Profile's ABN/GST identity).
 /// `@MainActor`; deps injected. Lazily ensures a tax_settings row exists.
@@ -10,6 +24,7 @@ final class TaxSettingsViewModel {
     @ObservationIgnored private let sync: any SyncEnqueuing
     @ObservationIgnored private let userId: String
     @ObservationIgnored private let profile: Profile
+    @ObservationIgnored private let api: APIClient
     @ObservationIgnored private var settings: TaxSettings
 
     var showsBusinessIdentity: Bool { profile.type == "business" }
@@ -20,6 +35,17 @@ final class TaxSettingsViewModel {
     private(set) var financialYearStartMonth: Int
     private(set) var gstRegistered: Bool
     private(set) var abn: String
+
+    // GST rate (bp) + business/bank details (mirror the active Profile). (spec §3, §5)
+    private(set) var gstRateBp: Int
+    private(set) var businessEmail: String
+    private(set) var phone: String
+    private(set) var website: String
+    private(set) var addressText: String
+    private(set) var bankDetails: String
+    private(set) var logoR2Key: String?
+    private(set) var isUploadingLogo = false
+    var logoUploadError: String?
 
     // Local-only prefs (no column): entity type, GST basis, BAS period, vehicle method.
     var entityType: String { didSet { defaults.set(entityType, forKey: key("entityType")) } }
@@ -33,11 +59,12 @@ final class TaxSettingsViewModel {
     var nextBasDue: Date { BasSchedule.nextDue(basPeriod, on: Date()) }
 
     init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profile: Profile,
-         defaults: UserDefaults = .standard) {
+         api: APIClient = StubAPIClient(), defaults: UserDefaults = .standard) {
         self.context = context
         self.sync = sync
         self.userId = userId
         self.profile = profile
+        self.api = api
         self.defaults = defaults
 
         let pid = profile.id
@@ -57,6 +84,13 @@ final class TaxSettingsViewModel {
         self.financialYearStartMonth = settings.financialYearStartMonth
         self.gstRegistered = profile.gstRegistered
         self.abn = profile.abn ?? ""
+        self.gstRateBp = profile.gstRateBp
+        self.businessEmail = profile.businessEmail ?? ""
+        self.phone = profile.phone ?? ""
+        self.website = profile.website ?? ""
+        self.addressText = profile.addressText ?? ""
+        self.bankDetails = profile.bankDetails ?? ""
+        self.logoR2Key = profile.logoR2Key
         self.entityType = defaults.string(forKey: "sc.tax.\(pid).entityType") ?? "Sole trader"
         self.gstBasis = defaults.string(forKey: "sc.tax.\(pid).gstBasis") ?? "Cash"
         self.basPeriodRaw = defaults.string(forKey: "sc.tax.\(pid).basPeriod") ?? BasPeriod.quarterly.rawValue
@@ -78,4 +112,70 @@ final class TaxSettingsViewModel {
     func setFinancialYearStartMonth(_ m: Int) { let c = max(1, min(12, m)); financialYearStartMonth = c; settings.financialYearStartMonth = c; saveSettings() }
     func setGstRegistered(_ on: Bool) { gstRegistered = on; profile.gstRegistered = on; saveProfile() }
     func setAbn(_ s: String) { abn = s; profile.abn = s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : s; saveProfile() }
+
+    // MARK: - GST rate (bp)
+
+    /// The preset the current rate corresponds to (1000→.au, 1500→.nz, else .custom).
+    var derivedPreset: GstRatePreset {
+        switch gstRateBp {
+        case 1000: return .au
+        case 1500: return .nz
+        default: return .custom
+        }
+    }
+    var gstRatePreset: GstRatePreset { derivedPreset }
+    /// Percent string for the custom field (e.g. 1250 → "12.5").
+    var gstRatePercentText: String {
+        let pct = Double(gstRateBp) / 100.0
+        return pct == pct.rounded() ? String(Int(pct)) : String(pct)
+    }
+
+    func setGstRateBp(_ bp: Int) {
+        let clamped = max(0, min(10_000, bp))   // 0%..100%
+        gstRateBp = clamped
+        profile.gstRateBp = clamped
+        saveProfile()
+    }
+    func setGstRatePreset(_ preset: GstRatePreset) {
+        switch preset {
+        case .au: setGstRateBp(1000)
+        case .nz: setGstRateBp(1500)
+        case .custom: break   // custom is set via setCustomGstPercent
+        }
+    }
+    /// `12.5` → 1250 bp.
+    func setCustomGstPercent(_ percent: Double) {
+        setGstRateBp(Int((percent * 100).rounded()))
+    }
+
+    // MARK: - Business + bank details
+
+    private func normalize(_ s: String) -> String? {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+    func setBusinessEmail(_ s: String) { businessEmail = s; profile.businessEmail = normalize(s); saveProfile() }
+    func setPhone(_ s: String) { phone = s; profile.phone = normalize(s); saveProfile() }
+    func setWebsite(_ s: String) { website = s; profile.website = normalize(s); saveProfile() }
+    func setAddressText(_ s: String) { addressText = s; profile.addressText = normalize(s); saveProfile() }
+    func setBankDetails(_ s: String) { bankDetails = s; profile.bankDetails = normalize(s); saveProfile() }
+
+    /// Reduce → upload → store `logoR2Key`. The key is server-owned (synced pull-only);
+    /// we set it locally from the upload response so the preview updates immediately.
+    func uploadLogo(_ image: UIImage) async {
+        logoUploadError = nil
+        isUploadingLogo = true
+        defer { isUploadingLogo = false }
+        let png = ImageReducer().reduce(image)
+        do {
+            let r = try await api.uploadProfileLogo(profileId: profile.id, png: png)
+            logoR2Key = r.logoR2Key
+            profile.logoR2Key = r.logoR2Key
+            saveProfile()
+        } catch let e as APIError {
+            logoUploadError = e.message
+        } catch {
+            logoUploadError = "Couldn’t upload the logo. Try again."
+        }
+    }
 }
