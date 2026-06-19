@@ -265,6 +265,9 @@ enum AccessibilityID {
     static let basFullWorksheetToggle = "bas.fullWorksheet.toggle"
     static let basMarkLodged = "bas.markLodged"
     static let basExport = "bas.export"
+    static let basHistoryLink = "bas.history.link"
+    static let basHistoryScreen = "bas.history.screen"
+    static let basHistoryRowPrefix = "bas.history.row."   // + periodKey
     // Paywall (Workstream 6)
     static let paywallTitle      = "paywall.title"
     static let paywallBuyMonthly = "paywall.buy.monthly"

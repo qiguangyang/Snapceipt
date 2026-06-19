@@ -21,6 +21,7 @@ struct BasView: View {
     @Environment(\.accent) private var accent
     @State private var vm: BasViewModel?
     @State private var showFullWorksheet = false
+    @State private var showHistory = false
     @State private var paygText = ""
 
     var body: some View {
@@ -61,6 +62,14 @@ struct BasView: View {
         .onChange(of: vm?.periodOffset) { _, _ in
             guard let vm else { return }
             paygText = vm.paygInstalmentCents == 0 ? "" : String(vm.paygInstalmentCents / 100)
+        }
+        .sheet(isPresented: $showHistory) {
+            if let vm {
+                BasHistoryView(rows: vm.history(), currentOffset: vm.periodOffset,
+                               onSelect: { vm.select(offset: $0); showHistory = false },
+                               onClose: { showHistory = false })
+                    .environment(\.accent, accent)
+            }
         }
     }
 
@@ -272,6 +281,16 @@ struct BasView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.basExport)
+
+            Button { showHistory = true } label: {
+                HStack(spacing: 6) {
+                    Icon(name: "chart", size: 14, color: accent.base)
+                    Text("Past BAS").font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(AccessibilityID.basHistoryLink)
         }
     }
 }
