@@ -548,7 +548,8 @@ private struct QuoteSyncMapper: SyncRowMapper {
         f["status"] = .string(r.status)
         f["validUntil"] = str(r.validUntil)
         f["sentAt"] = num(r.sentAt)
-        f["pdfR2Key"] = str(r.pdfR2Key)
+        // pdfR2Key is server-owned (set on POST /quotes/:id/pdf): pull-only — decode it,
+        // never encode it, so a follow-up push can't clobber the server value to NULL.
         f["invoiceId"] = str(r.invoiceId)
         return f
     }
@@ -884,7 +885,8 @@ private struct InvoiceSyncMapper: SyncRowMapper {
         f["issueDate"] = str(r.issueDate)
         f["dueDate"] = str(r.dueDate)
         f["issuedAt"] = num(r.issuedAt)
-        f["pdfR2Key"] = str(r.pdfR2Key)
+        // pdfR2Key is server-owned (set on POST /invoices/:id/issue and /invoices/:id/pdf):
+        // pull-only — decode it, never encode it, so a follow-up push can't clobber it to NULL.
         return f
     }
 }

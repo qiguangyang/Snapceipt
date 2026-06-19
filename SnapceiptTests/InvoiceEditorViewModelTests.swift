@@ -112,6 +112,36 @@ struct InvoiceEditorViewModelTests {
         #expect(v.status == "draft")
     }
 
+    @Test("send success applies emailed/pdfUrl + returns true")
+    func sendSucceeds() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        mock.sendInvoiceHandler = { _ in SendInvoiceResponse(pdfUrl: "/invoices/dl/sent", emailed: true) }
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        let ok = await v.send(api: mock)
+        #expect(ok == true)
+        #expect(mock.sendInvoiceCalls.count == 1)
+        #expect(v.emailed == true)
+        #expect(v.pdfUrl == "/invoices/dl/sent")
+        #expect(v.errorMessage == nil)
+    }
+
+    @Test("send failure surfaces errorMessage + returns false")
+    func sendFails() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        mock.sendInvoiceHandler = { _ in throw APIError(code: "X", message: "no client email", status: 400) }
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 10_00
+        let ok = await v.send(api: mock)
+        #expect(ok == false)
+        #expect(v.errorMessage != nil)
+        #expect(v.emailed == false)
+    }
+
     @Test("badge derives from the invoice's payments (issued + partial)")
     func badge() throws {
         let (ctx, sync) = try makeFixture()
