@@ -244,11 +244,13 @@ final class QuoteEditorViewModel {
         saveDraft()   // ensure the quote + lines are persisted before cloning
 
         let due = Self.dueDatePlus14()
+        let t = totals
         let invoice = Invoice(userId: userId, profileId: profileId,
                               quoteId: qid,
                               clientName: clientName, clientEmail: clientEmail,
                               gstEnabled: gstEnabled, gstInclusive: gstInclusive,
-                              subtotalCents: totals.subtotal, gstCents: totals.gst, totalCents: totals.total,
+                              subtotalCents: t.subtotal, gstCents: t.gst, totalCents: t.total,
+                              currency: quote.currency,
                               status: "draft", dueDate: due)
         context.insert(invoice)
 
