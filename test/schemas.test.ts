@@ -223,6 +223,13 @@ describe("profile/quote/invoice GST + business fields (migration 0010)", () => {
     const r = invoiceEntity.safeParse(env({ type: "invoice", gstRateBp: 1500 }));
     expect(r.success).toBe(true);
   });
+
+  it("accepts a quote carrying a snapshotted clientAddress (migration 0011)", () => {
+    const r = quoteEntity.safeParse(
+      env({ type: "quote", clientAddress: "9 Client Rd\nMelbourne VIC 3000" }),
+    );
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("entitySchemaFor / SYNCABLE_TYPES", () => {

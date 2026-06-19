@@ -29,6 +29,8 @@ export interface QuoteHtmlData {
   validUntil: string | null;
   clientName: string | null;
   clientEmail: string | null;
+  /** Freeform multiline client address; rendered in the To block only when non-empty. */
+  clientAddress: string | null;
   gstEnabled: boolean;
   gstInclusive: boolean;
   /** Basis points; null ⇒ label "GST (10%)". */
@@ -100,8 +102,9 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
   if (b.abn) companyLines.push(`ABN ${esc(b.abn)}`);
   const companyMeta = companyLines.map((l) => `<div class="muted">${l}</div>`).join("");
 
-  // Bill-to lines (client has name + email in our model; no separate address).
+  // Bill-to lines under the client name: optional multiline address, then email.
   const toLines: string[] = [];
+  if (data.clientAddress) toLines.push(`<div class="muted">${escMultiline(data.clientAddress)}</div>`);
   if (data.clientEmail) toLines.push(`<div class="muted">${esc(data.clientEmail)}</div>`);
 
   // Right-hand meta rows.

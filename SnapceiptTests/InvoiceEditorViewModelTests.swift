@@ -98,6 +98,30 @@ struct InvoiceEditorViewModelTests {
         #expect(inv.totalCents == 55_00)
     }
 
+    @Test("issue records the invoice total as an income transaction (positive, category income)")
+    func issueRecordsIncome() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        mock.issueInvoiceHandler = { _ in
+            IssueInvoiceResponse(pdfUrl: "/invoices/dl/tok", number: "INV-0010",
+                                 status: "issued", issueDate: "2026-06-19", dueDate: "2026-07-03",
+                                 issuedAt: 999, subtotalCents: 50_00, gstCents: 5_00, totalCents: 55_00,
+                                 expiresAt: 1)
+        }
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        _ = await v.issue(api: mock)
+
+        let income = try ctx.fetch(FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.source == "invoice" && $0.deletedAt == nil }))
+        #expect(income.count == 1)
+        #expect(income.first?.amountCents == 55_00)       // positive ⇒ income
+        #expect(income.first?.catKey == CategoryKey.income.rawValue)
+        #expect(income.first?.note == "Invoice INV-0010")
+        #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .transaction })
+    }
+
     @Test("issue failure keeps the invoice a draft + sets errorMessage")
     func issueFails() async throws {
         let (ctx, sync) = try makeFixture()

@@ -225,6 +225,7 @@ final class InvoiceEditorViewModel {
                 inv.updatedAt = Epoch.nowMs()
                 try? context.save()
                 sync.enqueue(op: "upsert", entityType: .invoice, entity: inv)
+                recordIncome(for: inv)
             }
             return true
         } catch let e as APIError {
@@ -234,6 +235,33 @@ final class InvoiceEditorViewModel {
             errorMessage = "Couldn’t issue the invoice. Try again."
             return false
         }
+    }
+
+    /// Record an issued invoice as income (user choice: recognize on issue). Creates one
+    /// positive (income) Transaction tagged to the invoice. Dedup-guarded by a per-invoice
+    /// note marker so a re-issue can't double-count.
+    private func recordIncome(for invoice: Invoice) {
+        let label = "Invoice \(invoice.number ?? invoice.id)"
+        let existing = try? context.fetch(FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.note == label && $0.source == "invoice" && $0.deletedAt == nil }))
+        if let existing, !existing.isEmpty { return }
+
+        let name = (clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let txn = Transaction(
+            userId: userId, profileId: profileId,
+            merchant: name.isEmpty ? label : name,
+            catKey: CategoryKey.income.rawValue,
+            amountCents: invoice.totalCents,        // positive ⇒ income
+            currency: invoice.currency,
+            txnDate: invoice.issueDate ?? ExportDateFormatter.shared.string(from: Date()),
+            mode: "business",
+            note: label,
+            gstCents: invoice.gstCents,
+            source: "invoice"
+        )
+        context.insert(txn)
+        try? context.save()
+        sync.enqueue(op: "upsert", entityType: .transaction, entity: txn)
     }
 
     /// Email the issued invoice's tax-invoice PDF to the client (POST /invoices/:id/send).

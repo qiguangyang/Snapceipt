@@ -3,13 +3,13 @@ import SwiftData
 
 /// Bill-to client picker, presented as a `.sheet` from the editor. Lists the active
 /// profile's saved clients (searchable), plus an inline "New client" form. Picking or
-/// creating a client hands its name/email snapshot back via `onPick`.
+/// creating a client hands its name/email/address snapshot back via `onPick`.
 struct ClientPickerSheet: View {
     let context: ModelContext
     let sync: any SyncEnqueuing
     let userId: String
     let profileId: String
-    let onPick: (_ name: String, _ email: String?) -> Void
+    let onPick: (_ name: String, _ email: String?, _ address: String?) -> Void
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
@@ -18,6 +18,7 @@ struct ClientPickerSheet: View {
     @State private var showNew = false
     @State private var newName = ""
     @State private var newEmail = ""
+    @State private var newAddress = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +35,7 @@ struct ClientPickerSheet: View {
                                 .padding(.top, 8)
                             VStack(spacing: 10) {
                                 ForEach(clients) { client in
-                                    Button { onPick(client.name, client.email) } label: { row(client) }
+                                    Button { onPick(client.name, client.email, client.address) } label: { row(client) }
                                         .buttonStyle(.plain)
                                         .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
                                 }
@@ -86,9 +87,10 @@ struct ClientPickerSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             field("Client name", text: $newName)
             field("Email (optional)", text: $newEmail)
+            multilineField("Address (optional)", text: $newAddress)
             Button {
-                if let c = vm.create(name: newName, email: newEmail) {
-                    onPick(c.name, c.email)
+                if let c = vm.create(name: newName, email: newEmail, address: newAddress) {
+                    onPick(c.name, c.email, c.address)
                 }
             } label: {
                 Text("Save client").font(.ui(15, .semibold)).foregroundStyle(.white)
@@ -111,6 +113,16 @@ struct ClientPickerSheet: View {
         }
     }
 
+    /// Freeform multiline field (e.g. address), grows 2–4 lines.
+    private func multilineField(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
+            TextField(title, text: text, axis: .vertical)
+                .lineLimit(2...4)
+                .padding(12).background(Palette.cream, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
     private func row(_ client: Client) -> some View {
         Card(padding: 14) {
             HStack(spacing: 12) {
@@ -119,6 +131,9 @@ struct ClientPickerSheet: View {
                     Text(client.name).font(.ui(15, .bold)).foregroundStyle(Palette.ink)
                     if let email = client.email {
                         Text(email).font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                    }
+                    if let address = client.address, !address.isEmpty {
+                        Text(address).font(.ui(12.5)).foregroundStyle(Palette.ink3).lineLimit(2)
                     }
                 }
                 Spacer(minLength: 0)

@@ -56,6 +56,9 @@ final class QuoteEditorViewModel {
     var gstInclusive = false
     private(set) var clientName: String?
     private(set) var clientEmail: String?
+    /// Snapshot of the picked client's freeform address (mirrors clientName/clientEmail);
+    /// rendered in the bill-to preview and on the hosted quote when non-empty.
+    private(set) var clientAddress: String?
 
     private(set) var number: String?
     private(set) var status: String = QuoteStatus.draft.rawValue
@@ -107,6 +110,7 @@ final class QuoteEditorViewModel {
             gstInclusive = q.gstInclusive
             clientName = q.clientName
             clientEmail = q.clientEmail
+            clientAddress = q.clientAddress
             number = q.number
             status = q.status
             sentAt = q.sentAt
@@ -126,6 +130,7 @@ final class QuoteEditorViewModel {
             gstInclusive = false
             clientName = nil
             clientEmail = nil
+            clientAddress = nil
             number = nil
             status = QuoteStatus.draft.rawValue
             sentAt = nil
@@ -138,9 +143,10 @@ final class QuoteEditorViewModel {
         }
     }
 
-    func setClient(name: String, email: String?) {
+    func setClient(name: String, email: String?, address: String? = nil) {
         clientName = name
         clientEmail = email
+        clientAddress = address
     }
 
     func addLine() {
@@ -170,6 +176,7 @@ final class QuoteEditorViewModel {
         let t = totals
         quote.clientName = clientName
         quote.clientEmail = clientEmail
+        quote.clientAddress = clientAddress
         quote.gstEnabled = gstEnabled
         quote.gstInclusive = gstInclusive
         quote.subtotalCents = t.subtotal
@@ -265,11 +272,23 @@ final class QuoteEditorViewModel {
         do {
             let r = try await api.quoteShareLink(qid)
             pdfUrl = r.url
-            // Apply the server-minted number immediately so the editor shows "Quote #N"
-            // without waiting for a sync pull (spec §4: link issues the quote).
-            if let n = r.number, number == nil {
-                number = n
-                if let q = fetchQuote(qid) { q.number = n; try? context.save() }
+            // Sharing the link issues the quote (spec §4): apply the server-minted number
+            // AND move it out of Draft → Sent so it becomes eligible to convert to an invoice.
+            let now = Epoch.nowMs()
+            if let n = r.number, number == nil { number = n }
+            if statusValue == .draft {
+                status = QuoteStatus.sent.rawValue
+                if sentAt == nil { sentAt = now }
+            }
+            if let q = fetchQuote(qid) {
+                if let n = r.number, q.number == nil { q.number = n }
+                if QuoteStatus(rawValue: q.status) == .draft {
+                    q.status = QuoteStatus.sent.rawValue
+                    if q.sentAt == nil { q.sentAt = now }
+                }
+                q.updatedAt = now
+                try? context.save()
+                sync.enqueue(op: "upsert", entityType: .quote, entity: q)
             }
             return r.url
         } catch let e as APIError {

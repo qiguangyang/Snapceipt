@@ -61,6 +61,16 @@ struct ClientPickerViewModelTests {
         #expect(c?.email == nil)
     }
 
+    @Test("create carries a trimmed multiline address; empty address normalizes to nil")
+    func createCarriesAddress() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        let c = v.create(name: "Acme", email: nil, address: "  9 Client Rd\nMelbourne VIC 3000  ")
+        #expect(c?.address == "9 Client Rd\nMelbourne VIC 3000")
+        let blank = v.create(name: "Beta", email: nil, address: "   \n  ")
+        #expect(blank?.address == nil)
+    }
+
     @Test("filtered matches name + email, case-insensitive")
     func filtered() throws {
         let (ctx, sync) = try makeFixture()

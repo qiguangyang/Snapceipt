@@ -141,6 +141,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     columns: {
       name: "name",
       email: "email",
+      address: "address",
     },
   },
   quote: {
@@ -150,6 +151,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       number: "number",
       clientName: "client_name",
       clientEmail: "client_email",
+      clientAddress: "client_address",
       gstEnabled: "gst_enabled",
       gstInclusive: "gst_inclusive",
       subtotalCents: "subtotal_cents",
