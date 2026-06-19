@@ -146,6 +146,55 @@ describe("GET /q/:token (public HTML quote)", () => {
     expect(html).toContain("$115.00");
   });
 
+  it("e2e: renders ALL business + bank details in full (not truncated/missing)", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+    const res = await SELF.fetch(`${BASE}/q/${token}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+
+    // Business header — every contact field present and FULL (the reported bug was the
+    // email rendering as a single char and the other fields missing entirely).
+    expect(html).toContain("Acme Pty Ltd");          // name
+    expect(html).toContain("hi@acme.example");        // FULL business email
+    expect(html).toContain("0400 000 000");           // phone
+    expect(html).toContain("acme.example");           // website
+    expect(html).toContain("1 Main St");              // address
+    expect(html).toContain("12 345 678 901");         // ABN
+    // Bank / payment details (the value, not just the heading).
+    expect(html).toContain("Payment details");
+    expect(html).toContain("BSB 062-000 Acc 1234 5678");
+    // Client + line item + total.
+    expect(html).toContain("Jane Roe");
+    expect(html).toContain("jane@example.com");
+    expect(html).toContain("Site inspection");
+    expect(html).toContain("$115.00");
+  });
+
+  it("e2e: renders a long business email in full (no single-char truncation)", async () => {
+    const { userId } = await seedAuthed();
+    const profileId = uuidv7();
+    const quoteId = uuidv7();
+    const now = nowMs();
+    await env.DB.prepare(
+      `INSERT INTO profiles (id,user_id,name,type,accent_1,accent_2,accent_3,business_email,created_at,updated_at)
+       VALUES (?,?,'Long Co','business','#0E7C72','#DCF0ED','#0A5950','accounts.payable@longcompanyname.com.au',?,?)`,
+    ).bind(profileId, userId, now, now).run();
+    await env.DB.prepare(
+      `INSERT INTO quotes (id,user_id,profile_id,number,client_name,gst_enabled,gst_inclusive,gst_rate_bp,status,created_at,updated_at)
+       VALUES (?,?,?,'SN-0002','Bob',1,0,1000,'draft',?,?)`,
+    ).bind(quoteId, userId, profileId, now, now).run();
+    await env.DB.prepare(
+      `INSERT INTO quote_line_items (id,user_id,quote_id,description,quantity,unit_price_cents,sort_order,created_at,updated_at)
+       VALUES (?,?,?,'Work',1,5000,0,?,?)`,
+    ).bind(uuidv7(), userId, quoteId, now, now).run();
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+    const res = await SELF.fetch(`${BASE}/q/${token}`);
+    const html = await res.text();
+    expect(html).toContain("accounts.payable@longcompanyname.com.au");
+  });
+
   it("labels GST 10% when the quote's gst_rate_bp is null (pre-feature quote)", async () => {
     const { userId } = await seedAuthed();
     const { quoteId } = await seedQuote(userId, { gstRateBp: null });

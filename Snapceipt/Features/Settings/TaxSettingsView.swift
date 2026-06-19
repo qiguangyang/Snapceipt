@@ -288,6 +288,10 @@ struct TaxSettingsView: View {
             TextField(placeholder, text: text)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(.never)
+                // Disable autocorrect: these fields aren't prose, and on the .emailAddress
+                // keyboard the autocorrect "marked text" composition got truncated to the
+                // first character when the per-keystroke save re-rendered the field.
+                .autocorrectionDisabled()
                 .font(.ui(16, .regular))
                 .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
                 .onChange(of: text.wrappedValue) { _, v in onCommit(v) }
