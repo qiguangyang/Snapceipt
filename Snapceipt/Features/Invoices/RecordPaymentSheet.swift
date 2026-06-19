@@ -100,6 +100,11 @@ struct RecordPaymentSheet: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.cream)
+        // `children: .contain` keeps the amount field / save button identifiable by
+        // their own ids — without it the container id propagates to every descendant,
+        // clobbering `recordPayment.amount`/`recordPayment.save` (so UI tests can't
+        // reach them). Mirrors `InvoiceEditorView`'s container treatment.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.recordPaymentSheet)
         .task {
             if vm == nil {
