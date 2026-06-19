@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import {
   buildInvoicePdf,
+  gstLabel,
   INVOICE_HEADING,
   GST_REGISTERED_LABEL,
   GST_INCLUSIVE_NOTE,
@@ -23,6 +24,7 @@ const invoice: InvoicePdfData = {
   clientEmail: "jane@example.com",
   gstEnabled: true,
   gstInclusive: false,
+  gstRateBp: null,
   subtotalCents: 105000,
   gstCents: 10500,
   totalCents: 115500,
@@ -45,6 +47,25 @@ describe("tax-invoice compliance strings", () => {
   });
 });
 
+describe("gstLabel — rate-aware ledger label", () => {
+  it("renders the configured rate (15%)", () => {
+    expect(gstLabel(1500, false)).toBe("GST (15%)");
+  });
+
+  it("renders a fractional rate (12.5%)", () => {
+    expect(gstLabel(1250, false)).toBe("GST (12.5%)");
+  });
+
+  it("defaults a null rate to 10% (pre-feature invoice)", () => {
+    expect(gstLabel(null, false)).toBe("GST (10%)");
+    expect(gstLabel(1000, false)).toBe("GST (10%)");
+  });
+
+  it("flags the embedded portion when GST-inclusive", () => {
+    expect(gstLabel(1500, true)).toBe("GST (15%) included");
+  });
+});
+
 describe("buildInvoicePdf", () => {
   it("returns a real %PDF Uint8Array that opens to >=1 page", async () => {
     const bytes = await buildInvoicePdf(invoice, lineItems, sender);
@@ -64,6 +85,7 @@ describe("buildInvoicePdf", () => {
         clientEmail: null,
         gstEnabled: false,
         gstInclusive: false,
+        gstRateBp: null,
         subtotalCents: 5000,
         gstCents: 0,
         totalCents: 5000,

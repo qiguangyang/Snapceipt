@@ -42,15 +42,28 @@ async function seedAuthed() {
   return { userId, accessToken };
 }
 
-/** Seed a business profile (15% GST + bank details) + a quote (gst_rate_bp snapshot) + 1 line item. */
-async function seedQuote(userId: string, opts: { gstRateBp?: number | null; bankDetails?: string | null } = {}) {
+/** Seed a business profile (15% GST + bank details) + a quote (gst_rate_bp snapshot) + 1 line item.
+ *  When opts.logoContentType is set, an R2 logo object is stored with that content-type and
+ *  the profile's logo_r2_key is set, so GET /q inlines it as a data-URI. */
+async function seedQuote(
+  userId: string,
+  opts: { gstRateBp?: number | null; bankDetails?: string | null; logoContentType?: string } = {},
+) {
   const profileId = uuidv7();
   const quoteId = uuidv7();
   const now = nowMs();
+  let logoKey: string | null = null;
+  if (opts.logoContentType) {
+    logoKey = `${userId}/profiles/${profileId}/logo`;
+    // JPEG (JFIF) magic bytes — content-type is what matters for the data-URI MIME.
+    await env.RECEIPTS.put(logoKey, new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), {
+      httpMetadata: { contentType: opts.logoContentType },
+    });
+  }
   await env.DB.prepare(
-    `INSERT INTO profiles (id,user_id,name,type,abn,gst_registered,accent_1,accent_2,accent_3,business_email,phone,website,address,bank_details,created_at,updated_at)
-     VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'#0E7C72','#DCF0ED','#0A5950','hi@acme.example','0400 000 000','https://acme.example','1 Main St',?,?,?)`,
-  ).bind(profileId, userId, opts.bankDetails === undefined ? "BSB 062-000 Acc 1234 5678" : opts.bankDetails, now, now).run();
+    `INSERT INTO profiles (id,user_id,name,type,abn,gst_registered,accent_1,accent_2,accent_3,business_email,phone,website,address,bank_details,logo_r2_key,created_at,updated_at)
+     VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'#0E7C72','#DCF0ED','#0A5950','hi@acme.example','0400 000 000','https://acme.example','1 Main St',?,?,?,?)`,
+  ).bind(profileId, userId, opts.bankDetails === undefined ? "BSB 062-000 Acc 1234 5678" : opts.bankDetails, logoKey, now, now).run();
   await env.DB.prepare(
     `INSERT INTO quotes (id,user_id,profile_id,number,client_name,client_email,gst_enabled,gst_inclusive,gst_rate_bp,status,valid_until,created_at,updated_at)
      VALUES (?,?,?,'SN-0001','Jane Roe','jane@example.com',1,0,?, 'draft','2026-07-04',?,?)`,
@@ -142,6 +155,15 @@ describe("GET /q/:token (public HTML quote)", () => {
     const html = await res.text();
     expect(html).toContain("GST (10%)");
     expect(html).toContain("$110.00"); // 10% on 10000 = 11000c total
+  });
+
+  it("inlines a JPEG logo as a data:image/jpeg data-URI (content-type round-trips)", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId, { logoContentType: "image/jpeg" });
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+    const html = await (await SELF.fetch(`${BASE}/q/${token}`)).text();
+    expect(html).toContain("src=\"data:image/jpeg;base64,");
+    expect(html).not.toContain("data:image/png;base64,");
   });
 
   it("omits the payment block when the profile has no bank details", async () => {

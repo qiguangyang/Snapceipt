@@ -46,7 +46,10 @@ async function seedAuthed() {
   return { userId, deviceId, accessToken };
 }
 
-async function seedInvoice(userId: string, opts: { gstInclusive?: boolean } = {}) {
+async function seedInvoice(
+  userId: string,
+  opts: { gstInclusive?: boolean; gstRateBp?: number | null } = {},
+) {
   const profileId = uuidv7();
   const invoiceId = uuidv7();
   const now = nowMs();
@@ -55,9 +58,17 @@ async function seedInvoice(userId: string, opts: { gstInclusive?: boolean } = {}
      VALUES (?,?,'Acme','business','12 345 678 901',1,'#1','#2','#3',?,?)`,
   ).bind(profileId, userId, now, now).run();
   await env.DB.prepare(
-    `INSERT INTO invoices (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,status,due_date,created_at,updated_at)
-     VALUES (?,?,?,'Jane','jane@example.com',1,?, 'draft','2026-07-03',?,?)`,
-  ).bind(invoiceId, userId, profileId, opts.gstInclusive ? 1 : 0, now, now).run();
+    `INSERT INTO invoices (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,gst_rate_bp,status,due_date,created_at,updated_at)
+     VALUES (?,?,?,'Jane','jane@example.com',1,?,?, 'draft','2026-07-03',?,?)`,
+  ).bind(
+    invoiceId,
+    userId,
+    profileId,
+    opts.gstInclusive ? 1 : 0,
+    opts.gstRateBp === undefined ? null : opts.gstRateBp,
+    now,
+    now,
+  ).run();
   await env.DB.prepare(
     `INSERT INTO invoice_line_items (id,user_id,invoice_id,description,quantity,unit_price_cents,sort_order,created_at,updated_at)
      VALUES (?,?,?,'Inspection',1,25000,0,?,?)`,
@@ -120,6 +131,52 @@ describe("POST /invoices/:id/issue", () => {
     expect(body.totalCents).toBe(105000);
     expect(body.gstCents).toBe(9545);
     expect(body.subtotalCents).toBe(95455);
+  });
+
+  it("honors a 15% gst_rate_bp (1500): $1050 ex-GST → $157.50 GST → $1207.50 total", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const { invoiceId } = await seedInvoice(userId, { gstRateBp: 1500 });
+    const body = (await (await issue(invoiceId, accessToken)).json()) as any;
+    // gross = 25000 + 2*40000 = 105000c ex-GST; 15% = 15750c GST; total 120750c.
+    expect(body.subtotalCents).toBe(105000);
+    expect(body.gstCents).toBe(15750);
+    expect(body.totalCents).toBe(120750);
+    const row = await env.DB.prepare(`SELECT gst_cents, total_cents FROM invoices WHERE id=?`)
+      .bind(invoiceId).first<any>();
+    expect(row.gst_cents).toBe(15750);
+    expect(row.total_cents).toBe(120750);
+  });
+
+  it("honors a 15% gst_rate_bp on a clean $200 ex-GST invoice → $30 GST → $230 total", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const profileId = uuidv7();
+    const invoiceId = uuidv7();
+    const now = nowMs();
+    await env.DB.prepare(
+      `INSERT INTO profiles (id,user_id,name,type,accent_1,accent_2,accent_3,created_at,updated_at)
+       VALUES (?,?,'Acme','business','#1','#2','#3',?,?)`,
+    ).bind(profileId, userId, now, now).run();
+    await env.DB.prepare(
+      `INSERT INTO invoices (id,user_id,profile_id,gst_enabled,gst_inclusive,gst_rate_bp,status,created_at,updated_at)
+       VALUES (?,?,?,1,0,1500,'draft',?,?)`,
+    ).bind(invoiceId, userId, profileId, now, now).run();
+    await env.DB.prepare(
+      `INSERT INTO invoice_line_items (id,user_id,invoice_id,description,quantity,unit_price_cents,sort_order,created_at,updated_at)
+       VALUES (?,?,?,'Service',1,20000,0,?,?)`,
+    ).bind(uuidv7(), userId, invoiceId, now, now).run();
+    const body = (await (await issue(invoiceId, accessToken)).json()) as any;
+    expect(body.subtotalCents).toBe(20000);
+    expect(body.gstCents).toBe(3000);
+    expect(body.totalCents).toBe(23000);
+  });
+
+  it("REGRESSION: a null gst_rate_bp defaults to 10% (pre-feature invoice)", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const { invoiceId } = await seedInvoice(userId, { gstRateBp: null });
+    const body = (await (await issue(invoiceId, accessToken)).json()) as any;
+    expect(body.subtotalCents).toBe(105000);
+    expect(body.gstCents).toBe(10500);
+    expect(body.totalCents).toBe(115500);
   });
 
   it("is IDEMPOTENT: a re-issue keeps INV-0001 + the original issued_at (no new mint)", async () => {

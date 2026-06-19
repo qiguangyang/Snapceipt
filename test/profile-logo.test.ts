@@ -50,6 +50,7 @@ async function seedProfile(userId: string) {
 }
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PNG magic
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]); // JPEG (JFIF) magic
 
 describe("POST /profile/logo", () => {
   it("stores the logo to R2 and sets logo_r2_key", async () => {
@@ -71,6 +72,24 @@ describe("POST /profile/logo", () => {
 
     const obj = await env.RECEIPTS.get(`${userId}/profiles/${profileId}/logo`);
     expect(obj).not.toBeNull();
+    expect(obj!.httpMetadata?.contentType).toBe("image/png");
+    await obj!.arrayBuffer();
+  });
+
+  it("round-trips a JPEG content-type to R2 (not hardcoded png)", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const profileId = await seedProfile(userId);
+
+    const res = await SELF.fetch(`${BASE}/profile/logo?profileId=${profileId}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "image/jpeg" },
+      body: JPEG,
+    });
+    expect(res.status).toBe(200);
+
+    const obj = await env.RECEIPTS.get(`${userId}/profiles/${profileId}/logo`);
+    expect(obj).not.toBeNull();
+    expect(obj!.httpMetadata?.contentType).toBe("image/jpeg");
     await obj!.arrayBuffer();
   });
 
