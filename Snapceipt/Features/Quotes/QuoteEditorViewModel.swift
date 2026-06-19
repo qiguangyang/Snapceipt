@@ -86,6 +86,14 @@ final class QuoteEditorViewModel {
                             gstInclusive: gstInclusive, gstRateBp: gstRateBp ?? profileGstRateBp)
     }
 
+    /// The GST rate (bp) this quote actually uses: its snapshot, else the profile default.
+    var effectiveGstRateBp: Int { gstRateBp ?? profileGstRateBp }
+    /// Percent text for the GST line label, e.g. "10", "15", "12.5".
+    var gstRatePercentText: String {
+        let pct = Double(effectiveGstRateBp) / 100.0
+        return pct == pct.rounded() ? String(Int(pct)) : String(pct)
+    }
+
     var canSend: Bool {
         !(clientName ?? "").trimmingCharacters(in: .whitespaces).isEmpty && !lineItems.isEmpty
     }

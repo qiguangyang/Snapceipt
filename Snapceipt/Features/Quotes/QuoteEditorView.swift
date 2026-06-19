@@ -285,7 +285,7 @@ struct QuoteEditorView: View {
                 // Toggle (XCUI queries app.switches[quoteEditorGst]); .labelsHidden() +
                 // income tint = the design's 42×26 income pill.
                 HStack {
-                    Text(inclusive ? "GST (10%) included" : "GST (10%)")
+                    Text(inclusive ? "GST (\(vm.gstRatePercentText)%) included" : "GST (\(vm.gstRatePercentText)%)")
                         .font(.ui(13.5)).foregroundStyle(Palette.ink2)
                     Spacer()
                     if vm.gstEnabled {

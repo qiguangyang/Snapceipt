@@ -15,6 +15,20 @@ struct QuoteEditorViewModelTests {
         QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
     }
 
+    @Test("a new quote uses the active profile's GST rate (15%) for totals + label")
+    func newQuoteUsesProfileRate() throws {
+        let (ctx, sync) = try makeFixture()
+        ctx.insert(Profile(id: "p1", userId: "u1", name: "Biz", type: "business",
+                           accent1: "FF6B35", accent2: "0E7C72", accent3: "5B6CFF", gstRateBp: 1500))
+        try ctx.save()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 200_00   // $200 ex-GST
+        #expect(v.gstRatePercentText == "15")
+        #expect(v.totals.gst == 30_00)      // 15% of $200, NOT 10% ($20)
+        #expect(v.totals.total == 230_00)
+    }
+
     @Test("load(nil) starts a fresh draft: empty lines, gst on, no client, not sendable")
     func loadNew() throws {
         let (ctx, sync) = try makeFixture()

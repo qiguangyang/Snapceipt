@@ -275,7 +275,7 @@ struct InvoiceEditorView: View {
                 totalRow(inclusive ? "Subtotal (ex GST)" : "Subtotal", fmt(t.subtotal))
                 Divider().overlay(Palette.line2)
                 HStack {
-                    Text(inclusive ? "GST (10%) included" : "GST (10%)").font(.ui(13.5)).foregroundStyle(Palette.ink2)
+                    Text(inclusive ? "GST (\(vm.gstRatePercentText)%) included" : "GST (\(vm.gstRatePercentText)%)").font(.ui(13.5)).foregroundStyle(Palette.ink2)
                     Spacer()
                     if vm.gstEnabled { Text(fmt(t.gst)).font(.ui(14, .semibold)).foregroundStyle(Palette.ink).monospacedDigit() }
                     Toggle("", isOn: Binding(get: { vm.gstEnabled },
