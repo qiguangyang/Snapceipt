@@ -250,9 +250,11 @@ final class LiveAPIClient: APIClient {
     }
 
     func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse {
+        // `ImageReducer` emits JPEG bytes (the `png` arg is historically named); send the
+        // matching content-type so the backend stores + serves the real type.
         let data = try await performRawImage("/profile/logo",
                                              query: [URLQueryItem(name: "profileId", value: profileId)],
-                                             bytes: png, contentType: "image/png")
+                                             bytes: png, contentType: "image/jpeg")
         do { return try decoder.decode(UploadProfileLogoResponse.self, from: data) }
         catch { throw APIError.decoding }
     }

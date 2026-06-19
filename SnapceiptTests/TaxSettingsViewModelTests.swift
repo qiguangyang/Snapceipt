@@ -19,7 +19,7 @@ struct TaxSettingsViewModelTests {
     @Test("loads the row and persists an edited meals % via enqueue")
     func editMeals() throws {
         let (ctx, sync, p) = try fixture(type: "business")
-        let vm = TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p)
+        let vm = TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p, api: MockAPIClient())
         #expect(vm.mealsDeductiblePct == 50)
         vm.setMealsDeductiblePct(80)
         #expect(vm.mealsDeductiblePct == 80)
@@ -33,16 +33,16 @@ struct TaxSettingsViewModelTests {
     @Test("business shows identity; personal hides it")
     func identityVisibility() throws {
         let (ctx, sync, biz) = try fixture(type: "business")
-        #expect(TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: biz).showsBusinessIdentity == true)
+        #expect(TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: biz, api: MockAPIClient()).showsBusinessIdentity == true)
         let p = Profile(userId: "u1", name: "Personal", type: "personal", accent1: "#0", accent2: "#1", accent3: "#2")
         ctx.insert(p); ctx.insert(TaxSettings(userId: "u1", profileId: p.id)); try ctx.save()
-        #expect(TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p).showsBusinessIdentity == false)
+        #expect(TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p, api: MockAPIClient()).showsBusinessIdentity == false)
     }
 
     @Test("editing GST + ABN writes to the Profile and FY start to tax_settings")
     func gstAndFy() throws {
         let (ctx, sync, p) = try fixture(type: "business")
-        let vm = TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p)
+        let vm = TaxSettingsViewModel(context: ctx, sync: sync, userId: "u1", profile: p, api: MockAPIClient())
         vm.setGstRegistered(true)
         vm.setAbn("12 345 678 901")
         vm.setFinancialYearStartMonth(4)

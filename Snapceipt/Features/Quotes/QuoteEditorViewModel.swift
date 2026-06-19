@@ -288,7 +288,10 @@ final class QuoteEditorViewModel {
                               gstEnabled: gstEnabled, gstInclusive: gstInclusive,
                               subtotalCents: t.subtotal, gstCents: t.gst, totalCents: t.total,
                               currency: quote.currency,
-                              status: "draft", dueDate: due)
+                              status: "draft", dueDate: due,
+                              // Snapshot the quote's GST rate onto the invoice so it stays
+                              // consistent with the quote it came from (spec §3).
+                              gstRateBp: quote.gstRateBp)
         context.insert(invoice)
 
         var clonedLines: [InvoiceLineItem] = []

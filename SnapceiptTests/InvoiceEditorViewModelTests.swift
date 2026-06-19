@@ -142,6 +142,28 @@ struct InvoiceEditorViewModelTests {
         #expect(v.emailed == false)
     }
 
+    @Test("fresh invoice uses the profile GST rate (15%) for totals + snapshots it on save")
+    func freshInvoiceUsesProfileRate() throws {
+        let (ctx, sync) = try makeFixture()
+        // A 15% (NZ) profile keyed "p1" — the rate the VM resolves for a fresh invoice.
+        let p = Profile(userId: "u1", name: "Biz", type: "business",
+                        accent1: "#0", accent2: "#1", accent3: "#2", gstRateBp: 1500)
+        p.id = "p1"
+        ctx.insert(p); try ctx.save()
+
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 200_00   // $200 ex-GST
+        // 15% of $200 = $30 GST; total $230.
+        #expect(v.totals.gst == 30_00)
+        #expect(v.totals.total == 230_00)
+        v.saveDraft()
+        #expect(v.gstRateBp == 1500)
+        let inv = try ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.deletedAt == nil }))[0]
+        #expect(inv.gstRateBp == 1500)
+        #expect(inv.gstCents == 30_00)
+    }
+
     @Test("badge derives from the invoice's payments (issued + partial)")
     func badge() throws {
         let (ctx, sync) = try makeFixture()

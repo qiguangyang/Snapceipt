@@ -90,6 +90,23 @@ struct QuoteConvertTests {
         #expect(sync.calls.filter { $0.entityType == .invoiceLineItem && $0.op == "upsert" }.count == 2)
     }
 
+    @Test("convertToInvoice snapshots the quote's GST rate (15%) onto the invoice")
+    func convertSnapshotsRate() throws {
+        let (ctx, sync) = try makeFixture()
+        // A 15% (NZ) profile keyed "p1" — the rate the quote snapshots on save.
+        let p = Profile(userId: "u1", name: "Biz", type: "business",
+                        accent1: "#0", accent2: "#1", accent3: "#2", gstRateBp: 1500)
+        p.id = "p1"
+        ctx.insert(p); try ctx.save()
+
+        let v = sentQuote(ctx, sync)
+        #expect(v.gstRateBp == 1500)            // quote snapshotted the 15% rate
+        let invId = v.convertToInvoice()
+        #expect(invId != nil)
+        let inv = try ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == invId! }))[0]
+        #expect(inv.gstRateBp == 1500)          // invoice inherits the quote's rate
+    }
+
     @Test("convert is idempotent: a second convert returns the same invoice id, no second invoice")
     func convertIdempotent() throws {
         let (ctx, sync) = try makeFixture()

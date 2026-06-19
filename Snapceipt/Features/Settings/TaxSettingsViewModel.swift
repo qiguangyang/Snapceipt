@@ -59,7 +59,7 @@ final class TaxSettingsViewModel {
     var nextBasDue: Date { BasSchedule.nextDue(basPeriod, on: Date()) }
 
     init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profile: Profile,
-         api: APIClient = StubAPIClient(), defaults: UserDefaults = .standard) {
+         api: APIClient, defaults: UserDefaults = .standard) {
         self.context = context
         self.sync = sync
         self.userId = userId
