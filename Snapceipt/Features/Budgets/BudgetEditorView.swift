@@ -105,6 +105,18 @@ struct BudgetEditorView: View {
                     capText = String(b.capCents / 100)
                     threshold = Double(b.alertThresholdPct)
                 } else {
+                    // Adding: a whole-profile budget is unique. If one already exists,
+                    // defaulting Scope to "Whole profile" is a disabled-Save dead-end — so
+                    // default to Category and preselect the first category without a budget.
+                    if model.existingBudget(scopeCategory: false, catKey: "") != nil {
+                        scopeCategory = true
+                        scopeSelection = "category"
+                        if let free = CategoryKey.allCases.first(where: {
+                            $0 != .income && model.existingBudget(scopeCategory: true, catKey: $0.rawValue) == nil
+                        }) {
+                            catKey = free.rawValue
+                        }
+                    }
                     applyDefaultLabel()
                 }
             }
