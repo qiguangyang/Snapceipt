@@ -15,6 +15,7 @@ import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
 import { invoicesRoutes } from "./routes/invoices";
 import { inboxRoutes } from "./routes/inbox";
+import { profileRoutes } from "./routes/profile";
 import { accountRoutes } from "./routes/account";
 import { crashReportRoutes } from "./routes/crashReports";
 import { appstoreRoutes } from "./routes/appstore";
@@ -87,6 +88,10 @@ app.use("/invoices", rateLimit("quotes"));
 app.use("/invoices/*", rateLimit("quotes"));
 // Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
 app.use("/profiles/*", rateLimit("inbox"));
+// Business-profile asset upload (logo) — default tier. Auth-gated (NOT in PUBLIC_PATHS).
+// Mount on BOTH the exact path AND the wildcard so the POST is limited.
+app.use("/profile", rateLimit("default"));
+app.use("/profile/*", rateLimit("default"));
 // Account ops (change email / delete account) — tight per-user tier. Auth-gated.
 app.use("/users/*", rateLimit("account"));
 app.use("/account", rateLimit("account"));
@@ -114,6 +119,8 @@ app.route("/quotes", quotesRoutes);
 app.route("/invoices", invoicesRoutes);
 // Protected: per-profile inbox alias (GET mint + POST rotate).
 app.route("/profiles", inboxRoutes);
+// Protected: business-profile assets (POST /profile/logo -> R2 + logo_r2_key).
+app.route("/profile", profileRoutes);
 // Protected: iOS MetricKit crash/hang ingest (server-only crash_reports table).
 app.route("/crash-reports", crashReportRoutes);
 // Protected: account ops (change email via code, delete account).
