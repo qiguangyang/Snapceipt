@@ -61,9 +61,9 @@ it. We add a cursor and a `move`:
   needs no change.
 - **Bounds:** `canGoForward = periodOffset < 0`. `canGoBack = periodOffset > earliestOffset`.
   `earliestOffset` is a **shared pure function**
-  (`BasHistory.earliestOffset(txns:lodgedLookup:basPeriod:startMonth:now:cap:)`, `cap = 12`
-  quarterly / `36` monthly) used by BOTH the VM (`canGoBack`) and the history builder (§4) so they
-  can never disagree. It returns `max(capFloor, deepestDataOffset)` (both ≤ 0) where
+  (`BasHistory.earliestOffset(txns:lodged:basPeriod:startMonth:now:)` — `cap = 12`
+  quarterly / `36` monthly, derived internally from `basPeriod`) used by BOTH the VM (`canGoBack`)
+  and the history builder (§4) so they can never disagree. It returns `max(capFloor, deepestDataOffset)` (both ≤ 0) where
   `capFloor = -(cap-1)` and `deepestDataOffset` = the furthest-back offset **within the cap** whose
   period has a transaction **or** a lodged snapshot (`0` if neither — no history). This keeps us
   inside the 3-year cap **and** stops at the earliest period the user actually has history for
