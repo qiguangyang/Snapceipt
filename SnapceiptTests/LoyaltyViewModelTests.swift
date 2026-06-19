@@ -142,6 +142,31 @@ struct AddLoyaltyViewModelTests {
         #expect(sync.calls[0].entityType == .loyaltyCard)
     }
 
+    @Test("applyScan with no brand chosen defaults to Custom so a direct scan is addable")
+    func applyScanDefaultsBrand() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.applyScan(value: "2798326381610", format: .qr)
+        #expect(v.number == "2798326381610")
+        #expect(v.format == .qr)
+        #expect(v.selectedBrand?.key == "custom")
+        #expect(v.canSave == false)        // Custom still needs a name…
+        v.customName = "flybuys"
+        #expect(v.canSave == true)         // …then it's addable.
+    }
+
+    @Test("applyScan keeps an already-chosen brand")
+    func applyScanKeepsBrand() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        let brand = LoyaltyBrand.catalog.first { $0.key == "everydayRewards" }!
+        v.selectedBrand = brand
+        v.applyScan(value: "9352999000000", format: .ean13)
+        #expect(v.selectedBrand?.key == "everydayRewards")   // unchanged
+        #expect(v.number == "9352999000000")
+        #expect(v.format == .ean13)
+    }
+
     @Test("custom brand uses the typed name + neutral colors")
     func saveCustom() throws {
         let (ctx, sync) = try makeFixture()
