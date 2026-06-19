@@ -13,8 +13,10 @@ import { imageRoutes } from "./routes/images";
 import { extractRoutes } from "./routes/extract";
 import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
+import { quoteLinkRoutes } from "./routes/quoteLink";
 import { invoicesRoutes } from "./routes/invoices";
 import { inboxRoutes } from "./routes/inbox";
+import { profileRoutes } from "./routes/profile";
 import { accountRoutes } from "./routes/account";
 import { crashReportRoutes } from "./routes/crashReports";
 import { appstoreRoutes } from "./routes/appstore";
@@ -73,13 +75,14 @@ app.use("/images/*", rateLimit("default"));
 // normal accountant opening a 7-day link is well under the cap.
 app.use("/export", rateLimit("export"));
 app.use("/export/*", rateLimit("export"));
-// Quote send — PDF build + email; 60/hr. Mount on BOTH the exact path
+// Quote link/send — mint number + email; 60/hr. Mount on BOTH the exact path
 // (POST /quotes/:id/send) AND the wildcard so the limiter runs for the actual
-// POST too. The wildcard also covers the public GET /quotes/dl/* download:
-// since that route is unauthenticated, the "quotes" tier (dimension: user)
-// falls back to IP-keyed limiting on the public endpoint.
+// POST too. The `/q/*` public HTML page is rate-limited separately below.
 app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
+// Public HTML quote page — GET /q/:token. Unauthenticated; the default tier's
+// per-user limiter falls back to IP-keyed limiting on this public endpoint.
+app.use("/q/*", rateLimit("default"));
 // Invoice issue/send/pdf — PDF build + email; reuse the "quotes" tier (60/hr).
 // Mount on BOTH the exact path AND the wildcard so the limiter runs for the POSTs;
 // the wildcard also IP-limits the public GET /invoices/dl/* download.
@@ -87,6 +90,10 @@ app.use("/invoices", rateLimit("quotes"));
 app.use("/invoices/*", rateLimit("quotes"));
 // Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
 app.use("/profiles/*", rateLimit("inbox"));
+// Business-profile asset upload (logo) — default tier. Auth-gated (NOT in PUBLIC_PATHS).
+// Mount on BOTH the exact path AND the wildcard so the POST is limited.
+app.use("/profile", rateLimit("default"));
+app.use("/profile/*", rateLimit("default"));
 // Account ops (change email / delete account) — tight per-user tier. Auth-gated.
 app.use("/users/*", rateLimit("account"));
 app.use("/account", rateLimit("account"));
@@ -108,12 +115,14 @@ app.route("/images", imageRoutes);
 app.route("/extract", extractRoutes);
 // Protected: POST /export (+ public GET /export/dl/:token via PUBLIC_PATHS).
 app.route("/export", exportRoutes);
-// Protected: POST /quotes/:id/send (+ public GET /quotes/dl/:token via PUBLIC_PATHS).
+// Protected: POST /quotes/:id/send + POST /quotes/:id/link.
 app.route("/quotes", quotesRoutes);
 // Protected: POST /invoices/:id/issue|send|pdf (+ public GET /invoices/dl/:token via PUBLIC_PATHS).
 app.route("/invoices", invoicesRoutes);
 // Protected: per-profile inbox alias (GET mint + POST rotate).
 app.route("/profiles", inboxRoutes);
+// Protected: business-profile assets (POST /profile/logo -> R2 + logo_r2_key).
+app.route("/profile", profileRoutes);
 // Protected: iOS MetricKit crash/hang ingest (server-only crash_reports table).
 app.route("/crash-reports", crashReportRoutes);
 // Protected: account ops (change email via code, delete account).
@@ -121,6 +130,8 @@ app.route("/", accountRoutes);
 // Protected: POST /me/subscription — purchase link (StoreKit tx → backend).
 app.use("/me/*", rateLimit("account"));
 app.route("/me/subscription", subscriptionRoutes);
+// Public: GET /q/:token — hosted HTML quote page (via PUBLIC_PATHS).
+app.route("/q", quoteLinkRoutes);
 // Public unauthenticated webhook — IP-keyed via the default tier's fallback
 // (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
 app.use("/appstore/*", rateLimit("default"));

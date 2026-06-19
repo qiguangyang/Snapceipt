@@ -273,6 +273,13 @@ private struct ProfileSyncMapper: SyncRowMapper {
         if let v = env.bool("gstRegistered") { row.gstRegistered = v }
         if let v = env.int("sortOrder") { row.sortOrder = v }
         if let v = env.bool("isDefault") { row.isDefault = v }
+        if let v = env.int("gstRateBp") { row.gstRateBp = v }
+        if let v = env.string("businessEmail") { row.businessEmail = v }
+        if let v = env.string("phone") { row.phone = v }
+        if let v = env.string("website") { row.website = v }
+        if let v = env.string("address") { row.addressText = v }
+        if let v = env.string("bankDetails") { row.bankDetails = v }
+        if let v = env.string("logoR2Key") { row.logoR2Key = v }
     }
 
     func payload(_ r: Profile) -> [String: JSONValue] {
@@ -287,6 +294,14 @@ private struct ProfileSyncMapper: SyncRowMapper {
         f["gstRegistered"] = boolv(r.gstRegistered)
         f["sortOrder"] = num(r.sortOrder)
         f["isDefault"] = boolv(r.isDefault)
+        f["gstRateBp"] = num(r.gstRateBp)
+        f["businessEmail"] = str(r.businessEmail)
+        f["phone"] = str(r.phone)
+        f["website"] = str(r.website)
+        f["address"] = str(r.addressText)   // wire key `address` ↔ model `addressText`
+        f["bankDetails"] = str(r.bankDetails)
+        // logoR2Key is server-owned (set on POST /profile/logo): pull-only — decode it,
+        // never encode it, so a follow-up push can't clobber the server value to NULL.
         return f
     }
 }
@@ -532,6 +547,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         if let v = env.int("sentAt") { row.sentAt = v }
         if let v = env.string("pdfR2Key") { row.pdfR2Key = v }
         if let v = env.string("invoiceId") { row.invoiceId = v }
+        if let v = env.int("gstRateBp") { row.gstRateBp = v }
     }
 
     func payload(_ r: Quote) -> [String: JSONValue] {
@@ -551,6 +567,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
         // pdfR2Key is server-owned (set on POST /quotes/:id/pdf): pull-only — decode it,
         // never encode it, so a follow-up push can't clobber the server value to NULL.
         f["invoiceId"] = str(r.invoiceId)
+        f["gstRateBp"] = num(r.gstRateBp)
         return f
     }
 }
@@ -867,6 +884,7 @@ private struct InvoiceSyncMapper: SyncRowMapper {
         if let v = env.string("dueDate") { row.dueDate = v }
         if let v = env.int("issuedAt") { row.issuedAt = v }
         if let v = env.string("pdfR2Key") { row.pdfR2Key = v }
+        if let v = env.int("gstRateBp") { row.gstRateBp = v }
     }
 
     func payload(_ r: Invoice) -> [String: JSONValue] {
@@ -885,6 +903,7 @@ private struct InvoiceSyncMapper: SyncRowMapper {
         f["issueDate"] = str(r.issueDate)
         f["dueDate"] = str(r.dueDate)
         f["issuedAt"] = num(r.issuedAt)
+        f["gstRateBp"] = num(r.gstRateBp)
         // pdfR2Key is server-owned (set on POST /invoices/:id/issue and /invoices/:id/pdf):
         // pull-only — decode it, never encode it, so a follow-up push can't clobber it to NULL.
         return f

@@ -345,6 +345,53 @@ describe("POST /sync/push", () => {
     expect(row.rev).toBe(1);
   });
 
+  it("persists the new profile GST + business columns through a push upsert", async () => {
+    const profileId = uuidv7();
+    const now = Date.now();
+    const mutation = {
+      mutationId: uuidv7(),
+      entityType: "profile",
+      entityId: profileId,
+      op: "upsert" as const,
+      updatedAt: now,
+      payload: {
+        id: profileId,
+        userId: USER_ID,
+        type: "profile",
+        name: "Acme Pty Ltd",
+        profileType: "business",
+        accent1: "#0E7C72",
+        accent2: "#DCF0ED",
+        accent3: "#0A5950",
+        gstRateBp: 1500,
+        businessEmail: "hi@acme.example",
+        phone: "0400 000 000",
+        website: "https://acme.example",
+        address: "1 Main St",
+        bankDetails: "BSB 062-000 Acc 1234 5678",
+        logoR2Key: "u/x/profiles/p/logo",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        rev: 0,
+        lastEditedDeviceId: DEVICE_ID,
+      } as Record<string, unknown>,
+    };
+    const res = await push({ deviceId: DEVICE_ID, mutations: [mutation] });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as any;
+    expect(json.results[0].status).toBe("applied");
+
+    const row = await env.DB.prepare(
+      `SELECT gst_rate_bp, business_email, phone, website, address, bank_details, logo_r2_key
+         FROM profiles WHERE id = ?`,
+    ).bind(profileId).first<any>();
+    expect(row.gst_rate_bp).toBe(1500);
+    expect(row.business_email).toBe("hi@acme.example");
+    expect(row.bank_details).toBe("BSB 062-000 Acc 1234 5678");
+    expect(row.logo_r2_key).toBe("u/x/profiles/p/logo");
+  });
+
   it("persists transaction gst_free/capital/gst_source to D1", async () => {
     const txnId = uuidv7();
     const m = txnMutation({ entityId: txnId });
@@ -729,6 +776,22 @@ describe("syncable table map", () => {
     const q = tableForEntityType("quote")!;
     expect(q.columns.pdfR2Key).toBe("pdf_r2_key");
     expect(q.columns.invoiceId).toBe("invoice_id");
+  });
+
+  it("maps the new profile GST + business columns (migration 0010)", () => {
+    const p = tableForEntityType("profile")!;
+    expect(p.columns.gstRateBp).toBe("gst_rate_bp");
+    expect(p.columns.businessEmail).toBe("business_email");
+    expect(p.columns.phone).toBe("phone");
+    expect(p.columns.website).toBe("website");
+    expect(p.columns.address).toBe("address");
+    expect(p.columns.bankDetails).toBe("bank_details");
+    expect(p.columns.logoR2Key).toBe("logo_r2_key");
+  });
+
+  it("maps the new quote + invoice gstRateBp columns (migration 0010)", () => {
+    expect(tableForEntityType("quote")!.columns.gstRateBp).toBe("gst_rate_bp");
+    expect(tableForEntityType("invoice")!.columns.gstRateBp).toBe("gst_rate_bp");
   });
 
   it("maps the new mileageTrip logbook columns", () => {

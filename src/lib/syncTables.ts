@@ -68,6 +68,14 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       gstRegistered: "gst_registered",
       sortOrder: "sort_order",
       isDefault: "is_default",
+      // Migration 0010: configurable GST rate + business details + logo key.
+      gstRateBp: "gst_rate_bp",
+      businessEmail: "business_email",
+      phone: "phone",
+      website: "website",
+      address: "address",
+      bankDetails: "bank_details",
+      logoR2Key: "logo_r2_key",
     },
   },
   category: {
@@ -153,6 +161,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       sentAt: "sent_at",
       pdfR2Key: "pdf_r2_key",
       invoiceId: "invoice_id",
+      gstRateBp: "gst_rate_bp",
     },
   },
   quoteLineItem: {
@@ -185,6 +194,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       dueDate: "due_date",
       issuedAt: "issued_at",
       pdfR2Key: "pdf_r2_key",
+      gstRateBp: "gst_rate_bp",
     },
   },
   invoiceLineItem: {

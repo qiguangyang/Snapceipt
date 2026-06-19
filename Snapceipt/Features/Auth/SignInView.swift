@@ -197,12 +197,14 @@ final class PreviewAPIClient: APIClient {
         UpdateDeviceResponse(id: "preview-device")
     }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
-        SendQuoteResponse(number: "SN-0001", sentAt: 1_790_000_000_000, status: "sent",
-                          subtotalCents: 0, gstCents: 0, totalCents: 0,
-                          pdfUrl: nil, expiresAt: nil, emailed: false)
+        SendQuoteResponse(url: "https://api.snapceipt.cc/q/preview-token", emailed: false,
+                          number: "SN-0001")
     }
-    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
-        GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/preview-token", number: "SN-0001", expiresAt: nil)
+    func quoteShareLink(_ id: String) async throws -> QuoteShareLinkResponse {
+        QuoteShareLinkResponse(url: "https://api.snapceipt.cc/q/preview-token", number: "SN-0001")
+    }
+    func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse {
+        UploadProfileLogoResponse(logoR2Key: "\(profileId)/profiles/preview/logo")
     }
     func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
         IssueInvoiceResponse(pdfUrl: "/invoices/dl/preview-token", number: "INV-0001",

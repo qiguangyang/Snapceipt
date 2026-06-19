@@ -147,7 +147,7 @@ export async function sendExportEmail(env: Env, msg: ExportEmail): Promise<void>
   await env.EMAIL.send(message);
 }
 
-/** The quote-send email (PDF attachment). */
+/** The quote-send email (a link to the hosted HTML quote, no attachment). */
 export interface QuoteEmail {
   to: string;
   /** The trader's own email — set as Reply-To so the client replies to them. */
@@ -155,52 +155,30 @@ export interface QuoteEmail {
   quoteNumber: string;
   clientName: string | null;
   totalCents: number;
-  pdf: Uint8Array;
+  /** The hosted HTML quote URL (https://api.snapceipt.cc/q/<token>). */
+  url: string;
 }
 
-/** PDF attachment ceiling — Cloudflare Email Send caps the message. */
-const MAX_QUOTE_PDF_BYTES = 25 * 1024 * 1024; // 25 MiB
-
 /**
- * Send the quote email with the PDF attached (spec §5). Mirrors sendExportEmail:
- * mimetext/browser MIME (self-contained, workerd-safe), base64 PDF attachment,
- * cloudflare:email EmailMessage(from,to,raw) + env.EMAIL.send. `from` is the
- * magic-link sender (the only allowed_sender_addresses entry); Reply-To is the
- * trader so the client replies to them. Stubbed in route tests via
- * vi.spyOn(emailModule, "sendQuoteEmail"). The route GATES this on env.EMAIL.
+ * Send the quote email with a LINK to the hosted HTML quote (spec §4/§5 — no PDF
+ * attachment). Mirrors sendMagicLinkEmail's plain-text SendEmail builder path (no
+ * mimetext/cloudflare:email needed for a link-only message). `from` is the magic-link
+ * sender; Reply-To is the trader so the client replies to them. Stubbed in route tests
+ * via vi.spyOn(emailModule, "sendQuoteEmail").
  */
 export async function sendQuoteEmail(env: Env, msg: QuoteEmail): Promise<void> {
-  if (msg.pdf.byteLength > MAX_QUOTE_PDF_BYTES) {
-    throw new Error(`quote PDF exceeds ${MAX_QUOTE_PDF_BYTES} bytes`);
-  }
-
-  const { createMimeMessage, Mailbox } = await import("mimetext/browser");
-  const { EmailMessage } = await import("cloudflare:email");
-
   const total = `$${(msg.totalCents / 100).toFixed(2)}`;
   const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
-
-  const mime = createMimeMessage();
-  mime.setSender({ name: "Snapceipt", addr: MAGIC_LINK_SENDER });
-  mime.setRecipient(msg.to);
-  mime.setHeader("Reply-To", new Mailbox(msg.replyTo, { type: "Reply-To" } as any));
-  mime.setSubject(`Quote ${msg.quoteNumber} — ${total}`);
-  mime.addMessage({
-    contentType: "text/plain",
-    data:
+  await env.EMAIL.send({
+    from: { name: "Snapceipt", email: MAGIC_LINK_SENDER },
+    to: msg.to,
+    replyTo: msg.replyTo,
+    subject: `Quote ${msg.quoteNumber} — ${total}`,
+    text:
       `${greeting}\n\n` +
-      `Please find attached quote ${msg.quoteNumber} for ${total}.\n\n` +
+      `View your quote ${msg.quoteNumber} for ${total} here:\n\n${msg.url}\n\n` +
       `Reply to this email if you have any questions.\n`,
   });
-  mime.addAttachment({
-    filename: `quote-${msg.quoteNumber}.pdf`,
-    contentType: "application/pdf",
-    encoding: "base64",
-    data: base64Bytes(msg.pdf),
-  });
-
-  const message = new EmailMessage(MAGIC_LINK_SENDER, msg.to, mime.asRaw());
-  await env.EMAIL.send(message);
 }
 
 /** The invoice-send email (tax-invoice PDF attachment). */

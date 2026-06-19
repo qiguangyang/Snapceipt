@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 /// Tax & GST editor (F7). Bound to `TaxSettingsViewModel` over the active profile's
 /// `tax_settings` row (+ the Profile's ABN/GST identity). Mirrors the shared sub-page
@@ -11,6 +12,7 @@ import SwiftData
 struct TaxSettingsView: View {
     let profiles: ProfilesStore
     let sync: any SyncEnqueuing
+    let api: APIClient
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
@@ -19,6 +21,12 @@ struct TaxSettingsView: View {
     // Local edit mirrors for the text fields (committed to the VM on change).
     @State private var abnText = ""
     @State private var wfhText = ""
+    @State private var businessEmailText = ""
+    @State private var phoneText = ""
+    @State private var websiteText = ""
+    @State private var addressTextField = ""
+    @State private var bankDetailsText = ""
+    @State private var logoItem: PhotosPickerItem?
 
     /// Pin the calendar's locale to en-AU so `monthSymbols` resolves to full English
     /// month names ("July"), not the generic ISO placeholders ("M07") the runtime
@@ -42,7 +50,11 @@ struct TaxSettingsView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
                             statPills(vm)
-                            if vm.showsBusinessIdentity { businessIdentity(vm) }
+                            if vm.showsBusinessIdentity {
+                                businessIdentity(vm)
+                                businessDetails(vm)
+                                bankDetails(vm)
+                            }
                             financialYear(vm)
                             deductionDefaults(vm)
                         }
@@ -58,9 +70,14 @@ struct TaxSettingsView: View {
         .task {
             if vm == nil, let profile = profiles.profiles.first(where: { $0.id == profiles.activeProfileId }) {
                 let model = TaxSettingsViewModel(context: profiles.context, sync: sync,
-                                                 userId: profiles.userId, profile: profile)
+                                                 userId: profiles.userId, profile: profile, api: api)
                 abnText = model.abn
                 wfhText = String(model.wfhRateCentsPerHour)
+                businessEmailText = model.businessEmail
+                phoneText = model.phone
+                websiteText = model.website
+                addressTextField = model.addressText
+                bankDetailsText = model.bankDetails
                 vm = model
             }
         }
@@ -141,8 +158,134 @@ struct TaxSettingsView: View {
                     .font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
                     .accessibilityIdentifier(AccessibilityID.taxGstToggle)
                 divider
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("GST rate").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+                    Picker("GST rate", selection: Binding(
+                        get: { vm.gstRatePreset },
+                        set: { vm.setGstRatePreset($0) })) {
+                            ForEach(GstRatePreset.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier(AccessibilityID.taxGstRateControl)
+                    if vm.gstRatePreset == .custom {
+                        HStack(spacing: 6) {
+                            TextField("12.5", text: Binding(
+                                get: { vm.gstRatePercentText },
+                                set: { if let pct = Double($0) { vm.setCustomGstPercent(pct) } }))
+                                .keyboardType(.decimalPad)
+                                .font(.ui(16, .regular))
+                                .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                                .accessibilityIdentifier(AccessibilityID.taxGstRateCustom)
+                            Text("%").font(.ui(16)).foregroundStyle(Palette.ink2)
+                        }
+                    }
+                }
+                divider
                 menuRow(title: "GST accounting", value: vm.gstBasis, options: gstBases) { vm.gstBasis = $0 }
             }
+        }
+    }
+
+    // MARK: - Business details + Bank details (Business profiles only)
+
+    @ViewBuilder private func businessDetails(_ vm: TaxSettingsViewModel) -> some View {
+        groupLabel("Business details")
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                labeledField("Business email", placeholder: "you@business.com",
+                             text: $businessEmailText, id: AccessibilityID.taxBusinessEmailField,
+                             keyboard: .emailAddress) { vm.setBusinessEmail($0) }
+                divider
+                labeledField("Phone", placeholder: "0400 000 000",
+                             text: $phoneText, id: AccessibilityID.taxBusinessPhoneField,
+                             keyboard: .phonePad) { vm.setPhone($0) }
+                divider
+                labeledField("Website", placeholder: "yourbusiness.com",
+                             text: $websiteText, id: AccessibilityID.taxBusinessWebsiteField,
+                             keyboard: .URL) { vm.setWebsite($0) }
+                divider
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Address").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+                    TextField("Street, suburb, state", text: $addressTextField, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(.ui(16, .regular))
+                        .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                        .onChange(of: addressTextField) { _, v in vm.setAddressText(v) }
+                        .accessibilityIdentifier(AccessibilityID.taxBusinessAddressField)
+                }
+                divider
+                logoRow(vm)
+            }
+        }
+    }
+
+    @ViewBuilder private func logoRow(_ vm: TaxSettingsViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Logo").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+            HStack(spacing: 12) {
+                if vm.isUploadingLogo {
+                    ProgressView().frame(width: 48, height: 48)
+                } else if vm.logoR2Key != nil {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 28))
+                        .foregroundStyle(accent.base).frame(width: 48, height: 48)
+                        .accessibilityIdentifier(AccessibilityID.taxBusinessLogoPreview)
+                } else {
+                    Image(systemName: "photo").font(.system(size: 24)).foregroundStyle(Palette.ink3)
+                        .frame(width: 48, height: 48)
+                        .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                }
+                PhotosPicker(selection: $logoItem, matching: .images) {
+                    Text(vm.logoR2Key == nil ? "Add logo" : "Change logo")
+                        .font(.ui(14.5, .semibold)).foregroundStyle(accent.base)
+                }
+                .disabled(vm.isUploadingLogo)
+                .accessibilityIdentifier(AccessibilityID.taxBusinessLogoPicker)
+            }
+            if let err = vm.logoUploadError {
+                Text(err).font(.ui(12)).foregroundStyle(Palette.alert)
+            }
+        }
+        .onChange(of: logoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await vm.uploadLogo(image)
+                }
+                logoItem = nil
+            }
+        }
+    }
+
+    @ViewBuilder private func bankDetails(_ vm: TaxSettingsViewModel) -> some View {
+        groupLabel("Bank details")
+        Card {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Payment details").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+                TextField("BSB + account, PayID, or international details", text: $bankDetailsText, axis: .vertical)
+                    .lineLimit(3...6)
+                    .font(.ui(16, .regular))
+                    .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                    .onChange(of: bankDetailsText) { _, v in vm.setBankDetails(v) }
+                    .accessibilityIdentifier(AccessibilityID.taxBankDetailsField)
+            }
+        }
+    }
+
+    /// A label + single-line text field that commits to the VM on change (mirrors the ABN row).
+    @ViewBuilder private func labeledField(_ title: String, placeholder: String,
+                                           text: Binding<String>, id: String,
+                                           keyboard: UIKeyboardType,
+                                           onCommit: @escaping (String) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+            TextField(placeholder, text: text)
+                .keyboardType(keyboard)
+                .textInputAutocapitalization(.never)
+                .font(.ui(16, .regular))
+                .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                .onChange(of: text.wrappedValue) { _, v in onCommit(v) }
+                .accessibilityIdentifier(id)
         }
     }
 

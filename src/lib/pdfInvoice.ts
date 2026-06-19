@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 
 /**
- * Tax-invoice PDF (spec §4.3) — clones src/lib/pdfQuote.ts: A4 portrait, pdf-lib
+ * Tax-invoice PDF (spec §4.3) — A4 portrait, pdf-lib
  * StandardFonts (no font file), no embedded images (pure-JS, Workers-safe). Pure:
  * the route recomputes the totals (recomputeTotals) and passes them in along with
  * the derived amountPaidCents. Returns the encoded bytes (%PDF...).
@@ -30,6 +30,8 @@ export interface InvoicePdfData {
   /** When true (and gstEnabled), prices include GST: subtotal is ex-GST, GST is the
    *  embedded portion, and the total equals the entered sum. */
   gstInclusive: boolean;
+  /** GST rate in basis points; null ⇒ label "GST (10%)" (mirrors the quote HTML). */
+  gstRateBp: number | null;
   subtotalCents: number;
   gstCents: number;
   totalCents: number;
@@ -51,8 +53,25 @@ const MARGIN = 48;
 const LINE = 16;
 const BOTTOM = MARGIN + LINE;
 
+/** Default GST rate in basis points (10% AU GST) when a rate is null/absent. */
+const DEFAULT_GST_RATE_BP = 1000;
+
 function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** Format a basis-point rate as a percent string ("15", "12.5", "10"); null ⇒ "10". */
+function ratePct(bp: number | null): string {
+  return String((bp ?? DEFAULT_GST_RATE_BP) / 100);
+}
+
+/**
+ * The GST ledger label, e.g. "GST (15%)" or "GST (10%)" (null bp ⇒ 10%). When the
+ * invoice is GST-inclusive the embedded portion is flagged " included". Exported so
+ * tests can assert the rate-aware wording without parsing the encoded PDF stream.
+ */
+export function gstLabel(gstRateBp: number | null, inclusive: boolean): string {
+  return `GST (${ratePct(gstRateBp)}%)${inclusive ? " included" : ""}`;
 }
 
 export async function buildInvoicePdf(
@@ -118,7 +137,7 @@ export async function buildInvoicePdf(
   const inclusive = invoice.gstEnabled && invoice.gstInclusive;
   draw(`${inclusive ? "Subtotal (ex GST)" : "Subtotal"}: ${dollars(invoice.subtotalCents)}`, font, 12);
   if (invoice.gstEnabled) {
-    draw(`GST (10%)${inclusive ? " included" : ""}: ${dollars(invoice.gstCents)}`, font, 12);
+    draw(`${gstLabel(invoice.gstRateBp, inclusive)}: ${dollars(invoice.gstCents)}`, font, 12);
   }
   draw(`Total: ${dollars(invoice.totalCents)}`, bold, 14);
   if (inclusive) draw(`${GST_INCLUSIVE_NOTE} ${dollars(invoice.gstCents)}.`, font, 9);

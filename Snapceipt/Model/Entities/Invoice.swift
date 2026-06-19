@@ -25,6 +25,9 @@ final class Invoice: Syncable {
     var dueDate: String?             // "YYYY-MM-DD" (editable; default today+14)
     var issuedAt: Int?               // epoch ms (set on issue)
     var pdfR2Key: String?            // persisted R2 key of the last-built PDF
+    /// GST rate snapshot in basis points, set from the profile at convert/save. null ⇒
+    /// 10% (1000) for legacy invoices. Totals + PDF GST label read THIS value. (spec §3)
+    var gstRateBp: Int?
 
     var createdAt: Int
     var updatedAt: Int
@@ -53,6 +56,7 @@ final class Invoice: Syncable {
         dueDate: String? = nil,
         issuedAt: Int? = nil,
         pdfR2Key: String? = nil,
+        gstRateBp: Int? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -77,6 +81,7 @@ final class Invoice: Syncable {
         self.dueDate = dueDate
         self.issuedAt = issuedAt
         self.pdfR2Key = pdfR2Key
+        self.gstRateBp = gstRateBp
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

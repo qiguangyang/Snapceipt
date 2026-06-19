@@ -20,6 +20,8 @@ struct QuoteEditorView: View {
     @State private var showClientPicker = false
     @State private var sent = false
     @State private var shareURL: URL?
+    @State private var shareFileURL: URL?
+    @State private var renderer = QuotePdfRenderer()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -58,6 +60,7 @@ struct QuoteEditorView: View {
             }
         }
         .sheet(item: shareItem) { item in QuoteActivityView(url: item.url) }
+        .sheet(item: shareFileItem) { item in QuoteActivityView(url: item.url) }
     }
 
     /// Sub-page chrome: close button | centered title | trailing quote number.
@@ -305,15 +308,27 @@ struct QuoteEditorView: View {
                 .accessibilityIdentifier(AccessibilityID.quoteEditorConvert)
             }
             HStack(spacing: 12) {
-                // Generate / Share PDF (56×56 r18 paper): enabled whenever the quote is
-                // valid (client + ≥1 line). Builds the PDF on tap (always reflecting the
-                // latest edits) then shares; no status change. (spec §3)
-                Button {
-                    Task {
-                        // Always (re)build from the current quote state so edits made
-                        // after a first generate are reflected, then share. (spec §3)
-                        if await vm.generatePdf(api: api) { openPDF(vm) }
-                    }
+                // Share menu (56×56 r18 paper): enabled whenever the quote is valid (client
+                // + ≥1 line). Offers "Share link" (the hosted HTML quote URL) and "Generate
+                // PDF" (render that link in a hidden WKWebView → PDF file). (spec §4)
+                Menu {
+                    Button {
+                        Task {
+                            if let url = await vm.shareLink(api: api), let u = URL(string: absolute(url)) {
+                                shareURL = u
+                            }
+                        }
+                    } label: { Label("Share link", systemImage: "link") }
+                    .accessibilityIdentifier(AccessibilityID.quoteEditorShareLink)
+
+                    Button {
+                        Task {
+                            if let file = await vm.generatePdf(api: api, renderer: renderer) {
+                                shareFileURL = file
+                            }
+                        }
+                    } label: { Label("Generate PDF", systemImage: "doc") }
+                    .accessibilityIdentifier(AccessibilityID.quoteEditorGeneratePdf)
                 } label: {
                     Icon(name: "doc", size: 22, color: Palette.ink2)
                         .frame(width: 56, height: 56)
@@ -322,10 +337,9 @@ struct QuoteEditorView: View {
                             .strokeBorder(Palette.line, lineWidth: 1))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
                 .disabled(!vm.canGeneratePdf || vm.isSending)
                 .opacity(vm.canGeneratePdf ? 1 : 0.45)
-                .accessibilityIdentifier(AccessibilityID.quoteEditorGeneratePdf)
+                .accessibilityIdentifier(AccessibilityID.quoteEditorShareMenu)
 
                 Button {
                     Task {
@@ -370,8 +384,14 @@ struct QuoteEditorView: View {
                 .shadow(color: Palette.income.opacity(0.4), radius: 16, x: 0, y: 12)
                 Text(vm.emailed ? "Quote sent!" : "Quote ready!").font(.display(23, .bold)).foregroundStyle(Palette.ink)
                 Text("\(vm.displayNumber) · \(fmt(vm.totals.total))").font(.ui(14)).foregroundStyle(Palette.ink2)
-                if !vm.emailed, vm.pdfUrl != nil {
-                    Button { openPDF(vm) } label: {
+                if !vm.emailed {
+                    Button {
+                        Task {
+                            if let url = await vm.shareLink(api: api), let u = URL(string: absolute(url)) {
+                                shareURL = u
+                            }
+                        }
+                    } label: {
                         Text("View PDF").font(.ui(15, .semibold)).foregroundStyle(.white)
                             .frame(minWidth: 160, minHeight: 46)
                             .background(accent.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -388,16 +408,18 @@ struct QuoteEditorView: View {
         .transition(.opacity)
     }
 
-    private func openPDF(_ vm: QuoteEditorViewModel) {
-        guard let url = vm.pdfUrl else { return }
-        let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
-        shareURL = URL(string: full)
+    private func absolute(_ url: String) -> String {
+        url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
     }
 
     private struct ShareItem: Identifiable { let id = UUID(); let url: URL }
     private var shareItem: Binding<ShareItem?> {
         Binding(get: { shareURL.map { ShareItem(url: $0) } },
                 set: { if $0 == nil { shareURL = nil } })
+    }
+    private var shareFileItem: Binding<ShareItem?> {
+        Binding(get: { shareFileURL.map { ShareItem(url: $0) } },
+                set: { if $0 == nil { shareFileURL = nil } })
     }
 }
 

@@ -368,7 +368,7 @@ struct ShellView: View {
         }
         .overlay {
             if router.overlay == .tax {
-                TaxSettingsView(profiles: profiles, sync: sync, onClose: { router.dismissOverlay() })
+                TaxSettingsView(profiles: profiles, sync: sync, api: captureAPI, onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }

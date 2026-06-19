@@ -11,16 +11,18 @@ enum GstTreatment {
         let gstSource: String?   // "derived" | "manual" | nil
     }
 
-    /// round(|total| / 11), half-up. `totalCents` is the magnitude (>= 0).
-    static func derivedGstCents(totalCents: Int) -> Int {
-        Int((Double(totalCents) / 11.0).rounded())
+    /// round(totalCents × bp / (10000 + bp)), half-up. `totalCents` is the magnitude
+    /// (>= 0). `bp` is the profile's GST rate in basis points (default 1000 = 10%, which
+    /// reduces to the legacy ÷11). (spec §3)
+    static func derivedGstCents(totalCents: Int, bp: Int = 1000) -> Int {
+        Int((Double(totalCents) * Double(bp) / Double(10_000 + bp)).rounded())
     }
 
-    /// Toggle gstFree. true ⇒ gstCents=0, gstSource=nil. false ⇒ re-derive
+    /// Toggle gstFree. true ⇒ gstCents=0, gstSource=nil. false ⇒ re-derive at `bp`
     /// (gstSource="derived"). `totalCents` is the magnitude of the txn amount.
-    static func applyGstFree(_ gstFree: Bool, totalCents: Int) -> Result {
+    static func applyGstFree(_ gstFree: Bool, totalCents: Int, bp: Int = 1000) -> Result {
         if gstFree { return Result(gstCents: 0, gstSource: nil) }
-        return Result(gstCents: derivedGstCents(totalCents: totalCents), gstSource: "derived")
+        return Result(gstCents: derivedGstCents(totalCents: totalCents, bp: bp), gstSource: "derived")
     }
 
     /// User typed an exact GST amount → manual provenance (overrides ÷11).

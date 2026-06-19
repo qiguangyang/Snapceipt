@@ -19,7 +19,22 @@ final class InvoiceEditorViewModel {
     @ObservationIgnored private let userId: String
     @ObservationIgnored let profileId: String
 
+    /// The active profile's GST rate (basis points), resolved lazily from storage; used
+    /// for live totals + snapshotted onto a fresh invoice at save. (spec §3)
+    @ObservationIgnored private lazy var profileGstRateBp: Int = {
+        fetchProfile(profileId)?.gstRateBp ?? QuoteTotals.defaultRateBp
+    }()
+
+    private func fetchProfile(_ id: String) -> Profile? {
+        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id })
+        d.fetchLimit = 1
+        return (try? context.fetch(d))?.first
+    }
+
     private(set) var invoiceId: String?
+    /// The invoice's snapshotted GST rate (basis points), loaded from storage. nil until
+    /// the first save snapshots `profileGstRateBp` (or convert sets it). (spec §3)
+    private(set) var gstRateBp: Int?
     var lineItems: [InvoiceLineItem] = []
     var gstEnabled = true
     var gstInclusive = false
@@ -47,7 +62,8 @@ final class InvoiceEditorViewModel {
     }
 
     var totals: (subtotal: Int, gst: Int, total: Int) {
-        InvoiceTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled, gstInclusive: gstInclusive)
+        InvoiceTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled, gstInclusive: gstInclusive,
+                              gstRateBp: gstRateBp ?? profileGstRateBp)
     }
 
     var canIssue: Bool {
@@ -77,6 +93,7 @@ final class InvoiceEditorViewModel {
             quoteId = inv.quoteId
             issuedAt = inv.issuedAt
             pdfUrl = nil
+            gstRateBp = inv.gstRateBp
             dueDate = inv.dueDate ?? QuoteEditorViewModel.dueDatePlus14()
             let iid = inv.id
             let d = FetchDescriptor<InvoiceLineItem>(
@@ -95,6 +112,7 @@ final class InvoiceEditorViewModel {
             quoteId = nil
             issuedAt = nil
             pdfUrl = nil
+            gstRateBp = nil
             dueDate = QuoteEditorViewModel.dueDatePlus14()
             lineItems = []
             originalLineIds = []
@@ -121,13 +139,18 @@ final class InvoiceEditorViewModel {
 
     func saveDraft() {
         guard let iid = invoiceId else { return }
-        let t = totals
         let invoice = fetchInvoice(iid) ?? {
             let x = Invoice(userId: userId, profileId: profileId)
             x.id = iid
             context.insert(x)
             return x
         }()
+        // Snapshot the GST rate from the active profile on first save (mirrors the quote
+        // editor); keep an existing snapshot (e.g. set by convert) so a re-save never
+        // re-rates the invoice. (spec §3)
+        if invoice.gstRateBp == nil { invoice.gstRateBp = profileGstRateBp }
+        gstRateBp = invoice.gstRateBp
+        let t = totals
         invoice.profileId = profileId
         invoice.quoteId = quoteId
         invoice.clientName = clientName

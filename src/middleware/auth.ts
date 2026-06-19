@@ -8,7 +8,7 @@ import { verifyAccess } from "../lib/jwt";
  * prefix (e.g. `/auth/` covers all `/auth/*`); other entries match exactly.
  * Per the Canonical Contracts this includes `/health`, `/auth/*`, and `/banks`.
  */
-export const PUBLIC_PATHS = ["/health", "/auth/", "/banks", "/export/dl/", "/quotes/dl/", "/invoices/dl/", "/appstore/"];
+export const PUBLIC_PATHS = ["/health", "/auth/", "/banks", "/export/dl/", "/q/", "/invoices/dl/", "/appstore/"];
 
 function isPublic(path: string): boolean {
   return PUBLIC_PATHS.some((p) => (p.endsWith("/") ? path.startsWith(p) : path === p));

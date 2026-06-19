@@ -215,30 +215,32 @@ struct UpdateDeviceResponse: Decodable {
 
 // MARK: - Quotes (spec §4.5)
 
-/// POST /quotes/:id/send response. `number`/`pdfUrl`/`expiresAt` are null when the
-/// quote had no number yet but email is off, or generally when not applicable; the
-/// editor applies number/status/sentAt/totals to the local Quote on success.
+/// `POST /quotes/:id/send` → the hosted HTML quote link + email status + minted number.
+/// Status/totals are persisted server-side and synced via /sync — NOT returned here.
 struct SendQuoteResponse: Decodable {
-    let number: String?
-    let sentAt: Int?
-    let status: String
-    let subtotalCents: Int
-    let gstCents: Int
-    let totalCents: Int
-    let pdfUrl: String?
-    let expiresAt: Int?
+    /// The hosted HTML quote URL (https://api.snapceipt.cc/q/<token>).
+    let url: String?
     let emailed: Bool
-}
-
-// MARK: - Quote PDF + Invoices (spec §6)
-
-/// POST /quotes/:id/pdf response. Builds/stores the quote PDF + persists pdf_r2_key
-/// and mints `number` if absent. No status change. `pdfUrl` is the public dl link.
-struct GenerateQuotePdfResponse: Decodable {
-    let pdfUrl: String
+    /// The minted (or existing) quote number, e.g. "SN-0001". Apply to the local quote
+    /// so "Quote #N" displays immediately without waiting for a sync pull.
     let number: String?
-    let expiresAt: Int?
 }
+
+/// `POST /quotes/:id/link` → the hosted HTML quote URL + minted quote number (spec §4).
+struct QuoteShareLinkResponse: Decodable {
+    let url: String
+    /// The minted (or existing) quote number. Apply to the local quote so the editor
+    /// can show "Quote #N" immediately after sharing without a sync pull.
+    let number: String?
+}
+
+/// `POST /profile/logo` → the stored R2 key (server-owned; iOS persists it locally
+/// pull-only via sync, but the upload response lets us reflect it immediately). (spec §5)
+struct UploadProfileLogoResponse: Decodable {
+    let logoR2Key: String
+}
+
+// MARK: - Invoices (spec §6)
 
 /// POST /invoices/:id/issue response. Mints the number, builds the tax-invoice PDF →
 /// R2, sets status=issued + dates. The editor applies these to the local Invoice.

@@ -39,7 +39,8 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var exportBasHandler: ((_ profileId: String, _ from: String, _ to: String, _ paygInstalmentCents: Int, _ toEmail: String?) async throws -> ExportResult)?
     var updateDeviceHandler: ((UpdateDeviceBody) async throws -> UpdateDeviceResponse)?
     var sendQuoteHandler: ((String) async throws -> SendQuoteResponse)?
-    var generateQuotePdfHandler: ((String) async throws -> GenerateQuotePdfResponse)?
+    var quoteShareLinkHandler: ((String) async throws -> QuoteShareLinkResponse)?
+    var uploadProfileLogoHandler: ((String, Data) async throws -> UploadProfileLogoResponse)?
     var issueInvoiceHandler: ((String) async throws -> IssueInvoiceResponse)?
     var sendInvoiceHandler: ((String) async throws -> SendInvoiceResponse)?
     var invoicePdfHandler: ((String) async throws -> InvoicePdfResponse)?
@@ -61,7 +62,8 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     private(set) var exportBasCalls: [(profileId: String, from: String, to: String, paygInstalmentCents: Int, toEmail: String?)] = []
     private(set) var updateDeviceCalls: [UpdateDeviceBody] = []
     private(set) var sendQuoteCalls: [String] = []
-    private(set) var generateQuotePdfCalls: [String] = []
+    private(set) var quoteShareLinkCalls: [String] = []
+    private(set) var uploadProfileLogoCalls: [(profileId: String, bytes: Int)] = []
     private(set) var issueInvoiceCalls: [String] = []
     private(set) var sendInvoiceCalls: [String] = []
     private(set) var invoicePdfCalls: [String] = []
@@ -183,11 +185,18 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try await h(id)
     }
 
-    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
-        generateQuotePdfCalls.append(id)
-        guard let h = generateQuotePdfHandler else { throw MockAPIClientError.unscripted }
+    func quoteShareLink(_ id: String) async throws -> QuoteShareLinkResponse {
+        quoteShareLinkCalls.append(id)
+        guard let h = quoteShareLinkHandler else { throw MockAPIClientError.unscripted }
         return try await h(id)
     }
+
+    func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse {
+        uploadProfileLogoCalls.append((profileId, png.count))
+        guard let h = uploadProfileLogoHandler else { throw MockAPIClientError.unscripted }
+        return try await h(profileId, png)
+    }
+
     func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
         issueInvoiceCalls.append(id)
         guard let h = issueInvoiceHandler else { throw MockAPIClientError.unscripted }

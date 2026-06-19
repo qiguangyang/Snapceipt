@@ -219,6 +219,15 @@ enum AccessibilityID {
     static let taxAbnField = "tax.abn.field"
     static let taxFyStart = "tax.fy.start"
     static let taxMealsPct = "tax.meals.pct"
+    static let taxGstRateControl = "tax.gstRate.control"
+    static let taxGstRateCustom = "tax.gstRate.custom"
+    static let taxBusinessEmailField = "tax.business.email"
+    static let taxBusinessPhoneField = "tax.business.phone"
+    static let taxBusinessWebsiteField = "tax.business.website"
+    static let taxBusinessAddressField = "tax.business.address"
+    static let taxBusinessLogoPicker = "tax.business.logo.picker"
+    static let taxBusinessLogoPreview = "tax.business.logo.preview"
+    static let taxBankDetailsField = "tax.bank.details"
     // Categories & rules
     static let categoriesScreen = "categories.screen"
     static let categoryRowPrefix = "category.row."     // + category.id
@@ -340,5 +349,7 @@ enum AccessibilityID {
     static let recordPaymentSave = "recordPayment.save"
     // Quote editor — new PDF + convert affordances
     static let quoteEditorGeneratePdf = "quote.editor.generatePdf"
+    static let quoteEditorShareMenu = "quote.editor.shareMenu"
+    static let quoteEditorShareLink = "quote.editor.shareLink"
     static let quoteEditorConvert = "quote.editor.convert"
 }

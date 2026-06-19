@@ -4,7 +4,7 @@ import SwiftData
 @testable import Snapceipt
 
 @MainActor
-@Suite("Quote convert + generatePdf")
+@Suite("Quote convert + shareLink")
 struct QuoteConvertTests {
     private func makeFixture() throws -> (ModelContext, MockSyncEngine) {
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
@@ -31,22 +31,22 @@ struct QuoteConvertTests {
         return v2
     }
 
-    @Test("generatePdf saves, calls the route, persists pdfR2Key/number, leaves status draft")
-    func generatePdf() async throws {
+    @Test("shareLink saves, calls /quotes/:id/link, applies url/number, leaves status draft")
+    func shareLink() async throws {
         let (ctx, sync) = try makeFixture()
         let mock = MockAPIClient()
-        mock.generateQuotePdfHandler = { _ in
-            GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/tok", number: "SN-0007", expiresAt: 1)
+        mock.quoteShareLinkHandler = { _ in
+            QuoteShareLinkResponse(url: "https://api.snapceipt.cc/q/tok", number: "SN-0007")
         }
         let v = vm(ctx, sync)
         v.load(id: nil)
         v.setClient(name: "Acme", email: nil)
         v.addLine(); v.lineItems[0].unitPriceCents = 100_00
         #expect(v.canGeneratePdf == true)
-        let ok = await v.generatePdf(api: mock)
-        #expect(ok == true)
-        #expect(mock.generateQuotePdfCalls.count == 1)
-        #expect(v.pdfUrl == "/quotes/dl/tok")
+        let url = await v.shareLink(api: mock)
+        #expect(url == "https://api.snapceipt.cc/q/tok")
+        #expect(mock.quoteShareLinkCalls.count == 1)
+        #expect(v.pdfUrl == "https://api.snapceipt.cc/q/tok")
         #expect(v.number == "SN-0007")
         #expect(v.statusValue == .draft)            // status unchanged
         let q = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.deletedAt == nil }))[0]
@@ -88,6 +88,23 @@ struct QuoteConvertTests {
         // Enqueues the invoice + each line.
         #expect(sync.calls.contains { $0.entityType == .invoice && $0.op == "upsert" })
         #expect(sync.calls.filter { $0.entityType == .invoiceLineItem && $0.op == "upsert" }.count == 2)
+    }
+
+    @Test("convertToInvoice snapshots the quote's GST rate (15%) onto the invoice")
+    func convertSnapshotsRate() throws {
+        let (ctx, sync) = try makeFixture()
+        // A 15% (NZ) profile keyed "p1" — the rate the quote snapshots on save.
+        let p = Profile(userId: "u1", name: "Biz", type: "business",
+                        accent1: "#0", accent2: "#1", accent3: "#2", gstRateBp: 1500)
+        p.id = "p1"
+        ctx.insert(p); try ctx.save()
+
+        let v = sentQuote(ctx, sync)
+        #expect(v.gstRateBp == 1500)            // quote snapshotted the 15% rate
+        let invId = v.convertToInvoice()
+        #expect(invId != nil)
+        let inv = try ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == invId! }))[0]
+        #expect(inv.gstRateBp == 1500)          // invoice inherits the quote's rate
     }
 
     @Test("convert is idempotent: a second convert returns the same invoice id, no second invoice")

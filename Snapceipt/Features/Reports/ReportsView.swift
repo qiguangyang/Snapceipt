@@ -104,11 +104,7 @@ struct ReportsView: View {
         } label: {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("BAS · this quarter").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
-                        Spacer()
-                        Text(basLodged ? "Lodged" : "Review").font(.ui(12.5, .semibold)).foregroundStyle(accent.base)
-                    }
+                    Text("BAS · this quarter").font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
                     Text(basNetCents < 0 ? "ATO owes you \(fmt(-basNetCents))" : "\(fmt(basNetCents)) to pay")
                         .font(.display(24)).foregroundStyle(Palette.ink).monospacedDigit()
                     HStack {

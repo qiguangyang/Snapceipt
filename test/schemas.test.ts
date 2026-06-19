@@ -8,6 +8,8 @@ import {
   loyaltyCardEntity,
   vehicleEntity,
   vehicleYearEntity,
+  quoteEntity,
+  invoiceEntity,
   entitySchemaFor,
   SYNCABLE_TYPES,
 } from "../src/schemas/entities";
@@ -184,6 +186,41 @@ describe("profileEntity / budgetEntity / loyaltyCardEntity / lineItemEntity", ()
     const r = lineItemEntity.safeParse(
       env({ type: "lineItem", profileId: undefined, transactionId: EID, name: "Coffee", priceCents: 550 }),
     );
+    expect(r.success).toBe(true);
+  });
+});
+
+describe("profile/quote/invoice GST + business fields (migration 0010)", () => {
+  it("accepts a profile with gstRateBp + business details + logoR2Key", () => {
+    const r = profileEntity.safeParse(
+      env({
+        type: "profile",
+        profileId: undefined,
+        name: "Acme Pty Ltd",
+        profileType: "business",
+        gstRateBp: 1500,
+        businessEmail: "hi@acme.example",
+        phone: "0400 000 000",
+        website: "https://acme.example",
+        address: "1 Main St\nSydney NSW 2000",
+        bankDetails: "BSB 062-000\nAcc 1234 5678",
+        logoR2Key: "u/x/profiles/p/logo",
+      }),
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a non-integer gstRateBp on a profile", () => {
+    expect(profileEntity.safeParse(env({ type: "profile", name: "X", profileType: "business", gstRateBp: 12.5 })).success).toBe(false);
+  });
+
+  it("accepts a quote carrying a snapshotted gstRateBp", () => {
+    const r = quoteEntity.safeParse(env({ type: "quote", gstRateBp: 1000 }));
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts an invoice carrying a snapshotted gstRateBp", () => {
+    const r = invoiceEntity.safeParse(env({ type: "invoice", gstRateBp: 1500 }));
     expect(r.success).toBe(true);
   });
 });

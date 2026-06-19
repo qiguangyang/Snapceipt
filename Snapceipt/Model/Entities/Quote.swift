@@ -27,6 +27,9 @@ final class Quote: Syncable {
     var pdfR2Key: String?
     /// The invoice this quote was converted into, if any (one-to-one). (spec §4.2)
     var invoiceId: String?
+    /// GST rate snapshot in basis points, set from the profile at save. null ⇒ 10%
+    /// (1000) for legacy quotes. Totals + the "GST (X%)" label read THIS value. (spec §3)
+    var gstRateBp: Int?
 
     var createdAt: Int
     var updatedAt: Int
@@ -54,6 +57,7 @@ final class Quote: Syncable {
         sentAt: Int? = nil,
         pdfR2Key: String? = nil,
         invoiceId: String? = nil,
+        gstRateBp: Int? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -77,6 +81,7 @@ final class Quote: Syncable {
         self.sentAt = sentAt
         self.pdfR2Key = pdfR2Key
         self.invoiceId = invoiceId
+        self.gstRateBp = gstRateBp
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

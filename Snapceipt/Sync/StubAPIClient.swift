@@ -102,13 +102,14 @@ final class StubAPIClient: APIClient {
         UpdateDeviceResponse(id: "stub-device")
     }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
-        SendQuoteResponse(number: "SN-0001", sentAt: 1_790_000_000_000, status: "sent",
-                          subtotalCents: 40_000, gstCents: 4_000, totalCents: 44_000,
-                          pdfUrl: "/quotes/dl/stub-token", expiresAt: 1_790_000_000_000, emailed: false)
+        SendQuoteResponse(url: "https://api.snapceipt.cc/q/stub-token", emailed: false,
+                          number: "SN-0001")
     }
-    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
-        GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/stub-token", number: "SN-0001",
-                                 expiresAt: 1_790_000_000_000)
+    func quoteShareLink(_ id: String) async throws -> QuoteShareLinkResponse {
+        QuoteShareLinkResponse(url: "https://api.snapceipt.cc/q/stub-token", number: "SN-0001")
+    }
+    func uploadProfileLogo(profileId: String, png: Data) async throws -> UploadProfileLogoResponse {
+        UploadProfileLogoResponse(logoR2Key: "\(profileId)/profiles/stub/logo")
     }
     func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
         IssueInvoiceResponse(pdfUrl: "/invoices/dl/stub-token", number: "INV-0001",

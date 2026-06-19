@@ -28,6 +28,7 @@ interface InvoiceRow {
   client_email: string | null;
   gst_enabled: number;
   gst_inclusive: number;
+  gst_rate_bp: number | null;
   status: string;
   issue_date: string | null;
   due_date: string | null;
@@ -58,7 +59,7 @@ async function loadInvoiceForPdf(
 }> {
   const invoice = await c.env.DB.prepare(
     `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive,
-            status, issue_date, due_date, issued_at, pdf_r2_key
+            gst_rate_bp, status, issue_date, due_date, issued_at, pdf_r2_key
        FROM invoices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(invoiceId, userId).first<InvoiceRow>();
   if (!invoice) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
@@ -103,13 +104,14 @@ invoicesRoutes.post("/:id/issue", async (c) => {
 
   const { invoice, lineItems, sender } = await loadInvoiceForPdf(c, invoiceId, userId);
 
-  // Recompute totals authoritatively.
+  // Recompute totals authoritatively at the invoice's snapshotted rate (null ⇒ 1000).
   const gstEnabled = invoice.gst_enabled === 1;
   const gstInclusive = invoice.gst_inclusive === 1;
   const totals = recomputeTotals(
     lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
     gstEnabled,
     gstInclusive,
+    invoice.gst_rate_bp,
   );
 
   // Mint INV-#### per PROFILE only on the FIRST issue; a re-issue keeps the number,
@@ -128,6 +130,7 @@ invoicesRoutes.post("/:id/issue", async (c) => {
       clientEmail: invoice.client_email,
       gstEnabled,
       gstInclusive,
+      gstRateBp: invoice.gst_rate_bp,
       subtotalCents: totals.subtotalCents,
       gstCents: totals.gstCents,
       totalCents: totals.totalCents,
@@ -194,6 +197,7 @@ async function rebuildInvoicePdf(
     lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
     gstEnabled,
     gstInclusive,
+    invoice.gst_rate_bp,
   );
   const now = nowMs();
   const paidCents = await invoiceAmountPaidCents(c.env.DB, invoiceId, userId);
@@ -204,6 +208,7 @@ async function rebuildInvoicePdf(
       clientEmail: invoice.client_email,
       gstEnabled,
       gstInclusive,
+      gstRateBp: invoice.gst_rate_bp,
       subtotalCents: totals.subtotalCents,
       gstCents: totals.gstCents,
       totalCents: totals.totalCents,
@@ -313,7 +318,7 @@ invoicesRoutes.get("/dl/:token", async (c) => {
   const obj = await c.env.RECEIPTS.get(r2Key);
   if (!obj) throw new ApiError("NOT_FOUND", "Invoice PDF not found");
 
-  // Buffer fully (mirrors quotes/dl) so the R2 read completes before the response
+  // Buffer fully (mirrors export.ts) so the R2 read completes before the response
   // returns — a dangling stream blocks vitest-pool-workers teardown.
   const bytes = await obj.arrayBuffer();
   const contentType = obj.httpMetadata?.contentType ?? "application/octet-stream";

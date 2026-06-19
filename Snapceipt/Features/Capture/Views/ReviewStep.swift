@@ -46,6 +46,9 @@ struct ReviewStep: View {
     private var selectedProfileName: String {
         vm.profileOptions.first(where: { $0.id == selectedProfileId })?.name ?? "Select profile"
     }
+    private var selectedGstRateBp: Int {
+        vm.profileOptions.first(where: { $0.id == selectedProfileId })?.gstRateBp ?? 1000
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -257,7 +260,7 @@ struct ReviewStep: View {
                         draft.gstFree = isFree
                         // GST-free zeroes GST; turning it back on re-infers a starting
                         // value that's then editable in the GST field below.
-                        let r = GstTreatment.applyGstFree(isFree, totalCents: Int((draft.total as NSDecimalNumber).doubleValue * 100))
+                        let r = GstTreatment.applyGstFree(isFree, totalCents: Int((draft.total as NSDecimalNumber).doubleValue * 100), bp: selectedGstRateBp)
                         draft.gst = r.gstCents.map { Decimal($0) / 100 }
                     }))
                     .accessibilityIdentifier(AccessibilityID.txnGstFreeToggle)
