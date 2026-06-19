@@ -165,7 +165,7 @@ final class SyncEngine {
                     handler.overwriteLocal(context, env)
                 }
                 context.delete(m)
-                toast.show("Updated on another device", kind: .info)
+                toast.show("Synced", kind: .success)   // green check, not a wordy reminder
             default: // "rejected" or unknown
                 m.status = "failed"
             }

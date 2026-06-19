@@ -15,9 +15,14 @@ struct ToastHost: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
             if let t = center.current {
-                Text(t.message)
-                    .font(.ui(13.5, .semibold))
-                    .foregroundStyle(.white)
+                HStack(spacing: 6) {
+                    if t.kind == .success {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.income)
+                    } else if t.kind == .error {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.white)
+                    }
+                    Text(t.message).font(.ui(13.5, .semibold)).foregroundStyle(.white)
+                }
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(t.kind == .error ? Palette.alert : Palette.ink, in: Capsule())
                     .padding(.top, 8).transition(.move(edge: .top).combined(with: .opacity))

@@ -183,6 +183,10 @@ final class TaxSettingsViewModel {
         defer { isUploadingLogo = false }
         let png = ImageReducer().reduce(image)
         do {
+            // A freshly-created profile may not have synced yet; the logo route 404s if the
+            // profile row isn't in D1. Drain the outbox first so the profile upsert lands
+            // server-side before we upload (mirrors the quote send/link flush).
+            await sync.flush()
             let r = try await api.uploadProfileLogo(profileId: profile.id, png: png)
             logoR2Key = r.logoR2Key
             profile.logoR2Key = r.logoR2Key
