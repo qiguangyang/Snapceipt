@@ -13,7 +13,7 @@ struct CaptureHostFactoryTests {
         let profile = Profile(userId: "u7", name: "Me", type: "business",
                               accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950", isDefault: true)
         ctx.insert(profile); try ctx.save()
-        final class SpySync: SyncEnqueuing {
+        @MainActor final class SpySync: SyncEnqueuing {
             func enqueue(op: String, entityType: EntityType, entity: any Syncable) {}
         }
         let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u7")

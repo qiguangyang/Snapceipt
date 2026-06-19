@@ -5,7 +5,7 @@ import Foundation
 
 @MainActor
 struct PendingExtractionReconcilerTests {
-    final class SpySync: SyncEnqueuing {
+    @MainActor final class SpySync: SyncEnqueuing {
         private(set) var enqueuedTxnIds: [String] = []
         func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
             if entityType == .transaction { enqueuedTxnIds.append(entity.id) }

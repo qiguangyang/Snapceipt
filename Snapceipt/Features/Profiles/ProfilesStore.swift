@@ -7,6 +7,11 @@ import SwiftUI
 /// Seam over `SyncEngine` so view-models can enqueue a sync mutation — and force
 /// an immediate outbox drain — while staying unit-testable (tests inject a
 /// `MockSyncEngine` spy). `enqueue` mirrors `SyncEngine.enqueue` VERBATIM.
+// @MainActor: enqueue/flush manipulate SyncEngine's main-actor-isolated outbox, and
+// every caller (the @MainActor view-models, stores, and reconcilers) is already on the
+// main actor — so isolate the protocol to match. This silences the Swift 6
+// "conformance crosses into main actor-isolated code" error on `SyncEngine: SyncEnqueuing`.
+@MainActor
 protocol SyncEnqueuing: AnyObject {
     func enqueue(op: String, entityType: EntityType, entity: any Syncable)
 

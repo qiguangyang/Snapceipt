@@ -7,7 +7,7 @@ import UIKit
 struct CaptureViewModelTests {
 
     /// Spy enqueuer (mirrors the one used by ProfilesStore tests).
-    final class SpySync: SyncEnqueuing {
+    @MainActor final class SpySync: SyncEnqueuing {
         struct Call { let op: String; let entityType: EntityType; let entityId: String }
         private(set) var calls: [Call] = []
         func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
