@@ -316,4 +316,29 @@ enum AccessibilityID {
     static let txnGstAmountField = "txn.gstAmount.field"
     // Tax & GST ABN hint (F8)
     static let taxAbnHint = "tax.abn.hint"
+
+    // Invoices & A/R
+    static let homeQuickInvoices = "home.quick.invoices"
+    static let invoicesScreen = "invoices.screen"
+    static let invoiceRowPrefix = "invoice.row."          // + invoice.id
+    static let invoicesAdd = "invoices.add"
+    static let invoiceNeedsAttentionSection = "invoices.needsAttention"
+    static let invoiceEditorScreen = "invoice.editor.screen"
+    static let invoiceEditorClient = "invoice.editor.client"
+    static let invoiceEditorAddLine = "invoice.editor.addLine"
+    static let invoiceLineRowPrefix = "invoice.line.row."  // + line.id
+    static let invoiceEditorGst = "invoice.editor.gst"
+    static let invoiceEditorGstInclusive = "invoice.editor.gstInclusive"
+    static let invoiceEditorDueDate = "invoice.editor.dueDate"
+    static let invoiceEditorIssue = "invoice.editor.issue"
+    static let invoiceEditorSend = "invoice.editor.send"
+    static let invoiceEditorPdf = "invoice.editor.pdf"
+    static let invoiceEditorRecordPayment = "invoice.editor.recordPayment"
+    static let invoiceEditorConvertFromQuote = "invoice.editor.fromQuote"
+    static let recordPaymentSheet = "recordPayment.sheet"
+    static let recordPaymentAmount = "recordPayment.amount"
+    static let recordPaymentSave = "recordPayment.save"
+    // Quote editor — new PDF + convert affordances
+    static let quoteEditorGeneratePdf = "quote.editor.generatePdf"
+    static let quoteEditorConvert = "quote.editor.convert"
 }

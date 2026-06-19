@@ -689,7 +689,7 @@ describe("POST /sync/push — logbook entities (vehicle, vehicleYear, extended m
 });
 
 describe("syncable table map", () => {
-  it("maps all 15 syncable entity types to a table (full coverage)", () => {
+  it("maps all 18 syncable entity types to a table (full coverage)", () => {
     const expected: Record<string, string> = {
       transaction: "transactions",
       lineItem: "line_items",
@@ -706,8 +706,11 @@ describe("syncable table map", () => {
       taxSettings: "tax_settings",
       vehicle: "vehicles",
       vehicleYear: "vehicle_years",
+      invoice: "invoices",
+      invoiceLineItem: "invoice_line_items",
+      payment: "payments",
     };
-    expect(SYNCABLE_TYPES).toHaveLength(15);
+    expect(SYNCABLE_TYPES).toHaveLength(18);
     for (const type of SYNCABLE_TYPES) {
       const meta = tableForEntityType(type);
       expect(meta, `missing table mapping for ${type}`).not.toBeNull();
@@ -720,6 +723,12 @@ describe("syncable table map", () => {
   it("requires profile_id for the new vehicle + vehicleYear tables", () => {
     expect(PROFILE_ID_REQUIRED.has("vehicle")).toBe(true);
     expect(PROFILE_ID_REQUIRED.has("vehicleYear")).toBe(true);
+  });
+
+  it("maps the new quote pdfR2Key + invoiceId columns (migration 0009)", () => {
+    const q = tableForEntityType("quote")!;
+    expect(q.columns.pdfR2Key).toBe("pdf_r2_key");
+    expect(q.columns.invoiceId).toBe("invoice_id");
   });
 
   it("maps the new mileageTrip logbook columns", () => {

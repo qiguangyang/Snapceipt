@@ -40,6 +40,104 @@ function utcDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+quotesRoutes.post("/:id/pdf", async (c) => {
+  const userId = c.var.userId;
+  const quoteId = c.req.param("id");
+
+  // 1. Load the quote (scoped to the authed user).
+  const quote = await c.env.DB.prepare(
+    `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, valid_until
+       FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(quoteId, userId).first<QuoteRow>();
+  if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
+
+  // 2. Load its non-deleted line items (deterministic order).
+  const { results: lineItems } = await c.env.DB.prepare(
+    `SELECT description, quantity, unit_price_cents
+       FROM quote_line_items
+      WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
+      ORDER BY sort_order ASC, id ASC`,
+  ).bind(quoteId, userId).all<LineItemRow>();
+  if (lineItems.length === 0) {
+    throw new ApiError("VALIDATION_FAILED", "Cannot build a PDF for a quote with no line items");
+  }
+
+  // 3. Recompute totals authoritatively.
+  const gstEnabled = quote.gst_enabled === 1;
+  const gstInclusive = quote.gst_inclusive === 1;
+  const totals = recomputeTotals(
+    lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
+    gstEnabled,
+    gstInclusive,
+  );
+
+  // 4. Mint SN-#### only if the quote has none yet (so the PDF shows a real number).
+  //    A re-build keeps the existing number — generating a PDF never changes status (§2.1).
+  const number = quote.number ?? (await assignQuoteNumber(c.env.DB, userId));
+
+  // 5. Load the owning profile for the PDF sender block.
+  const profile = await c.env.DB.prepare(
+    `SELECT name, abn, gst_registered FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(quote.profile_id, userId).first<{ name: string; abn: string | null; gst_registered: number | null }>();
+  if (!profile) throw new ApiError("NOT_FOUND", "Profile not found for this quote");
+  const sender: QuoteSender = {
+    name: profile.name,
+    abn: profile.abn,
+    gstRegistered: profile.gst_registered === 1,
+  };
+
+  // 6. Build the PDF -> R2 (same key as the send path; a re-build overwrites it).
+  const now = nowMs();
+  const pdf = await buildQuotePdf(
+    {
+      number,
+      clientName: quote.client_name,
+      clientEmail: quote.client_email,
+      gstEnabled,
+      gstInclusive,
+      subtotalCents: totals.subtotalCents,
+      gstCents: totals.gstCents,
+      totalCents: totals.totalCents,
+      validUntil: quote.valid_until,
+      issuedDate: utcDate(now),
+    },
+    lineItems.map((li): QuoteLineItemRow => ({
+      description: li.description,
+      quantity: li.quantity,
+      unitPriceCents: li.unit_price_cents,
+    })),
+    sender,
+  );
+  const key = `${userId}/quotes/${quoteId}.pdf`;
+  await c.env.RECEIPTS.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
+
+  // 7. Persist number + totals + pdf_r2_key. NO status change, NO sent_at (§2.1).
+  await c.env.DB.prepare(
+    `UPDATE quotes
+        SET number = ?, pdf_r2_key = ?,
+            subtotal_cents = ?, gst_cents = ?, total_cents = ?,
+            updated_at = ?
+      WHERE id = ? AND user_id = ?`,
+  ).bind(number, key, totals.subtotalCents, totals.gstCents, totals.totalCents, now, quoteId, userId).run();
+
+  // 8. Signed 7-day download link.
+  const origin = new URL(c.req.url).origin;
+  const token = await signDownloadToken(c.env.JWT_SIGNING_KEY, key);
+  const pdfUrl = `${origin}/quotes/dl/${token}`;
+  const expiresAt = now + DOWNLOAD_TTL_SECONDS * 1000;
+
+  // 9. Response — status stays draft (no email, no outbox).
+  return c.json({
+    number,
+    status: "draft",
+    subtotalCents: totals.subtotalCents,
+    gstCents: totals.gstCents,
+    totalCents: totals.totalCents,
+    pdfUrl,
+    expiresAt,
+  });
+});
+
 quotesRoutes.post("/:id/send", async (c) => {
   const userId = c.var.userId;
   const quoteId = c.req.param("id");

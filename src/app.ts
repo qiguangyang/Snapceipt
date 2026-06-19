@@ -13,6 +13,7 @@ import { imageRoutes } from "./routes/images";
 import { extractRoutes } from "./routes/extract";
 import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
+import { invoicesRoutes } from "./routes/invoices";
 import { inboxRoutes } from "./routes/inbox";
 import { accountRoutes } from "./routes/account";
 import { crashReportRoutes } from "./routes/crashReports";
@@ -79,6 +80,11 @@ app.use("/export/*", rateLimit("export"));
 // falls back to IP-keyed limiting on the public endpoint.
 app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
+// Invoice issue/send/pdf — PDF build + email; reuse the "quotes" tier (60/hr).
+// Mount on BOTH the exact path AND the wildcard so the limiter runs for the POSTs;
+// the wildcard also IP-limits the public GET /invoices/dl/* download.
+app.use("/invoices", rateLimit("quotes"));
+app.use("/invoices/*", rateLimit("quotes"));
 // Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
 app.use("/profiles/*", rateLimit("inbox"));
 // Account ops (change email / delete account) — tight per-user tier. Auth-gated.
@@ -104,6 +110,8 @@ app.route("/extract", extractRoutes);
 app.route("/export", exportRoutes);
 // Protected: POST /quotes/:id/send (+ public GET /quotes/dl/:token via PUBLIC_PATHS).
 app.route("/quotes", quotesRoutes);
+// Protected: POST /invoices/:id/issue|send|pdf (+ public GET /invoices/dl/:token via PUBLIC_PATHS).
+app.route("/invoices", invoicesRoutes);
 // Protected: per-profile inbox alias (GET mint + POST rotate).
 app.route("/profiles", inboxRoutes);
 // Protected: iOS MetricKit crash/hang ingest (server-only crash_reports table).

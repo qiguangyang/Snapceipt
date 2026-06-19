@@ -48,6 +48,9 @@ final class SyncEntityRegistry {
         register(.vehicle, VehicleSyncMapper())
         register(.vehicleYear, VehicleYearSyncMapper())
         register(.client, ClientSyncMapper())
+        register(.invoice, InvoiceSyncMapper())
+        register(.invoiceLineItem, InvoiceLineItemSyncMapper())
+        register(.payment, PaymentSyncMapper())
     }
 
     private func register<M: SyncRowMapper>(_ type: EntityType, _ mapper: M) {
@@ -527,6 +530,8 @@ private struct QuoteSyncMapper: SyncRowMapper {
         if let v = env.string("status") { row.status = v }
         if let v = env.string("validUntil") { row.validUntil = v }
         if let v = env.int("sentAt") { row.sentAt = v }
+        if let v = env.string("pdfR2Key") { row.pdfR2Key = v }
+        if let v = env.string("invoiceId") { row.invoiceId = v }
     }
 
     func payload(_ r: Quote) -> [String: JSONValue] {
@@ -543,6 +548,8 @@ private struct QuoteSyncMapper: SyncRowMapper {
         f["status"] = .string(r.status)
         f["validUntil"] = str(r.validUntil)
         f["sentAt"] = num(r.sentAt)
+        f["pdfR2Key"] = str(r.pdfR2Key)
+        f["invoiceId"] = str(r.invoiceId)
         return f
     }
 }
@@ -828,6 +835,134 @@ private struct ClientSyncMapper: SyncRowMapper {
 }
 
 extension Client: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - Invoice (spec §4.1)
+
+private struct InvoiceSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = Invoice(userId: env.userId, profileId: env.profileId)
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        row.profileId = env.profileId
+        if let v = env.string("number") { row.number = v }
+        if let v = env.string("quoteId") { row.quoteId = v }
+        if let v = env.string("clientName") { row.clientName = v }
+        if let v = env.string("clientEmail") { row.clientEmail = v }
+        if let v = env.bool("gstEnabled") { row.gstEnabled = v }
+        if let v = env.bool("gstInclusive") { row.gstInclusive = v }
+        if let v = env.int("subtotalCents") { row.subtotalCents = v }
+        if let v = env.int("gstCents") { row.gstCents = v }
+        if let v = env.int("totalCents") { row.totalCents = v }
+        if let v = env.string("currency") { row.currency = v }
+        if let v = env.string("status") { row.status = v }
+        if let v = env.string("issueDate") { row.issueDate = v }
+        if let v = env.string("dueDate") { row.dueDate = v }
+        if let v = env.int("issuedAt") { row.issuedAt = v }
+        if let v = env.string("pdfR2Key") { row.pdfR2Key = v }
+    }
+
+    func payload(_ r: Invoice) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["number"] = str(r.number)
+        f["quoteId"] = str(r.quoteId)
+        f["clientName"] = str(r.clientName)
+        f["clientEmail"] = str(r.clientEmail)
+        f["gstEnabled"] = boolv(r.gstEnabled)
+        f["gstInclusive"] = boolv(r.gstInclusive)
+        f["subtotalCents"] = num(r.subtotalCents)
+        f["gstCents"] = num(r.gstCents)
+        f["totalCents"] = num(r.totalCents)
+        f["currency"] = .string(r.currency)
+        f["status"] = .string(r.status)
+        f["issueDate"] = str(r.issueDate)
+        f["dueDate"] = str(r.dueDate)
+        f["issuedAt"] = num(r.issuedAt)
+        f["pdfR2Key"] = str(r.pdfR2Key)
+        return f
+    }
+}
+
+extension Invoice: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - InvoiceLineItem
+
+private struct InvoiceLineItemSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = InvoiceLineItem(userId: env.userId, invoiceId: env.string("invoiceId") ?? "",
+                                    // backend wire key is "itemDescription" (D1 column "description")
+                                    itemDescription: env.string("itemDescription") ?? "",
+                                    unitPriceCents: env.int("unitPriceCents") ?? 0)
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        if let v = env.string("invoiceId") { row.invoiceId = v }
+        if let v = env.string("itemDescription") { row.itemDescription = v }
+        if let v = env.int("quantity") { row.quantity = v }
+        if let v = env.int("unitPriceCents") { row.unitPriceCents = v }
+        if let v = env.int("sortOrder") { row.sortOrder = v }
+    }
+
+    func payload(_ r: InvoiceLineItem) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["invoiceId"] = .string(r.invoiceId)
+        f["itemDescription"] = .string(r.itemDescription)   // backend wire key "itemDescription"
+        f["quantity"] = num(r.quantity)
+        f["unitPriceCents"] = num(r.unitPriceCents)
+        f["sortOrder"] = num(r.sortOrder)
+        return f
+    }
+}
+
+extension InvoiceLineItem: SyncableMutableEnvelope, MutableSyncRow {
+    func setRev(_ rev: Int) { self.rev = rev }
+    func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
+}
+
+// MARK: - Payment
+
+private struct PaymentSyncMapper: SyncRowMapper {
+    func upsert(_ context: ModelContext, _ env: PullChange) {
+        let row = fetch(context, env.id) ?? {
+            let x = Payment(userId: env.userId, invoiceId: env.string("invoiceId") ?? "",
+                            amountCents: env.int("amountCents") ?? 0,
+                            paidOn: env.string("paidOn") ?? "")
+            x.id = env.id
+            context.insert(x)
+            return x
+        }()
+        applySharedEnvelope(row, env)
+        if let v = env.string("invoiceId") { row.invoiceId = v }
+        if let v = env.int("amountCents") { row.amountCents = v }
+        if let v = env.string("paidOn") { row.paidOn = v }
+        if let v = env.string("method") { row.method = v }
+        if let v = env.string("note") { row.note = v }
+    }
+
+    func payload(_ r: Payment) -> [String: JSONValue] {
+        var f = sharedFields(r)
+        f["invoiceId"] = .string(r.invoiceId)
+        f["amountCents"] = num(r.amountCents)
+        f["paidOn"] = .string(r.paidOn)
+        f["method"] = str(r.method)
+        f["note"] = str(r.note)
+        return f
+    }
+}
+
+extension Payment: SyncableMutableEnvelope, MutableSyncRow {
     func setRev(_ rev: Int) { self.rev = rev }
     func setUpdatedAt(_ updatedAt: Int) { self.updatedAt = updatedAt }
 }

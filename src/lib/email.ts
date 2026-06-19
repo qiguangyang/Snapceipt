@@ -203,6 +203,62 @@ export async function sendQuoteEmail(env: Env, msg: QuoteEmail): Promise<void> {
   await env.EMAIL.send(message);
 }
 
+/** The invoice-send email (tax-invoice PDF attachment). */
+export interface InvoiceEmail {
+  to: string;
+  /** The trader's own email — set as Reply-To so the client replies to them. */
+  replyTo: string;
+  invoiceNumber: string;
+  clientName: string | null;
+  totalCents: number;
+  pdf: Uint8Array;
+}
+
+/** PDF attachment ceiling — Cloudflare Email Send caps the message. */
+const MAX_INVOICE_PDF_BYTES = 25 * 1024 * 1024; // 25 MiB
+
+/**
+ * Send the invoice email with the tax-invoice PDF attached (spec §4.5). Mirrors
+ * sendQuoteEmail: mimetext/browser MIME (self-contained, workerd-safe), base64 PDF
+ * attachment, cloudflare:email EmailMessage(from,to,raw) + env.EMAIL.send. `from` is
+ * the magic-link sender (the only allowed_sender_addresses entry); Reply-To is the
+ * trader so the client replies to them. Stubbed in route tests via
+ * vi.spyOn(emailModule, "sendInvoiceEmail").
+ */
+export async function sendInvoiceEmail(env: Env, msg: InvoiceEmail): Promise<void> {
+  if (msg.pdf.byteLength > MAX_INVOICE_PDF_BYTES) {
+    throw new Error(`invoice PDF exceeds ${MAX_INVOICE_PDF_BYTES} bytes`);
+  }
+
+  const { createMimeMessage, Mailbox } = await import("mimetext/browser");
+  const { EmailMessage } = await import("cloudflare:email");
+
+  const total = `$${(msg.totalCents / 100).toFixed(2)}`;
+  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+
+  const mime = createMimeMessage();
+  mime.setSender({ name: "Snapceipt", addr: MAGIC_LINK_SENDER });
+  mime.setRecipient(msg.to);
+  mime.setHeader("Reply-To", new Mailbox(msg.replyTo, { type: "Reply-To" } as any));
+  mime.setSubject(`Tax invoice ${msg.invoiceNumber} — ${total}`);
+  mime.addMessage({
+    contentType: "text/plain",
+    data:
+      `${greeting}\n\n` +
+      `Please find attached tax invoice ${msg.invoiceNumber} for ${total}.\n\n` +
+      `Reply to this email if you have any questions.\n`,
+  });
+  mime.addAttachment({
+    filename: `invoice-${msg.invoiceNumber}.pdf`,
+    contentType: "application/pdf",
+    encoding: "base64",
+    data: base64Bytes(msg.pdf),
+  });
+
+  const message = new EmailMessage(MAGIC_LINK_SENDER, msg.to, mime.asRaw());
+  await env.EMAIL.send(message);
+}
+
 /** Base64-encode bytes in chunks (avoids the call-stack limit of spreading a
  *  large Uint8Array into String.fromCharCode). */
 function base64Bytes(bytes: Uint8Array): string {

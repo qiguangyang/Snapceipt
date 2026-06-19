@@ -43,6 +43,16 @@ protocol APIClient {
     /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), render the
     /// PDF, email the client; returns the applied number/status/sentAt/totals. (§4.5)
     func sendQuote(_ id: String) async throws -> SendQuoteResponse
+    /// POST /quotes/:id/pdf — build/store the quote PDF, persist pdf_r2_key, mint
+    /// number if absent. No email, no status change. (spec §3)
+    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse
+    /// POST /invoices/:id/issue — mint number, build tax-invoice PDF → R2, set
+    /// issued + dates + pdf_r2_key. (spec §4.2)
+    func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse
+    /// POST /invoices/:id/send — ensure PDF, email client (reuse quote email path). (spec §4.5)
+    func sendInvoice(_ id: String) async throws -> SendInvoiceResponse
+    /// POST /invoices/:id/pdf — (re)build/return the invoice PDF for share. (spec §6)
+    func invoicePdf(_ id: String) async throws -> InvoicePdfResponse
     /// GET /profiles/:id/inbox — the per-profile email-in alias (minted on first read). (§3.1)
     func profileInbox(profileId: String) async throws -> InboxAddressResponse
     /// POST /profiles/:id/inbox/rotate — replace the alias; the old token stops resolving. (§3.1)
@@ -232,6 +242,22 @@ final class LiveAPIClient: APIClient {
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         try await send("POST", "/quotes/\(id)/send", body: NoBody(), authenticated: true)
+    }
+
+    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
+        try await send("POST", "/quotes/\(id)/pdf", body: NoBody(), authenticated: true)
+    }
+
+    func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
+        try await send("POST", "/invoices/\(id)/issue", body: NoBody(), authenticated: true)
+    }
+
+    func sendInvoice(_ id: String) async throws -> SendInvoiceResponse {
+        try await send("POST", "/invoices/\(id)/send", body: NoBody(), authenticated: true)
+    }
+
+    func invoicePdf(_ id: String) async throws -> InvoicePdfResponse {
+        try await send("POST", "/invoices/\(id)/pdf", body: NoBody(), authenticated: true)
     }
 
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {

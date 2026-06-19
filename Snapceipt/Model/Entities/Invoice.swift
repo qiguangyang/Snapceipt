@@ -1,32 +1,30 @@
 import Foundation
 import SwiftData
 
-/// A client quote (Business). Totals are server-recomputed on save. Mirrors D1 `quotes`.
+/// A tax invoice (Business). Totals are server-recomputed on issue. Mirrors D1 `invoices`.
+/// Derived A/R state (amountPaid / paymentState / isOverdue) is NOT stored — see
+/// `AccountsReceivable`.
 @Model
-final class Quote: Syncable {
+final class Invoice: Syncable {
     @Attribute(.unique) var id: String
     var userId: String
     var profileId: String?
 
-    var number: String?
+    var number: String?              // minted on issue (POST /invoices/:id/issue)
+    var quoteId: String?             // origin link (the quote this was converted from)
     var clientName: String?
     var clientEmail: String?
     var gstEnabled: Bool
-    /// When true (and `gstEnabled`), entered line prices already include GST: the
-    /// grand total is the entered sum and GST is the embedded 1/11 portion. Default
-    /// false = GST added on top (exclusive). Mirrors D1 `quotes.gst_inclusive`.
     var gstInclusive: Bool
     var subtotalCents: Int
     var gstCents: Int
     var totalCents: Int
     var currency: String
-    var status: String               // "draft" | "sent" | "accepted" | "declined" | "expired" | "invoiced"
-    var validUntil: String?          // "YYYY-MM-DD"
-    var sentAt: Int?
-    /// R2 key of the last-generated quote PDF (persisted; re-shareable from history). (spec §3)
-    var pdfR2Key: String?
-    /// The invoice this quote was converted into, if any (one-to-one). (spec §4.2)
-    var invoiceId: String?
+    var status: String               // "draft" | "issued" | "void"
+    var issueDate: String?           // "YYYY-MM-DD" (set on issue)
+    var dueDate: String?             // "YYYY-MM-DD" (editable; default today+14)
+    var issuedAt: Int?               // epoch ms (set on issue)
+    var pdfR2Key: String?            // persisted R2 key of the last-built PDF
 
     var createdAt: Int
     var updatedAt: Int
@@ -34,13 +32,14 @@ final class Quote: Syncable {
     var rev: Int
     var lastEditedDeviceId: String?
 
-    var entityType: EntityType { .quote }
+    var entityType: EntityType { .invoice }
 
     init(
         id: String = Snapceipt.ID.uuidv7(),
         userId: String,
         profileId: String?,
         number: String? = nil,
+        quoteId: String? = nil,
         clientName: String? = nil,
         clientEmail: String? = nil,
         gstEnabled: Bool = true,
@@ -50,10 +49,10 @@ final class Quote: Syncable {
         totalCents: Int = 0,
         currency: String = "AUD",
         status: String = "draft",
-        validUntil: String? = nil,
-        sentAt: Int? = nil,
+        issueDate: String? = nil,
+        dueDate: String? = nil,
+        issuedAt: Int? = nil,
         pdfR2Key: String? = nil,
-        invoiceId: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -64,6 +63,7 @@ final class Quote: Syncable {
         self.userId = userId
         self.profileId = profileId
         self.number = number
+        self.quoteId = quoteId
         self.clientName = clientName
         self.clientEmail = clientEmail
         self.gstEnabled = gstEnabled
@@ -73,10 +73,10 @@ final class Quote: Syncable {
         self.totalCents = totalCents
         self.currency = currency
         self.status = status
-        self.validUntil = validUntil
-        self.sentAt = sentAt
+        self.issueDate = issueDate
+        self.dueDate = dueDate
+        self.issuedAt = issuedAt
         self.pdfR2Key = pdfR2Key
-        self.invoiceId = invoiceId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

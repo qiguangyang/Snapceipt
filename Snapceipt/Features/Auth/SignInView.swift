@@ -201,6 +201,21 @@ final class PreviewAPIClient: APIClient {
                           subtotalCents: 0, gstCents: 0, totalCents: 0,
                           pdfUrl: nil, expiresAt: nil, emailed: false)
     }
+    func generateQuotePdf(_ id: String) async throws -> GenerateQuotePdfResponse {
+        GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/preview-token", number: "SN-0001", expiresAt: nil)
+    }
+    func issueInvoice(_ id: String) async throws -> IssueInvoiceResponse {
+        IssueInvoiceResponse(pdfUrl: "/invoices/dl/preview-token", number: "INV-0001",
+                             status: "issued", issueDate: "2026-06-19", dueDate: "2026-07-03",
+                             issuedAt: 1_790_000_000_000, subtotalCents: 0, gstCents: 0,
+                             totalCents: 0, expiresAt: nil)
+    }
+    func sendInvoice(_ id: String) async throws -> SendInvoiceResponse {
+        SendInvoiceResponse(pdfUrl: "/invoices/dl/preview-token", emailed: false)
+    }
+    func invoicePdf(_ id: String) async throws -> InvoicePdfResponse {
+        InvoicePdfResponse(pdfUrl: "/invoices/dl/preview-token", expiresAt: nil)
+    }
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {
         InboxAddressResponse(profileId: profileId, token: "previewtoken",
                              address: "r.previewtoken@in.snapceipt.cc")

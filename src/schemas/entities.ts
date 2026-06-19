@@ -163,6 +163,46 @@ export const vehicleYearEntity = baseEnvelope.extend({
   claimCents: cents.nullable().optional(),
 });
 
+/** invoice — issued tax invoice (spec §4.1). Money in cents, dates date-only. */
+export const invoiceEntity = baseEnvelope.extend({
+  type: z.literal("invoice"),
+  number: z.string().nullable().optional(),
+  quoteId: uuid.nullable().optional(),
+  clientName: z.string().nullable().optional(),
+  clientEmail: z.string().nullable().optional(),
+  gstEnabled: z.boolean().optional(),
+  gstInclusive: z.boolean().optional(),
+  subtotalCents: cents.optional(),
+  gstCents: cents.optional(),
+  totalCents: cents.optional(),
+  currency: z.string().length(3).optional(),
+  status: z.enum(["draft", "issued", "void"]).optional(),
+  issueDate: isoDate.nullable().optional(),
+  dueDate: isoDate.nullable().optional(),
+  issuedAt: epochMs.nullable().optional(),
+  pdfR2Key: z.string().nullable().optional(),
+});
+
+/** invoiceLineItem — child of an invoice; a clone of quoteLineItem (profileId nil). */
+export const invoiceLineItemEntity = baseEnvelope.extend({
+  type: z.literal("invoiceLineItem"),
+  invoiceId: uuid,
+  itemDescription: z.string().min(1),
+  quantity: z.number().int().min(1).optional(),
+  unitPriceCents: cents,
+  sortOrder: z.number().int().optional(),
+});
+
+/** payment — one A/R payment record against an invoice (spec §4.1). */
+export const paymentEntity = baseEnvelope.extend({
+  type: z.literal("payment"),
+  invoiceId: uuid,
+  amountCents: cents,
+  paidOn: isoDate,
+  method: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+
 /** Every syncable type (SPINE). Types without a specialized schema validate via baseEnvelope. */
 export const SYNCABLE_TYPES = [
   "transaction",
@@ -180,6 +220,9 @@ export const SYNCABLE_TYPES = [
   "taxSettings",
   "vehicle",
   "vehicleYear",
+  "invoice",
+  "invoiceLineItem",
+  "payment",
 ] as const;
 
 export type SyncableType = (typeof SYNCABLE_TYPES)[number];
@@ -192,6 +235,9 @@ const SPECIALIZED: Partial<Record<SyncableType, z.ZodTypeAny>> = {
   loyaltyCard: loyaltyCardEntity,
   vehicle: vehicleEntity,
   vehicleYear: vehicleYearEntity,
+  invoice: invoiceEntity,
+  invoiceLineItem: invoiceLineItemEntity,
+  payment: paymentEntity,
 };
 
 /** Returns the strictest available schema for an entityType; baseEnvelope is the fallback. */

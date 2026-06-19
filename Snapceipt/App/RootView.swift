@@ -307,6 +307,24 @@ struct ShellView: View {
             }
         }
         .overlay {
+            if router.overlay == .invoices {
+                InvoiceListView(context: profiles.context, sync: sync, userId: profiles.userId,
+                                profileId: profiles.activeProfileId,
+                                onClose: { router.dismissOverlay() },
+                                onEdit: { router.openInvoice($0) })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .invoiceEditor(id) = router.overlay {
+                InvoiceEditorView(context: profiles.context, sync: sync, api: captureAPI,
+                                  userId: profiles.userId, profileId: profiles.activeProfileId,
+                                  invoiceId: id,
+                                  onClose: { router.dismissOverlay() })
+                    .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
             if router.overlay == .bas {
                 BasView(context: profiles.context, api: captureAPI, userId: profiles.userId,
                         profileId: profiles.activeProfileId,
@@ -324,7 +342,8 @@ struct ShellView: View {
                 QuoteEditorView(context: profiles.context, sync: sync, api: captureAPI,
                                 userId: profiles.userId, profileId: profiles.activeProfileId,
                                 quoteId: id,
-                                onClose: { router.dismissOverlay() })
+                                onClose: { router.dismissOverlay() },
+                                onConvert: { invId in router.openInvoice(invId) })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -573,7 +592,10 @@ struct ShellView: View {
                             alertSentAt: $0.budget.alertSentAt)
         }
         _ = budgets
-        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Epoch.now()))
+        let today = ExportDateFormatter.shared.string(from: Date())
+        let overdue = InvoiceListViewModel.overdueCount(context: profiles.context,
+                                                        profileId: pid, today: today)
+        return AlertCache().unreadCount(AlertFeed.items(inputs: inputs, now: Epoch.now())) + overdue
     }
 
     /// Home alerts bell — square rounded paper button with an accent unread dot
@@ -604,12 +626,12 @@ struct ShellView: View {
             if isBusiness {
                 quickTile(title: "Create Quote", icon: "receipt", id: AccessibilityID.homeQuickQuote,
                           accent: accent) { router.present(.quotes) }
+                quickTile(title: "Invoices", icon: "doc", id: AccessibilityID.homeQuickInvoices,
+                          accent: accent) { router.present(.invoices) }
                 quickTile(title: "Add Manually", icon: "plus", id: AccessibilityID.homeQuickManual,
                           accent: accent) { router.present(.manual(editId: nil)) }
                 quickTile(title: "Reports", icon: "chart", id: AccessibilityID.homeQuickReports,
                           accent: accent) { router.go(.reports) }
-                quickTile(title: "Receipts", icon: "receipt", id: AccessibilityID.homeQuickReceipts,
-                          accent: accent) { router.go(.activity) }
             } else {
                 quickTile(title: "Loyalty Card", icon: "star", id: AccessibilityID.homeQuickLoyalty,
                           accent: accent) { router.present(.loyalty) }
@@ -656,6 +678,7 @@ struct ShellView: View {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .manual, .receiptDetail, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
+                     .invoices, .invoiceEditor,
                      .emailIn, .emailInReview,
                      .tax, .categories, .ruleEditor, .profileDetail,
                      .account, .privacy, .changeEmail:
@@ -672,12 +695,14 @@ struct ShellView: View {
                                                Overlay.notificationSettings.id,
                                                Overlay.loyalty.id, Overlay.loyaltyAdd.id,
                                                Overlay.quotes.id, Overlay.bas.id, Overlay.emailIn.id,
+                                               Overlay.invoices.id,
                                                Overlay.tax.id, Overlay.categories.id,
                                                Overlay.account.id, Overlay.privacy.id, Overlay.changeEmail.id]
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
-                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("emailInReview"),
+                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("invoiceEditor"),
+                   !cur.id.hasPrefix("emailInReview"),
                    !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail"),
                    !cur.id.hasPrefix("manual"), !cur.id.hasPrefix("receiptDetail") {
                     router.dismissOverlay()
@@ -732,6 +757,7 @@ struct ShellView: View {
             EmptyView()  // handled by the full-screen capture overlay
         case .receiptDetail, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
+             .invoices, .invoiceEditor,
              .emailIn, .emailInReview,
              .tax, .categories, .ruleEditor, .profileDetail,
              .account, .privacy, .changeEmail:

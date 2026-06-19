@@ -230,6 +230,43 @@ struct SendQuoteResponse: Decodable {
     let emailed: Bool
 }
 
+// MARK: - Quote PDF + Invoices (spec §6)
+
+/// POST /quotes/:id/pdf response. Builds/stores the quote PDF + persists pdf_r2_key
+/// and mints `number` if absent. No status change. `pdfUrl` is the public dl link.
+struct GenerateQuotePdfResponse: Decodable {
+    let pdfUrl: String
+    let number: String?
+    let expiresAt: Int?
+}
+
+/// POST /invoices/:id/issue response. Mints the number, builds the tax-invoice PDF →
+/// R2, sets status=issued + dates. The editor applies these to the local Invoice.
+struct IssueInvoiceResponse: Decodable {
+    let pdfUrl: String
+    let number: String
+    let status: String       // "issued"
+    let issueDate: String    // "YYYY-MM-DD"
+    let dueDate: String?     // "YYYY-MM-DD"
+    let issuedAt: Int        // epoch ms
+    let subtotalCents: Int
+    let gstCents: Int
+    let totalCents: Int
+    let expiresAt: Int?
+}
+
+/// POST /invoices/:id/send response — emails the client the tax-invoice PDF.
+struct SendInvoiceResponse: Decodable {
+    let pdfUrl: String?
+    let emailed: Bool
+}
+
+/// POST /invoices/:id/pdf response — (re)build/return the invoice PDF for share.
+struct InvoicePdfResponse: Decodable {
+    let pdfUrl: String
+    let expiresAt: Int?
+}
+
 // MARK: - Email-in (spec §3.1 / §3.4)
 
 /// GET /profiles/:id/inbox + POST .../rotate — the per-profile inbox alias. The

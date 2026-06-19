@@ -196,7 +196,7 @@ describe("entitySchemaFor / SYNCABLE_TYPES", () => {
     expect(SYNCABLE_TYPES).toContain("vehicle");
     expect(SYNCABLE_TYPES).toContain("vehicleYear");
     expect(SYNCABLE_TYPES).toContain("client");
-    expect(SYNCABLE_TYPES.length).toBe(15);
+    expect(SYNCABLE_TYPES.length).toBe(18);
   });
 
   it("returns the specialized schema for known types", () => {
