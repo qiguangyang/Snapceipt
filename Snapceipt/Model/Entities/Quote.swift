@@ -23,6 +23,10 @@ final class Quote: Syncable {
     var status: String               // "draft" | "sent" | "accepted" | "declined" | "expired" | "invoiced"
     var validUntil: String?          // "YYYY-MM-DD"
     var sentAt: Int?
+    /// R2 key of the last-generated quote PDF (persisted; re-shareable from history). (spec §3)
+    var pdfR2Key: String?
+    /// The invoice this quote was converted into, if any (one-to-one). (spec §4.2)
+    var invoiceId: String?
 
     var createdAt: Int
     var updatedAt: Int
@@ -48,6 +52,8 @@ final class Quote: Syncable {
         status: String = "draft",
         validUntil: String? = nil,
         sentAt: Int? = nil,
+        pdfR2Key: String? = nil,
+        invoiceId: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -69,6 +75,8 @@ final class Quote: Syncable {
         self.status = status
         self.validUntil = validUntil
         self.sentAt = sentAt
+        self.pdfR2Key = pdfR2Key
+        self.invoiceId = invoiceId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

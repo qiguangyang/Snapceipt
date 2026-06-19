@@ -530,6 +530,8 @@ private struct QuoteSyncMapper: SyncRowMapper {
         if let v = env.string("status") { row.status = v }
         if let v = env.string("validUntil") { row.validUntil = v }
         if let v = env.int("sentAt") { row.sentAt = v }
+        if let v = env.string("pdfR2Key") { row.pdfR2Key = v }
+        if let v = env.string("invoiceId") { row.invoiceId = v }
     }
 
     func payload(_ r: Quote) -> [String: JSONValue] {
@@ -546,6 +548,8 @@ private struct QuoteSyncMapper: SyncRowMapper {
         f["status"] = .string(r.status)
         f["validUntil"] = str(r.validUntil)
         f["sentAt"] = num(r.sentAt)
+        f["pdfR2Key"] = str(r.pdfR2Key)
+        f["invoiceId"] = str(r.invoiceId)
         return f
     }
 }
