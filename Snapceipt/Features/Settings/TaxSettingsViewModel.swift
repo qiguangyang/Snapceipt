@@ -8,8 +8,8 @@ enum GstRatePreset: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .au: return "10% (Australia)"
-        case .nz: return "15% (New Zealand)"
+        case .au: return "10%"
+        case .nz: return "15%"
         case .custom: return "Custom %"
         }
     }
@@ -38,12 +38,20 @@ final class TaxSettingsViewModel {
 
     // GST rate (bp) + business/bank details (mirror the active Profile). (spec §3, §5)
     private(set) var gstRateBp: Int
+    /// The user's selected GST-rate segment. Stored (not derived) so "Custom" stays
+    /// selected even when the rate is a round number (e.g. custom 10%) — otherwise the
+    /// segmented control snaps back to a preset and the custom field never appears.
+    private(set) var gstRatePreset: GstRatePreset
     private(set) var businessEmail: String
     private(set) var phone: String
     private(set) var website: String
     private(set) var addressText: String
     private(set) var bankDetails: String
     private(set) var logoR2Key: String?
+    /// The logo bitmap for the settings preview. Set on upload and cached locally
+    /// (keyed by profile id) so the preview survives reopening settings — the R2 key
+    /// alone can't be rendered on-device (it's only inlined server-side in the HTML quote).
+    private(set) var logoImage: UIImage?
     private(set) var isUploadingLogo = false
     var logoUploadError: String?
 
@@ -85,12 +93,16 @@ final class TaxSettingsViewModel {
         self.gstRegistered = profile.gstRegistered
         self.abn = profile.abn ?? ""
         self.gstRateBp = profile.gstRateBp
+        self.gstRatePreset = Self.preset(forBp: profile.gstRateBp)
         self.businessEmail = profile.businessEmail ?? ""
         self.phone = profile.phone ?? ""
         self.website = profile.website ?? ""
         self.addressText = profile.addressText ?? ""
         self.bankDetails = profile.bankDetails ?? ""
         self.logoR2Key = profile.logoR2Key
+        if let url = Self.logoCacheURL(profileId: pid), let data = try? Data(contentsOf: url) {
+            self.logoImage = UIImage(data: data)
+        }
         self.entityType = defaults.string(forKey: "sc.tax.\(pid).entityType") ?? "Sole trader"
         self.gstBasis = defaults.string(forKey: "sc.tax.\(pid).gstBasis") ?? "Cash"
         self.basPeriodRaw = defaults.string(forKey: "sc.tax.\(pid).basPeriod") ?? BasPeriod.quarterly.rawValue
@@ -115,15 +127,16 @@ final class TaxSettingsViewModel {
 
     // MARK: - GST rate (bp)
 
-    /// The preset the current rate corresponds to (1000→.au, 1500→.nz, else .custom).
-    var derivedPreset: GstRatePreset {
-        switch gstRateBp {
+    /// Maps a basis-point rate to its preset (1000→.au, 1500→.nz, else .custom).
+    static func preset(forBp bp: Int) -> GstRatePreset {
+        switch bp {
         case 1000: return .au
         case 1500: return .nz
         default: return .custom
         }
     }
-    var gstRatePreset: GstRatePreset { derivedPreset }
+    /// The preset the current rate corresponds to (1000→.au, 1500→.nz, else .custom).
+    var derivedPreset: GstRatePreset { Self.preset(forBp: gstRateBp) }
     /// Percent string for the custom field (e.g. 1250 → "12.5").
     var gstRatePercentText: String {
         let pct = Double(gstRateBp) / 100.0
@@ -137,14 +150,16 @@ final class TaxSettingsViewModel {
         saveProfile()
     }
     func setGstRatePreset(_ preset: GstRatePreset) {
+        gstRatePreset = preset
         switch preset {
         case .au: setGstRateBp(1000)
         case .nz: setGstRateBp(1500)
-        case .custom: break   // custom is set via setCustomGstPercent
+        case .custom: break   // keep the current rate; the custom field edits it
         }
     }
     /// `12.5` → 1250 bp.
     func setCustomGstPercent(_ percent: Double) {
+        gstRatePreset = .custom
         setGstRateBp(Int((percent * 100).rounded()))
     }
 
@@ -172,10 +187,19 @@ final class TaxSettingsViewModel {
             logoR2Key = r.logoR2Key
             profile.logoR2Key = r.logoR2Key
             saveProfile()
+            // Show the just-uploaded logo immediately + cache it for next time.
+            logoImage = UIImage(data: png) ?? image
+            if let url = Self.logoCacheURL(profileId: profile.id) { try? png.write(to: url) }
         } catch let e as APIError {
             logoUploadError = e.message
         } catch {
             logoUploadError = "Couldn’t upload the logo. Try again."
         }
+    }
+
+    /// Local cache path for a profile's logo bitmap (Caches dir; safe to be evicted).
+    static func logoCacheURL(profileId: String) -> URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("sc.logo.\(profileId).img")
     }
 }

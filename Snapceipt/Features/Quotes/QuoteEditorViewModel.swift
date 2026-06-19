@@ -218,11 +218,12 @@ final class QuoteEditorViewModel {
     /// ≥1 line item) — NOT gated on an existing pdfUrl (spec §3).
     var canGeneratePdf: Bool { canSend }
 
-    /// Convert is offered on a sent/accepted quote, or whenever an invoice already
-    /// exists (re-open it). (spec §4.2)
+    /// Convert is offered on any valid quote (client + ≥1 line item), or whenever an
+    /// invoice already exists (re-open it). Relaxed from the original sent/accepted gate
+    /// (spec §4.2) so "Convert to invoice" is available directly from the quote view.
     var canConvert: Bool {
         if invoiceId != nil { return true }
-        return statusValue == .sent || statusValue == .accepted
+        return canSend
     }
 
     /// Mint (or re-mint) the hosted HTML quote link for the Share action (spec §4).

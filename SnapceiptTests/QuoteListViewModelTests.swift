@@ -49,4 +49,39 @@ struct QuoteListViewModelTests {
         #expect(sync.calls.last?.op == "delete")
         #expect(sync.calls.last?.entityType == .quote)
     }
+
+    @Test("duplicate clones client + line items into a fresh draft and returns its id")
+    func duplicateClones() throws {
+        let (ctx, sync) = try makeFixture()
+        let src = Quote(userId: "u1", profileId: "p1", clientName: "Acme",
+                        gstEnabled: true, status: "sent", gstRateBp: 1500,
+                        createdAt: 100, updatedAt: 100)
+        ctx.insert(src)
+        ctx.insert(QuoteLineItem(userId: "u1", quoteId: src.id, itemDescription: "Design",
+                                 quantity: 2, unitPriceCents: 5000, sortOrder: 0))
+        try ctx.save()
+        let v = vm(ctx, sync)
+        #expect(v.quotes.count == 1)
+
+        let newId = v.duplicate(src)
+        #expect(newId != nil)
+        #expect(newId != src.id)
+        #expect(v.quotes.count == 2)
+
+        let copy = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == newId! }))[0]
+        #expect(copy.clientName == "Acme")
+        #expect(copy.status == "draft")        // fresh draft, not the source's "sent"
+        #expect(copy.number == nil)            // no number / invoice carried over
+        #expect(copy.invoiceId == nil)
+        #expect(copy.gstRateBp == 1500)        // GST rate copied
+
+        let lines = try ctx.fetch(FetchDescriptor<QuoteLineItem>(predicate: #Predicate { $0.quoteId == newId! }))
+        #expect(lines.count == 1)
+        #expect(lines[0].itemDescription == "Design")
+        #expect(lines[0].unitPriceCents == 5000)
+        #expect(lines[0].quantity == 2)
+
+        #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .quote })
+        #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .quoteLineItem })
+    }
 }

@@ -41,4 +41,39 @@ final class QuoteListViewModel {
         reload()
         sync.enqueue(op: "delete", entityType: .quote, entity: quote)
     }
+
+    /// Clone a quote (client, GST flags, line items) into a fresh DRAFT — new id, no
+    /// number / invoice / PDF / sent state — so the user can quickly start a new quote
+    /// from an existing one. Returns the new quote's id (to open its editor).
+    @discardableResult
+    func duplicate(_ quote: Quote) -> String? {
+        let copy = Quote(
+            userId: userId, profileId: profileId,
+            clientName: quote.clientName, clientEmail: quote.clientEmail,
+            gstEnabled: quote.gstEnabled, gstInclusive: quote.gstInclusive,
+            subtotalCents: quote.subtotalCents, gstCents: quote.gstCents, totalCents: quote.totalCents,
+            currency: quote.currency, status: "draft", validUntil: quote.validUntil,
+            gstRateBp: quote.gstRateBp)
+        context.insert(copy)
+
+        let qid = quote.id
+        let d = FetchDescriptor<QuoteLineItem>(
+            predicate: #Predicate { $0.quoteId == qid && $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.sortOrder)])
+        let lines = (try? context.fetch(d)) ?? []
+        var cloned: [QuoteLineItem] = []
+        for (idx, line) in lines.enumerated() {
+            let c = QuoteLineItem(userId: userId, quoteId: copy.id,
+                                  itemDescription: line.itemDescription,
+                                  quantity: line.quantity, unitPriceCents: line.unitPriceCents,
+                                  sortOrder: idx)
+            context.insert(c)
+            cloned.append(c)
+        }
+        try? context.save()
+        reload()
+        sync.enqueue(op: "upsert", entityType: .quote, entity: copy)
+        for c in cloned { sync.enqueue(op: "upsert", entityType: .quoteLineItem, entity: c) }
+        return copy.id
+    }
 }

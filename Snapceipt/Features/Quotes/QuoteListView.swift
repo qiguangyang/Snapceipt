@@ -42,8 +42,19 @@ struct QuoteListView: View {
                                     .listRowBackground(Palette.cream)
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
-                                    .swipeActions {
-                                        Button(role: .destructive) { vm.delete(quote) } label: { Text("Delete") }
+                                    .swipeActions(allowsFullSwipe: false) {
+                                        Button(role: .destructive) { vm.delete(quote) } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .accessibilityIdentifier(AccessibilityID.quoteRowDelete + quote.id)
+                                        Button {
+                                            guard entitlement.isPro else { showPaywall = true; return }
+                                            if let newId = vm.duplicate(quote) { onEdit(newId) }
+                                        } label: {
+                                            Image(systemName: "plus.square.on.square")
+                                        }
+                                        .tint(accent.base)
+                                        .accessibilityIdentifier(AccessibilityID.quoteRowDuplicate + quote.id)
                                     }
                             }
                         }

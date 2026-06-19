@@ -225,6 +225,12 @@ struct TaxSettingsView: View {
             HStack(spacing: 12) {
                 if vm.isUploadingLogo {
                     ProgressView().frame(width: 48, height: 48)
+                } else if let logo = vm.logoImage {
+                    Image(uiImage: logo).resizable().scaledToFill()
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1))
+                        .accessibilityIdentifier(AccessibilityID.taxBusinessLogoPreview)
                 } else if vm.logoR2Key != nil {
                     Image(systemName: "checkmark.seal.fill").font(.system(size: 28))
                         .foregroundStyle(accent.base).frame(width: 48, height: 48)

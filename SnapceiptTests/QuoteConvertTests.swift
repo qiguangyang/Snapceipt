@@ -120,17 +120,31 @@ struct QuoteConvertTests {
         #expect(invoices.count == 1)
     }
 
-    @Test("convert not eligible for a draft quote (returns nil, no invoice)")
+    @Test("convert not eligible for an invalid quote (no client/lines): returns nil, no invoice")
     func convertGated() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.saveDraft()                       // no client, no line items → not a valid quote
+        #expect(v.canConvert == false)
+        #expect(v.convertToInvoice() == nil)
+        let invoices = try ctx.fetch(FetchDescriptor<Invoice>())
+        #expect(invoices.isEmpty)
+    }
+
+    @Test("convert IS eligible for a valid draft quote (client + ≥1 line item)")
+    func convertDraftEligible() throws {
         let (ctx, sync) = try makeFixture()
         let v = vm(ctx, sync)
         v.load(id: nil)
         v.setClient(name: "Acme", email: nil)
         v.addLine(); v.lineItems[0].unitPriceCents = 100_00
         v.saveDraft()
-        #expect(v.canConvert == false)
-        #expect(v.convertToInvoice() == nil)
-        let invoices = try ctx.fetch(FetchDescriptor<Invoice>())
-        #expect(invoices.isEmpty)
+        #expect(v.statusValue == .draft)
+        #expect(v.canConvert == true)
+        let invId = v.convertToInvoice()
+        #expect(invId != nil)
+        let invoices = try ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.deletedAt == nil }))
+        #expect(invoices.count == 1)
     }
 }

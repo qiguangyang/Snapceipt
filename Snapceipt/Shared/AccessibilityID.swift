@@ -173,6 +173,8 @@ enum AccessibilityID {
     // Quotes (F5)
     static let quotesScreen = "quotes.screen"
     static let quoteRowPrefix = "quote.row."             // + quote.id
+    static let quoteRowDelete = "quote.row.delete."      // + quote.id
+    static let quoteRowDuplicate = "quote.row.duplicate." // + quote.id
     static let quotesAdd = "quotes.add"
     static let quoteEditorScreen = "quote.editor.screen"
     static let quoteEditorClient = "quote.editor.client"

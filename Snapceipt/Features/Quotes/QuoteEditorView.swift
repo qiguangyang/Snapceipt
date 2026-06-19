@@ -199,9 +199,11 @@ struct QuoteEditorView: View {
 
     private func lineRow(_ vm: QuoteEditorViewModel, _ line: QuoteLineItem) -> some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 TextField("Description", text: Binding(
-                    get: { line.itemDescription }, set: { line.itemDescription = $0 }))
+                    get: { line.itemDescription }, set: { line.itemDescription = $0 }),
+                    axis: .vertical)
+                    .lineLimit(1...6)
                     .font(.ui(14.5, .semibold))
                 Text(fmt(line.lineTotalCents)).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 Button { vm.removeLine(line) } label: {
@@ -216,10 +218,10 @@ struct QuoteEditorView: View {
                     .keyboardType(.numberPad)
                     .padding(8).frame(width: 64).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
                 Text("×").font(.ui(13)).foregroundStyle(Palette.ink3)
-                TextField("Unit $", text: Binding(
-                    get: { String(line.unitPriceCents / 100) },
-                    set: { line.unitPriceCents = (Int($0.filter(\.isNumber)) ?? 0) * 100 }))
-                    .keyboardType(.numberPad)
+                Text("$").font(.ui(13)).foregroundStyle(Palette.ink3)
+                LinePriceField(cents: Binding(
+                    get: { line.unitPriceCents },
+                    set: { line.unitPriceCents = $0 }))
                     .padding(8).background(Palette.cream, in: RoundedRectangle(cornerRadius: 10))
                 Spacer(minLength: 0)
             }
