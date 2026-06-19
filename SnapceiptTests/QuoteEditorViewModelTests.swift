@@ -151,14 +151,12 @@ struct QuoteEditorViewModelTests {
         #expect(v2.lineItems[0].itemDescription == "X")
     }
 
-    @Test("send saves the draft, calls sendQuote once, and applies number/status/sentAt/totals")
+    @Test("send saves the draft, calls sendQuote once, and applies url/number/emailed + sets status sent")
     func sendApplies() async throws {
         let (ctx, sync) = try makeFixture()
         let mock = MockAPIClient()
         mock.sendQuoteHandler = { _ in
-            SendQuoteResponse(number: "SN-0042", sentAt: 999, status: "sent",
-                              subtotalCents: 50_00, gstCents: 5_00, totalCents: 55_00,
-                              pdfUrl: "/quotes/dl/tok", expiresAt: 1, emailed: true)
+            SendQuoteResponse(url: "https://api.snapceipt.cc/q/tok", emailed: true, number: "SN-0042")
         }
         let v = vm(ctx, sync)
         v.load(id: nil)
@@ -169,13 +167,12 @@ struct QuoteEditorViewModelTests {
         #expect(mock.sendQuoteCalls.count == 1)
         #expect(mock.sendQuoteCalls[0] == v.quoteId)
         #expect(v.number == "SN-0042")
-        #expect(v.statusValue == .sent)
-        #expect(v.sentAt == 999)
+        #expect(v.pdfUrl == "https://api.snapceipt.cc/q/tok")
+        #expect(v.statusValue == .sent)        // status is set locally on success
         #expect(v.emailed == true)
         let q = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.deletedAt == nil }))[0]
         #expect(q.number == "SN-0042")
         #expect(q.status == "sent")
-        #expect(q.totalCents == 55_00)
     }
 
     @Test("send flushes the outbox BEFORE calling sendQuote (the quote must exist server-side)")
@@ -187,9 +184,7 @@ struct QuoteEditorViewModelTests {
         var flushCountAtSend = -1
         mock.sendQuoteHandler = { _ in
             flushCountAtSend = sync.flushCount
-            return SendQuoteResponse(number: "SN-0001", sentAt: 1, status: "sent",
-                                     subtotalCents: 10_00, gstCents: 1_00, totalCents: 11_00,
-                                     pdfUrl: "/quotes/dl/tok", expiresAt: 1, emailed: false)
+            return SendQuoteResponse(url: "https://api.snapceipt.cc/q/tok", emailed: false, number: "SN-0001")
         }
         let v = vm(ctx, sync)
         v.load(id: nil)

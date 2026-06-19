@@ -14,7 +14,22 @@ final class QuoteEditorViewModel {
     @ObservationIgnored private let userId: String
     @ObservationIgnored let profileId: String
 
+    /// The active profile's GST rate (basis points), resolved lazily from storage; used
+    /// for live totals + snapshotted onto the quote at save. (spec §3)
+    @ObservationIgnored private lazy var profileGstRateBp: Int = {
+        fetchProfile(profileId)?.gstRateBp ?? QuoteTotals.defaultRateBp
+    }()
+
+    private func fetchProfile(_ id: String) -> Profile? {
+        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id })
+        d.fetchLimit = 1
+        return (try? context.fetch(d))?.first
+    }
+
     private(set) var quoteId: String?
+    /// The quote's snapshotted GST rate (basis points), loaded from storage. nil until
+    /// the first save snapshots `profileGstRateBp` onto the quote. (spec §3)
+    private(set) var gstRateBp: Int?
     var lineItems: [QuoteLineItem] = []
     var gstEnabled = true
     /// When true (and `gstEnabled`), entered prices already include GST — see
@@ -48,7 +63,8 @@ final class QuoteEditorViewModel {
     var statusValue: QuoteStatus? { QuoteStatus(rawValue: status) }
 
     var totals: (subtotal: Int, gst: Int, total: Int) {
-        QuoteTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled, gstInclusive: gstInclusive)
+        QuoteTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled,
+                            gstInclusive: gstInclusive, gstRateBp: gstRateBp ?? profileGstRateBp)
     }
 
     var canSend: Bool {
@@ -70,6 +86,7 @@ final class QuoteEditorViewModel {
             validUntil = q.validUntil
             pdfR2Key = q.pdfR2Key
             invoiceId = q.invoiceId
+            gstRateBp = q.gstRateBp
             let qid = q.id
             let d = FetchDescriptor<QuoteLineItem>(
                 predicate: #Predicate { $0.quoteId == qid && $0.deletedAt == nil },
@@ -88,6 +105,7 @@ final class QuoteEditorViewModel {
             validUntil = nil
             pdfR2Key = nil
             invoiceId = nil
+            gstRateBp = nil
             lineItems = []
             originalLineIds = []
         }
@@ -111,7 +129,6 @@ final class QuoteEditorViewModel {
 
     func saveDraft() {
         guard let qid = quoteId else { return }
-        let t = totals
         let quote = fetchQuote(qid) ?? {
             let q = Quote(userId: userId, profileId: profileId)
             q.id = qid
@@ -119,6 +136,11 @@ final class QuoteEditorViewModel {
             return q
         }()
         quote.profileId = profileId
+        // Snapshot the GST rate from the active profile on first save; keep an existing
+        // snapshot so a re-save never re-rates an already-sent quote. (spec §2.2/§3)
+        if quote.gstRateBp == nil { quote.gstRateBp = profileGstRateBp }
+        gstRateBp = quote.gstRateBp
+        let t = totals
         quote.clientName = clientName
         quote.clientEmail = clientEmail
         quote.gstEnabled = gstEnabled
@@ -165,19 +187,20 @@ final class QuoteEditorViewModel {
         await sync.flush()
         do {
             let r = try await api.sendQuote(qid)
-            number = r.number
-            status = r.status
-            sentAt = r.sentAt
-            pdfUrl = r.pdfUrl
+            // The send response now carries only {url, emailed, number}; status/totals are
+            // persisted server-side and synced via /sync (NOT returned here). Apply the
+            // link + email status + minted number, and set status locally. (spec §4)
+            pdfUrl = r.url
             emailed = r.emailed
+            if let n = r.number { number = n }
+            status = QuoteStatus.sent.rawValue
+            let sentNow = Epoch.nowMs()
+            sentAt = sentNow
             if let quote = fetchQuote(qid) {
-                quote.number = r.number
-                quote.status = r.status
-                quote.sentAt = r.sentAt
-                quote.subtotalCents = r.subtotalCents
-                quote.gstCents = r.gstCents
-                quote.totalCents = r.totalCents
-                quote.updatedAt = Epoch.nowMs()
+                if let n = r.number { quote.number = n }
+                quote.status = QuoteStatus.sent.rawValue
+                quote.sentAt = sentNow
+                quote.updatedAt = sentNow
                 try? context.save()
                 sync.enqueue(op: "upsert", entityType: .quote, entity: quote)
             }
@@ -202,33 +225,47 @@ final class QuoteEditorViewModel {
         return statusValue == .sent || statusValue == .accepted
     }
 
-    /// Build/store the quote PDF (spec §3): save + flush so the quote exists server-side,
-    /// then POST /quotes/:id/pdf. Persists pdfUrl/number/pdfR2Key locally. NO status change.
-    func generatePdf(api: APIClient) async -> Bool {
-        guard let qid = quoteId else { return false }
+    /// Mint (or re-mint) the hosted HTML quote link for the Share action (spec §4).
+    /// Saves + flushes so the quote exists server-side, then POST /quotes/:id/link.
+    /// Applies the minted number to the local quote so "Quote #N" displays immediately.
+    func shareLink(api: APIClient) async -> String? {
+        guard let qid = quoteId else { return nil }
         errorMessage = nil
         saveDraft()
         isSending = true
         defer { isSending = false }
         await sync.flush()
         do {
-            let r = try await api.generateQuotePdf(qid)
-            pdfUrl = r.pdfUrl
-            if let n = r.number { number = n }
-            if let quote = fetchQuote(qid) {
-                if let n = r.number { quote.number = n }
-                quote.updatedAt = Epoch.nowMs()
-                try? context.save()
-                sync.enqueue(op: "upsert", entityType: .quote, entity: quote)
-                pdfR2Key = quote.pdfR2Key   // pull will carry the persisted key
+            let r = try await api.quoteShareLink(qid)
+            pdfUrl = r.url
+            // Apply the server-minted number immediately so the editor shows "Quote #N"
+            // without waiting for a sync pull (spec §4: link issues the quote).
+            if let n = r.number, number == nil {
+                number = n
+                if let q = fetchQuote(qid) { q.number = n; try? context.save() }
             }
-            return true
+            return r.url
         } catch let e as APIError {
             errorMessage = e.message
-            return false
+            return nil
+        } catch {
+            errorMessage = "Couldn’t create the link. Try again."
+            return nil
+        }
+    }
+
+    /// Generate the on-device PDF (spec §4): mint the link, then render it in a hidden
+    /// WKWebView and return the temp PDF file URL for sharing.
+    func generatePdf(api: APIClient, renderer: QuotePdfRenderer) async -> URL? {
+        guard let urlString = await shareLink(api: api), let url = URL(string: urlString) else { return nil }
+        isSending = true
+        defer { isSending = false }
+        do {
+            let name = "Quote-\(number ?? "draft")"
+            return try await renderer.renderPDF(from: url, fileName: name)
         } catch {
             errorMessage = "Couldn’t build the PDF. Try again."
-            return false
+            return nil
         }
     }
 

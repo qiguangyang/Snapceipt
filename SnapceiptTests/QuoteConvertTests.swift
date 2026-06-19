@@ -4,7 +4,7 @@ import SwiftData
 @testable import Snapceipt
 
 @MainActor
-@Suite("Quote convert + generatePdf")
+@Suite("Quote convert + shareLink")
 struct QuoteConvertTests {
     private func makeFixture() throws -> (ModelContext, MockSyncEngine) {
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
@@ -31,22 +31,22 @@ struct QuoteConvertTests {
         return v2
     }
 
-    @Test("generatePdf saves, calls the route, persists pdfR2Key/number, leaves status draft")
-    func generatePdf() async throws {
+    @Test("shareLink saves, calls /quotes/:id/link, applies url/number, leaves status draft")
+    func shareLink() async throws {
         let (ctx, sync) = try makeFixture()
         let mock = MockAPIClient()
-        mock.generateQuotePdfHandler = { _ in
-            GenerateQuotePdfResponse(pdfUrl: "/quotes/dl/tok", number: "SN-0007", expiresAt: 1)
+        mock.quoteShareLinkHandler = { _ in
+            QuoteShareLinkResponse(url: "https://api.snapceipt.cc/q/tok", number: "SN-0007")
         }
         let v = vm(ctx, sync)
         v.load(id: nil)
         v.setClient(name: "Acme", email: nil)
         v.addLine(); v.lineItems[0].unitPriceCents = 100_00
         #expect(v.canGeneratePdf == true)
-        let ok = await v.generatePdf(api: mock)
-        #expect(ok == true)
-        #expect(mock.generateQuotePdfCalls.count == 1)
-        #expect(v.pdfUrl == "/quotes/dl/tok")
+        let url = await v.shareLink(api: mock)
+        #expect(url == "https://api.snapceipt.cc/q/tok")
+        #expect(mock.quoteShareLinkCalls.count == 1)
+        #expect(v.pdfUrl == "https://api.snapceipt.cc/q/tok")
         #expect(v.number == "SN-0007")
         #expect(v.statusValue == .draft)            // status unchanged
         let q = try ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.deletedAt == nil }))[0]

@@ -340,5 +340,7 @@ enum AccessibilityID {
     static let recordPaymentSave = "recordPayment.save"
     // Quote editor — new PDF + convert affordances
     static let quoteEditorGeneratePdf = "quote.editor.generatePdf"
+    static let quoteEditorShareMenu = "quote.editor.shareMenu"
+    static let quoteEditorShareLink = "quote.editor.shareLink"
     static let quoteEditorConvert = "quote.editor.convert"
 }
