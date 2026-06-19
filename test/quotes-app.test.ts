@@ -11,8 +11,8 @@ describe("/quotes (through the real app)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /quotes/dl/* is public (no auth) — a forged token is 403, not 401", async () => {
-    const res = await SELF.fetch("https://x/quotes/dl/forged");
+  it("GET /q/* is public (no auth) — a forged token is 403, not 401", async () => {
+    const res = await SELF.fetch("https://x/q/forged");
     expect(res.status).toBe(403);
   });
 });

@@ -313,7 +313,7 @@ invoicesRoutes.get("/dl/:token", async (c) => {
   const obj = await c.env.RECEIPTS.get(r2Key);
   if (!obj) throw new ApiError("NOT_FOUND", "Invoice PDF not found");
 
-  // Buffer fully (mirrors quotes/dl) so the R2 read completes before the response
+  // Buffer fully (mirrors export.ts) so the R2 read completes before the response
   // returns — a dangling stream blocks vitest-pool-workers teardown.
   const bytes = await obj.arrayBuffer();
   const contentType = obj.httpMetadata?.contentType ?? "application/octet-stream";

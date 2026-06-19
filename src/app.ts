@@ -75,11 +75,9 @@ app.use("/images/*", rateLimit("default"));
 // normal accountant opening a 7-day link is well under the cap.
 app.use("/export", rateLimit("export"));
 app.use("/export/*", rateLimit("export"));
-// Quote send — PDF build + email; 60/hr. Mount on BOTH the exact path
+// Quote link/send — mint number + email; 60/hr. Mount on BOTH the exact path
 // (POST /quotes/:id/send) AND the wildcard so the limiter runs for the actual
-// POST too. The wildcard also covers the public GET /quotes/dl/* download:
-// since that route is unauthenticated, the "quotes" tier (dimension: user)
-// falls back to IP-keyed limiting on the public endpoint.
+// POST too. The `/q/*` public HTML page is rate-limited separately below.
 app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
 // Public HTML quote page — GET /q/:token. Unauthenticated; the default tier's
@@ -117,7 +115,7 @@ app.route("/images", imageRoutes);
 app.route("/extract", extractRoutes);
 // Protected: POST /export (+ public GET /export/dl/:token via PUBLIC_PATHS).
 app.route("/export", exportRoutes);
-// Protected: POST /quotes/:id/send (+ public GET /quotes/dl/:token via PUBLIC_PATHS).
+// Protected: POST /quotes/:id/send + POST /quotes/:id/link.
 app.route("/quotes", quotesRoutes);
 // Protected: POST /invoices/:id/issue|send|pdf (+ public GET /invoices/dl/:token via PUBLIC_PATHS).
 app.route("/invoices", invoicesRoutes);

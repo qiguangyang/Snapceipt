@@ -4,7 +4,6 @@ import * as emailModule from "../src/lib/email";
 import { uuidv7 } from "../src/lib/ids";
 import { nowMs } from "../src/lib/time";
 import { issueSession } from "../src/lib/sessions";
-import { verifyDownloadToken } from "../src/lib/exportToken";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -56,8 +55,8 @@ async function seedQuote(userId: string, opts: { clientEmail?: string | null; gs
      VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'#0E7C72','#DCF0ED','#0A5950',?,?)`,
   ).bind(profileId, userId, now, now).run();
   await env.DB.prepare(
-    `INSERT INTO quotes (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,status,valid_until,created_at,updated_at)
-     VALUES (?,?,?,'Jane Roe',?,1,?,'draft','2026-06-15',?,?)`,
+    `INSERT INTO quotes (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,gst_rate_bp,status,valid_until,created_at,updated_at)
+     VALUES (?,?,?,'Jane Roe',?,1,?,1000,'draft','2026-06-15',?,?)`,
   ).bind(quoteId, userId, profileId,
     opts.clientEmail === undefined ? "jane@example.com" : opts.clientEmail,
     opts.gstInclusive ? 1 : 0, now, now).run();
@@ -81,7 +80,7 @@ function send(quoteId: string, accessToken: string) {
 }
 
 describe("POST /quotes/:id/send", () => {
-  it("recomputes totals, mints SN-0001 on first send, sets status=sent + sentAt, emails (spied)", async () => {
+  it("recomputes totals, mints SN-0001 on first send, sets status=sent + sentAt, emails the LINK (spied)", async () => {
     const spy = vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
     const { userId, accessToken, email } = await seedAuthed();
     const { quoteId } = await seedQuote(userId);
@@ -90,43 +89,40 @@ describe("POST /quotes/:id/send", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
 
-    // Recomputed totals: subtotal 25000 + 80000 = 105000; GST 10500; total 115500.
-    expect(body.subtotalCents).toBe(105000);
-    expect(body.gstCents).toBe(10500);
-    expect(body.totalCents).toBe(115500);
-    expect(body.number).toBe("SN-0001");
-    expect(body.status).toBe("sent");
-    expect(typeof body.sentAt).toBe("number");
-    expect(typeof body.pdfUrl).toBe("string");
-    expect(body.pdfUrl).toContain("/quotes/dl/");
-    expect(typeof body.expiresAt).toBe("number");
+    // The response is the link contract: { url, emailed, number }.
+    expect(typeof body.url).toBe("string");
+    expect(body.url).toContain("https://api.snapceipt.cc/q/");
     expect(body.emailed).toBe(true);
+    expect(body.number).toBe("SN-0001");
 
-    // Persisted on the quote.
+    // Persisted on the quote: number minted, status sent, totals recomputed (10% default).
     const row = await env.DB.prepare(
       `SELECT number, status, sent_at, subtotal_cents, gst_cents, total_cents FROM quotes WHERE id=?`,
     ).bind(quoteId).first<any>();
     expect(row.number).toBe("SN-0001");
     expect(row.status).toBe("sent");
     expect(row.sent_at).not.toBeNull();
+    expect(row.subtotal_cents).toBe(105000);
+    expect(row.gst_cents).toBe(10500);
     expect(row.total_cents).toBe(115500);
 
-    // sendQuoteEmail got the PDF + the trader's reply-to.
+    // sendQuoteEmail got the URL + the trader's reply-to (no pdf field anymore).
     expect(spy).toHaveBeenCalledTimes(1);
     const arg = spy.mock.calls[0]![1] as emailModule.QuoteEmail;
     expect(arg.to).toBe("jane@example.com");
     expect(arg.replyTo).toBe(email);
     expect(arg.quoteNumber).toBe("SN-0001");
-    expect(arg.pdf.byteLength).toBeGreaterThan(0);
+    expect(arg.url).toContain("/q/");
+    expect((arg as any).pdf).toBeUndefined();
 
-    // Outbox queued -> sent.
+    // Outbox queued -> sent; export_format is NULL for a link send.
     const outbox = await env.DB.prepare(
       `SELECT kind, status, to_email, related_id, export_format FROM email_outbox WHERE related_id=?`,
     ).bind(quoteId).first<any>();
     expect(outbox.kind).toBe("quote_send");
     expect(outbox.status).toBe("sent");
     expect(outbox.to_email).toBe("jane@example.com");
-    expect(outbox.export_format).toBe("pdf");
+    expect(outbox.export_format).toBeNull();
   });
 
   it("recomputes GST-INCLUSIVE totals when the quote is gst_inclusive (total == entered sum)", async () => {
@@ -136,16 +132,10 @@ describe("POST /quotes/:id/send", () => {
 
     const res = await send(quoteId, accessToken);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
 
     // Entered (GST-inclusive): 25000 + 80000 = 105000. The total stays the entered
     // sum; GST is the embedded portion = round(105000 * 0.1/1.1) = 9545; ex-GST
-    // subtotal = 95455.
-    expect(body.totalCents).toBe(105000);
-    expect(body.gstCents).toBe(9545);
-    expect(body.subtotalCents).toBe(95455);
-
-    // Persisted with the inclusive totals.
+    // subtotal = 95455. Persisted with the inclusive totals.
     const row = await env.DB.prepare(
       `SELECT subtotal_cents, gst_cents, total_cents FROM quotes WHERE id=?`,
     ).bind(quoteId).first<any>();
@@ -159,15 +149,12 @@ describe("POST /quotes/:id/send", () => {
     const { userId, accessToken } = await seedAuthed();
     const { quoteId } = await seedQuote(userId);
 
-    const first = await send(quoteId, accessToken);
-    const firstBody = (await first.json()) as any;
-    expect(firstBody.number).toBe("SN-0001");
+    await send(quoteId, accessToken);
+    await send(quoteId, accessToken);
 
-    const second = await send(quoteId, accessToken);
-    const secondBody = (await second.json()) as any;
-    expect(secondBody.number).toBe("SN-0001"); // unchanged
+    const row = await env.DB.prepare(`SELECT number FROM quotes WHERE id=?`).bind(quoteId).first<{ number: string }>();
+    expect(row?.number).toBe("SN-0001"); // unchanged
 
-    // The per-user counter advanced only ONCE.
     const ctr = await env.DB.prepare(`SELECT next_seq FROM quote_counters WHERE user_id=?`)
       .bind(userId).first<{ next_seq: number }>();
     expect(ctr?.next_seq).toBe(1);
@@ -179,10 +166,13 @@ describe("POST /quotes/:id/send", () => {
     const a = await seedQuote(userId);
     const b = await seedQuote(userId);
 
-    const r1 = (await (await send(a.quoteId, accessToken)).json()) as any;
-    const r2 = (await (await send(b.quoteId, accessToken)).json()) as any;
-    expect(r1.number).toBe("SN-0001");
-    expect(r2.number).toBe("SN-0002");
+    await send(a.quoteId, accessToken);
+    await send(b.quoteId, accessToken);
+
+    const ra = await env.DB.prepare(`SELECT number FROM quotes WHERE id=?`).bind(a.quoteId).first<{ number: string }>();
+    const rb = await env.DB.prepare(`SELECT number FROM quotes WHERE id=?`).bind(b.quoteId).first<{ number: string }>();
+    expect(ra?.number).toBe("SN-0001");
+    expect(rb?.number).toBe("SN-0002");
   });
 
   it("when the email send THROWS, outbox -> failed but the route still 200s with emailed:false", async () => {
@@ -194,9 +184,13 @@ describe("POST /quotes/:id/send", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.emailed).toBe(false);
-    expect(body.number).toBe("SN-0001"); // number still minted, status still sent
-    expect(body.status).toBe("sent");
-    expect(typeof body.pdfUrl).toBe("string");
+    expect(typeof body.url).toBe("string");
+    expect(body.number).toBe("SN-0001");
+
+    const row = await env.DB.prepare(`SELECT number, status FROM quotes WHERE id=?`)
+      .bind(quoteId).first<{ number: string | null; status: string }>();
+    expect(row?.number).toBe("SN-0001"); // number still minted, status still sent
+    expect(row?.status).toBe("sent");
 
     const outbox = await env.DB.prepare(`SELECT status, error FROM email_outbox WHERE related_id=?`)
       .bind(quoteId).first<{ status: string; error: string | null }>();
@@ -260,37 +254,5 @@ describe("POST /quotes/:id/send", () => {
     const { quoteId } = await seedQuote(other.userId);
     const res = await send(quoteId, accessToken);
     expect(res.status).toBe(404);
-  });
-});
-
-describe("GET /quotes/dl/:token", () => {
-  it("streams the quote PDF for a valid token (public, no auth)", async () => {
-    vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
-    const { userId, accessToken } = await seedAuthed();
-    const { quoteId } = await seedQuote(userId);
-    const sent = (await (await send(quoteId, accessToken)).json()) as any;
-
-    const dl = await SELF.fetch(sent.pdfUrl); // no auth header
-    expect(dl.status).toBe(200);
-    expect(dl.headers.get("content-type")).toContain("application/pdf");
-    const bytes = new Uint8Array(await dl.arrayBuffer());
-    expect(bytes[0]).toBe(0x25); // %
-
-    // The token verifies under the test key + points at the quote's R2 key.
-    const token = sent.pdfUrl.slice(sent.pdfUrl.lastIndexOf("/") + 1);
-    const out = await verifyDownloadToken(env.JWT_SIGNING_KEY, token);
-    expect(out.r2Key).toBe(`${userId}/quotes/${quoteId}.pdf`);
-  });
-
-  it("returns 403 for a forged token", async () => {
-    const res = await SELF.fetch(`${BASE}/quotes/dl/not.a.valid.token`);
-    expect(res.status).toBe(403);
-  });
-
-  it("returns 403 for an expired token", async () => {
-    const { signDownloadToken } = await import("../src/lib/exportToken");
-    const token = await signDownloadToken(env.JWT_SIGNING_KEY, "u/x/quotes/y.pdf", -10);
-    const res = await SELF.fetch(`${BASE}/quotes/dl/${token}`);
-    expect(res.status).toBe(403);
   });
 });

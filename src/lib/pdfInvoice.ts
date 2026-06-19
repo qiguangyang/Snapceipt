@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 
 /**
- * Tax-invoice PDF (spec §4.3) — clones src/lib/pdfQuote.ts: A4 portrait, pdf-lib
+ * Tax-invoice PDF (spec §4.3) — A4 portrait, pdf-lib
  * StandardFonts (no font file), no embedded images (pure-JS, Workers-safe). Pure:
  * the route recomputes the totals (recomputeTotals) and passes them in along with
  * the derived amountPaidCents. Returns the encoded bytes (%PDF...).

@@ -5,35 +5,18 @@ import { nowMs } from "../lib/time";
 import { uuidv7 } from "../lib/ids";
 import { recomputeTotals, type QuoteLineItemAmounts } from "../lib/quoteTotals";
 import { assignQuoteNumber } from "../lib/quoteCounter";
-import { buildQuotePdf, type QuoteLineItemRow, type QuoteSender } from "../lib/pdfQuote";
 import * as emailModule from "../lib/email";
-import {
-  signDownloadToken,
-  verifyDownloadToken,
-  DOWNLOAD_TTL_SECONDS,
-  signQuoteLinkToken,
-} from "../lib/exportToken";
+import { signQuoteLinkToken } from "../lib/exportToken";
 import { type QuoteHtmlData } from "../lib/quoteHtml";
 
 /**
- * POST /quotes/:id/send        — Bearer (global auth) + rate tier "quotes" (app.ts).
- * GET  /quotes/dl/:token       — PUBLIC (in PUBLIC_PATHS); streams the signed R2 PDF.
+ * POST /quotes/:id/link  — Bearer; mint a 90-day signed link to the public HTML quote.
+ * POST /quotes/:id/send  — Bearer; mint number + email the client the link.
+ * GET  /q/:token         — PUBLIC (separate group, quoteLink.ts); renders the HTML page.
  *
- * The ONLY new quote routes — quote/line-item/client CRUD stays on /sync.
+ * Quote/line-item/client CRUD stays on /sync. loadQuoteForRender is shared with /q.
  */
 export const quotesRoutes = new Hono<AppEnv>();
-
-interface QuoteRow {
-  id: string;
-  user_id: string;
-  profile_id: string;
-  number: string | null;
-  client_name: string | null;
-  client_email: string | null;
-  gst_enabled: number;
-  gst_inclusive: number;
-  valid_until: string | null;
-}
 
 interface LineItemRow {
   description: string;
@@ -160,113 +143,19 @@ export async function loadQuoteForRender(
   };
 }
 
-quotesRoutes.post("/:id/pdf", async (c) => {
-  const userId = c.var.userId;
-  const quoteId = c.req.param("id");
-
-  // 1. Load the quote (scoped to the authed user).
-  const quote = await c.env.DB.prepare(
-    `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, valid_until
-       FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(quoteId, userId).first<QuoteRow>();
-  if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
-
-  // 2. Load its non-deleted line items (deterministic order).
-  const { results: lineItems } = await c.env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
-       FROM quote_line_items
-      WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
-      ORDER BY sort_order ASC, id ASC`,
-  ).bind(quoteId, userId).all<LineItemRow>();
-  if (lineItems.length === 0) {
-    throw new ApiError("VALIDATION_FAILED", "Cannot build a PDF for a quote with no line items");
-  }
-
-  // 3. Recompute totals authoritatively.
-  const gstEnabled = quote.gst_enabled === 1;
-  const gstInclusive = quote.gst_inclusive === 1;
-  const totals = recomputeTotals(
-    lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
-    gstEnabled,
-    gstInclusive,
-  );
-
-  // 4. Mint SN-#### only if the quote has none yet (so the PDF shows a real number).
-  //    A re-build keeps the existing number — generating a PDF never changes status (§2.1).
-  const number = quote.number ?? (await assignQuoteNumber(c.env.DB, userId));
-
-  // 5. Load the owning profile for the PDF sender block.
-  const profile = await c.env.DB.prepare(
-    `SELECT name, abn, gst_registered FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(quote.profile_id, userId).first<{ name: string; abn: string | null; gst_registered: number | null }>();
-  if (!profile) throw new ApiError("NOT_FOUND", "Profile not found for this quote");
-  const sender: QuoteSender = {
-    name: profile.name,
-    abn: profile.abn,
-    gstRegistered: profile.gst_registered === 1,
-  };
-
-  // 6. Build the PDF -> R2 (same key as the send path; a re-build overwrites it).
-  const now = nowMs();
-  const pdf = await buildQuotePdf(
-    {
-      number,
-      clientName: quote.client_name,
-      clientEmail: quote.client_email,
-      gstEnabled,
-      gstInclusive,
-      subtotalCents: totals.subtotalCents,
-      gstCents: totals.gstCents,
-      totalCents: totals.totalCents,
-      validUntil: quote.valid_until,
-      issuedDate: utcDate(now),
-    },
-    lineItems.map((li): QuoteLineItemRow => ({
-      description: li.description,
-      quantity: li.quantity,
-      unitPriceCents: li.unit_price_cents,
-    })),
-    sender,
-  );
-  const key = `${userId}/quotes/${quoteId}.pdf`;
-  await c.env.RECEIPTS.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
-
-  // 7. Persist number + totals + pdf_r2_key. NO status change, NO sent_at (§2.1).
-  await c.env.DB.prepare(
-    `UPDATE quotes
-        SET number = ?, pdf_r2_key = ?,
-            subtotal_cents = ?, gst_cents = ?, total_cents = ?,
-            updated_at = ?
-      WHERE id = ? AND user_id = ?`,
-  ).bind(number, key, totals.subtotalCents, totals.gstCents, totals.totalCents, now, quoteId, userId).run();
-
-  // 8. Signed 7-day download link.
-  const origin = new URL(c.req.url).origin;
-  const token = await signDownloadToken(c.env.JWT_SIGNING_KEY, key);
-  const pdfUrl = `${origin}/quotes/dl/${token}`;
-  const expiresAt = now + DOWNLOAD_TTL_SECONDS * 1000;
-
-  // 9. Response — status stays draft (no email, no outbox).
-  return c.json({
-    number,
-    status: "draft",
-    subtotalCents: totals.subtotalCents,
-    gstCents: totals.gstCents,
-    totalCents: totals.totalCents,
-    pdfUrl,
-    expiresAt,
-  });
-});
-
 quotesRoutes.post("/:id/send", async (c) => {
   const userId = c.var.userId;
   const quoteId = c.req.param("id");
 
   // 1. Load the quote (scoped to the authed user).
   const quote = await c.env.DB.prepare(
-    `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, valid_until
+    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, gst_rate_bp
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(quoteId, userId).first<QuoteRow>();
+  ).bind(quoteId, userId).first<{
+    id: string; profile_id: string; number: string | null;
+    client_name: string | null; client_email: string | null;
+    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null;
+  }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
 
   // 2. Load its non-deleted line items (deterministic order).
@@ -280,70 +169,27 @@ quotesRoutes.post("/:id/send", async (c) => {
     throw new ApiError("VALIDATION_FAILED", "Cannot send a quote with no line items");
   }
 
-  // 2b. Email PRECONDITION — validate BEFORE any mutation. A quote send always
-  // attempts to email the client (the F2 accountant export proves the production
-  // pattern: call the email seam unconditionally + try/catch), so a missing client
-  // email is a hard 400 that must NOT burn a number / flip status / write R2 / log
-  // an outbox row. This ordering honours spec §8: on a validation failure no number
-  // is consumed and the quote stays draft.
-  // (NOTE: the `send_email` binding declares `allowed_sender_addresses`, which the
-  // vitest-pool-workers / miniflare runtime does NOT materialize, so `c.env.EMAIL`
-  // is undefined under test — gating the send on `Boolean(c.env.EMAIL)` would make
-  // the whole send path dead there. The send seam (`sendQuoteEmail`) already isolates
-  // the actual `env.EMAIL.send` and is spied in tests, exactly like `sendExportEmail`.)
+  // 2b. Email PRECONDITION — validate BEFORE any mutation (spec §8): a missing client
+  // email is a hard 400 that must NOT burn a number / flip status / log an outbox row.
   if (!quote.client_email) {
     throw new ApiError("VALIDATION_FAILED", "Quote has no client email to send to");
   }
 
-  // 3. Recompute totals authoritatively.
+  // 3. Recompute totals authoritatively at the quote's snapshotted rate (null ⇒ 1000).
   const gstEnabled = quote.gst_enabled === 1;
   const gstInclusive = quote.gst_inclusive === 1;
   const totals = recomputeTotals(
     lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
     gstEnabled,
     gstInclusive,
+    quote.gst_rate_bp,
   );
 
   // 4. Mint SN-#### only on the first send; a re-send keeps the existing number.
   const number = quote.number ?? (await assignQuoteNumber(c.env.DB, userId));
 
-  // 5. Load the owning profile for the PDF sender block.
-  const profile = await c.env.DB.prepare(
-    `SELECT name, abn, gst_registered FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(quote.profile_id, userId).first<{ name: string; abn: string | null; gst_registered: number | null }>();
-  if (!profile) throw new ApiError("NOT_FOUND", "Profile not found for this quote");
-  const sender: QuoteSender = {
-    name: profile.name,
-    abn: profile.abn,
-    gstRegistered: profile.gst_registered === 1,
-  };
-
-  // 6. Build the PDF -> R2.
+  // 5. Persist totals + number + status=sent + sent_at.
   const now = nowMs();
-  const pdf = await buildQuotePdf(
-    {
-      number,
-      clientName: quote.client_name,
-      clientEmail: quote.client_email,
-      gstEnabled,
-      gstInclusive,
-      subtotalCents: totals.subtotalCents,
-      gstCents: totals.gstCents,
-      totalCents: totals.totalCents,
-      validUntil: quote.valid_until,
-      issuedDate: utcDate(now),
-    },
-    lineItems.map((li): QuoteLineItemRow => ({
-      description: li.description,
-      quantity: li.quantity,
-      unitPriceCents: li.unit_price_cents,
-    })),
-    sender,
-  );
-  const key = `${userId}/quotes/${quoteId}.pdf`;
-  await c.env.RECEIPTS.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
-
-  // 7. Persist totals + number + status=sent + sent_at.
   await c.env.DB.prepare(
     `UPDATE quotes
         SET number = ?, status = 'sent', sent_at = ?,
@@ -352,26 +198,19 @@ quotesRoutes.post("/:id/send", async (c) => {
       WHERE id = ? AND user_id = ?`,
   ).bind(number, now, totals.subtotalCents, totals.gstCents, totals.totalCents, now, quoteId, userId).run();
 
-  // 8. Signed 7-day download link.
-  const origin = new URL(c.req.url).origin;
-  const token = await signDownloadToken(c.env.JWT_SIGNING_KEY, key);
-  const pdfUrl = `${origin}/quotes/dl/${token}`;
-  const expiresAt = now + DOWNLOAD_TTL_SECONDS * 1000;
+  // 6. Mint the 90-day public quote link.
+  const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId);
+  const url = `${API_ORIGIN}/q/${token}`;
 
-  // 9. email_outbox row + gated send.
+  // 7. email_outbox row + gated send. export_format is NULL (a link, no file).
   const outboxId = uuidv7();
   await c.env.DB.prepare(
     `INSERT INTO email_outbox (id, user_id, to_email, kind, subject, status, export_format, export_r2_key, related_id, created_at)
-     VALUES (?, ?, ?, 'quote_send', ?, 'queued', 'pdf', ?, ?, ?)`,
-  ).bind(outboxId, userId, quote.client_email ?? "", `Quote ${number}`, key, quoteId, now).run();
+     VALUES (?, ?, ?, 'quote_send', ?, 'queued', NULL, NULL, ?, ?)`,
+  ).bind(outboxId, userId, quote.client_email, `Quote ${number}`, quoteId, now).run();
 
-  // Attempt the send exactly like the F2 accountant export: call the `sendQuoteEmail`
-  // seam (which wraps `env.EMAIL.send`) unconditionally inside a try/catch, then flip
-  // the outbox row sent/failed. A failure (incl. a missing/un-materialized EMAIL
-  // binding surfacing as a thrown error) leaves the outbox `failed`, `emailed:false`,
-  // and the route still 200s — the number is already minted and the status is `sent`.
-  // The missing-client-email case is already rejected as a 400 in step 2b BEFORE any
-  // mutation, so here quote.client_email is guaranteed non-null.
+  // Attempt the send via the seam (which wraps env.EMAIL.send) inside try/catch; a
+  // failure leaves the outbox failed, emailed:false, route still 200s.
   let emailed = false;
   const trader = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
     .bind(userId).first<{ email: string | null }>();
@@ -382,7 +221,7 @@ quotesRoutes.post("/:id/send", async (c) => {
       quoteNumber: number,
       clientName: quote.client_name,
       totalCents: totals.totalCents,
-      pdf,
+      url,
     });
     await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)
       .bind(nowMs(), outboxId).run();
@@ -393,18 +232,8 @@ quotesRoutes.post("/:id/send", async (c) => {
     emailed = false;
   }
 
-  // 10. Response.
-  return c.json({
-    number,
-    sentAt: now,
-    status: "sent",
-    subtotalCents: totals.subtotalCents,
-    gstCents: totals.gstCents,
-    totalCents: totals.totalCents,
-    pdfUrl,
-    expiresAt,
-    emailed,
-  });
+  // 8. Response — the link + whether the email went out + the minted/existing number.
+  return c.json({ url, emailed, number });
 });
 
 // POST /quotes/:id/link — mint a 90-day signed link to the public HTML quote page.
@@ -436,30 +265,4 @@ quotesRoutes.post("/:id/link", async (c) => {
 
   const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId);
   return c.json({ url: `${API_ORIGIN}/q/${token}`, number });
-});
-
-// PUBLIC: GET /quotes/dl/:token — verify the signed token + stream the R2 PDF.
-quotesRoutes.get("/dl/:token", async (c) => {
-  const token = c.req.param("token");
-  let r2Key: string;
-  try {
-    ({ r2Key } = await verifyDownloadToken(c.env.JWT_SIGNING_KEY, token));
-  } catch {
-    throw new ApiError("FORBIDDEN", "Invalid or expired download link");
-  }
-  const obj = await c.env.RECEIPTS.get(r2Key);
-  if (!obj) throw new ApiError("NOT_FOUND", "Quote PDF not found");
-
-  // Buffer fully (mirrors export.ts) so the R2 read completes before the response
-  // returns — a dangling stream blocks vitest-pool-workers teardown.
-  const bytes = await obj.arrayBuffer();
-  const contentType = obj.httpMetadata?.contentType ?? "application/octet-stream";
-  const filename = r2Key.slice(r2Key.lastIndexOf("/") + 1);
-  return new Response(bytes, {
-    status: 200,
-    headers: {
-      "content-type": contentType,
-      "content-disposition": `attachment; filename="${filename}"`,
-    },
-  });
 });
