@@ -22,6 +22,8 @@ final class BasViewModel {
 
     private(set) var window: Period.Window
     private(set) var periodKey: String
+    private(set) var periodOffset: Int = 0
+    private(set) var earliestOffset: Int = 0
     private(set) var result: BasEngine.Result
     private(set) var reconcileItems: [BasReconciliation.Item]
     private(set) var lodgedAtMs: Int?
@@ -48,6 +50,10 @@ final class BasViewModel {
         self.lodgedAtMs = nil
         self.paygInstalmentCents = store.paygInstalmentCents(profileId: profileId, periodKey: periodKey)
         self.lodgedAtMs = store.lodgedSnapshot(profileId: profileId, periodKey: periodKey)?.lodgedAtMs
+        self.earliestOffset = BasHistory.earliestOffset(
+            txns: Self.engineTxns(context: context, profileId: profileId),
+            lodged: { store.lodgedSnapshot(profileId: profileId, periodKey: $0) },
+            basPeriod: basPeriod, startMonth: startMonth, now: now)
         recompute()
     }
 
@@ -93,6 +99,57 @@ final class BasViewModel {
                                    gstSource: $0.gstSource, gstCents: $0.gstCents,
                                    incomeConfirmed: $0.gstFree || $0.gstSource == "manual")
         }
+    }
+
+    // MARK: - Period navigation (the history cursor)
+
+    private static var utcCal: Calendar {
+        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c
+    }
+    private var monthsPerPeriod: Int { basPeriod == .quarterly ? 3 : 1 }
+
+    /// The selected period's lodge due date (not the global next-due).
+    var periodDueDate: Date { BasSchedule.dueDate(for: window, period: basPeriod) }
+
+    var canGoForward: Bool { periodOffset < 0 }      // 0 = current; never the future
+    var canGoBack: Bool { periodOffset > earliestOffset }
+
+    /// True when the selected period's lodge deadline has already passed (drives the soft
+    /// "Not marked as lodged" line). `periodDueDate` reads the observed `window`, so the
+    /// header re-renders on navigation; pairing it with the observed `lodgedAtMs` in the
+    /// view avoids a stale status. (The history list classifies via `BasHistory.status`.)
+    var isPastDue: Bool { now > periodDueDate }
+
+    func goToPrevious() { guard canGoBack else { return }; moveTo(periodOffset - 1) }
+    func goToNext() { guard canGoForward else { return }; moveTo(periodOffset + 1) }
+    func select(offset: Int) { moveTo(min(0, max(earliestOffset, offset))) }
+
+    private func moveTo(_ offset: Int) {
+        periodOffset = offset
+        let anchor = Self.utcCal.date(byAdding: .month, value: offset * monthsPerPeriod, to: now)!
+        let p: Period = basPeriod == .quarterly ? .quarter : .month
+        window = p.window(now: anchor, startMonth: startMonth)
+        periodKey = BasPeriodKey.make(window: window, basPeriod: basPeriod, startMonth: startMonth)
+        paygInstalmentCents = store.paygInstalmentCents(profileId: profileId, periodKey: periodKey)
+        lodgedAtMs = store.lodgedSnapshot(profileId: profileId, periodKey: periodKey)?.lodgedAtMs
+        recompute()
+    }
+
+    /// All non-deleted txns for the profile, mapped to engine txns (history + bounds span
+    /// every period, not just the current window).
+    private static func engineTxns(context: ModelContext, profileId: String) -> [BasEngine.Txn] {
+        let pid = profileId
+        let rows = (try? context.fetch(FetchDescriptor<Transaction>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }))) ?? []
+        return rows.map { BasEngine.Txn(amountCents: $0.amountCents, gstFree: $0.gstFree,
+                                        capital: $0.capital, txnDate: $0.txnDate) }
+    }
+
+    func history() -> [BasHistory.Row] {
+        BasHistory.build(txns: Self.engineTxns(context: context, profileId: profileId),
+                         lodged: { store.lodgedSnapshot(profileId: profileId, periodKey: $0) },
+                         gstRegistered: gstRegistered, basPeriod: basPeriod,
+                         startMonth: startMonth, now: now)
     }
 
     // MARK: - Reconciliation quick-fixes (mutate the txn, then recompute)
