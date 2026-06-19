@@ -13,6 +13,7 @@ import { imageRoutes } from "./routes/images";
 import { extractRoutes } from "./routes/extract";
 import { exportRoutes } from "./routes/export";
 import { quotesRoutes } from "./routes/quotes";
+import { quoteLinkRoutes } from "./routes/quoteLink";
 import { invoicesRoutes } from "./routes/invoices";
 import { inboxRoutes } from "./routes/inbox";
 import { profileRoutes } from "./routes/profile";
@@ -81,6 +82,9 @@ app.use("/export/*", rateLimit("export"));
 // falls back to IP-keyed limiting on the public endpoint.
 app.use("/quotes", rateLimit("quotes"));
 app.use("/quotes/*", rateLimit("quotes"));
+// Public HTML quote page — GET /q/:token. Unauthenticated; the default tier's
+// per-user limiter falls back to IP-keyed limiting on this public endpoint.
+app.use("/q/*", rateLimit("default"));
 // Invoice issue/send/pdf — PDF build + email; reuse the "quotes" tier (60/hr).
 // Mount on BOTH the exact path AND the wildcard so the limiter runs for the POSTs;
 // the wildcard also IP-limits the public GET /invoices/dl/* download.
@@ -128,6 +132,8 @@ app.route("/", accountRoutes);
 // Protected: POST /me/subscription — purchase link (StoreKit tx → backend).
 app.use("/me/*", rateLimit("account"));
 app.route("/me/subscription", subscriptionRoutes);
+// Public: GET /q/:token — hosted HTML quote page (via PUBLIC_PATHS).
+app.route("/q", quoteLinkRoutes);
 // Public unauthenticated webhook — IP-keyed via the default tier's fallback
 // (no userId is present; clientKeyForRoute falls back to CF-Connecting-IP).
 app.use("/appstore/*", rateLimit("default"));
