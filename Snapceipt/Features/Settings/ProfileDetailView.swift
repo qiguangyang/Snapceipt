@@ -128,15 +128,19 @@ struct ProfileDetailView: View {
         }
         .padding(20)
         .background(
-            ZStack(alignment: .topTrailing) {
-                LinearGradient(colors: [pal.base, pal.deep],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                Circle().fill(.white.opacity(0.08))
-                    .frame(width: 150, height: 150)
-                    .offset(x: 50, y: -60)
-                    .allowsHitTesting(false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            // The decorative circle is an OVERLAY (not a ZStack sibling) so its fixed 150pt
+            // size can't inflate the background's layout height — previously it grew the
+            // background to 150pt and the green bled ~27pt below the card, overlapping the
+            // "Details" label beneath it.
+            LinearGradient(colors: [pal.base, pal.deep],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(.white.opacity(0.08))
+                        .frame(width: 150, height: 150)
+                        .offset(x: 50, y: -60)
+                        .allowsHitTesting(false)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         )
         .cardShadow()
     }

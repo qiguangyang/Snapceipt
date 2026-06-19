@@ -121,7 +121,8 @@ struct SyncEngineTests {
         #expect(txn.rev == 5)
         let outbox = try context.fetch(FetchDescriptor<OutboxMutation>())
         #expect(outbox.isEmpty)
-        #expect(toast.current?.message == "Updated on another device")
+        #expect(toast.current?.message == "Synced")
+        #expect(toast.current?.kind == .success)   // green-check toast, not a wordy reminder
     }
 
     @Test func pushRejectedMarksOutboxFailed() async throws {

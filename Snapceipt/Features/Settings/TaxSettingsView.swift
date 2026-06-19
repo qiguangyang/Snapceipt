@@ -319,21 +319,19 @@ struct TaxSettingsView: View {
 
     @ViewBuilder private func monthMenuRow(_ vm: TaxSettingsViewModel) -> some View {
         let names = Self.monthNames
-        let label = "FY " + FinancialYear.of(Date(), startMonth: vm.financialYearStartMonth).label
-            .replacingOccurrences(of: "FY", with: "")
-        Menu {
-            ForEach(1...12, id: \.self) { m in
-                Button(names[m - 1]) { vm.setFinancialYearStartMonth(m) }
-            }
-        } label: {
-            HStack {
-                Text("Tax year").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
-                Spacer()
-                Text(label).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
-                Icon(name: "chevR", size: 16, color: Palette.ink3)
-            }
+        HStack {
+            Text("Tax year start").font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
+            Spacer()
+            Picker("Tax year start", selection: Binding(
+                get: { vm.financialYearStartMonth },
+                set: { vm.setFinancialYearStartMonth($0) })) {
+                    ForEach(1...12, id: \.self) { m in Text(names[m - 1]).tag(m) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(Palette.ink)
+                .accessibilityIdentifier(AccessibilityID.taxFyStart)
         }
-        .accessibilityIdentifier(AccessibilityID.taxFyStart)
     }
 
     // MARK: - Deduction defaults
@@ -391,16 +389,19 @@ struct TaxSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
     }
 
+    /// A native iOS pull-down selector: the row stays put (showing the value + chevron)
+    /// and tapping pops a system menu with a checkmark on the current choice. Replaces the
+    /// custom-label `Menu` whose label blanked out while the popup was open.
     private func menuRow(title: String, value: String, options: [String], onSelect: @escaping (String) -> Void) -> some View {
-        Menu {
-            ForEach(options, id: \.self) { opt in Button(opt) { onSelect(opt) } }
-        } label: {
-            HStack {
-                Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
-                Spacer()
-                Text(value).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
-                Icon(name: "chevR", size: 16, color: Palette.ink3)
+        HStack {
+            Text(title).font(.ui(14.5, .semibold)).foregroundStyle(Palette.ink2)
+            Spacer()
+            Picker(title, selection: Binding(get: { value }, set: { onSelect($0) })) {
+                ForEach(options, id: \.self) { Text($0).tag($0) }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(Palette.ink)
         }
     }
 }
