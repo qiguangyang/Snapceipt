@@ -235,3 +235,70 @@ describe("sync round-trip — invoice / invoiceLineItem / payment", () => {
     expect(body.results[0].reason).toBe("VALIDATION_FAILED");
   });
 });
+
+describe("sync round-trip — quote pdfR2Key + invoiceId (migration 0009 columns)", () => {
+  it("pushes a quote with pdfR2Key + invoiceId and pulls them back as camelCase", async () => {
+    const { userId, deviceId, profileId, accessToken } = await seedAuthed();
+    const quoteId = uuidv7();
+    const invoiceId = uuidv7();
+    const now = nowMs();
+
+    // Seed a parent invoice row so the FK quote.invoice_id can be set.
+    // (The quote row itself doesn't have an FK constraint on invoice_id — it's a
+    // plain nullable TEXT column — but we seed the invoice so the value is realistic.)
+    await env.DB.prepare(
+      `INSERT INTO invoices (id,user_id,profile_id,status,created_at,updated_at)
+       VALUES (?,?,(SELECT id FROM profiles WHERE user_id=?),'draft',?,?)`,
+    ).bind(invoiceId, userId, userId, now, now).run();
+
+    const res = await push(accessToken, deviceId, [
+      {
+        mutationId: uuidv7(),
+        entityType: "quote",
+        entityId: quoteId,
+        op: "upsert",
+        baseRev: 0,
+        updatedAt: now,
+        payload: {
+          id: quoteId,
+          userId,
+          profileId,
+          type: "quote",
+          clientName: "Acme Corp",
+          clientEmail: "acme@example.com",
+          gstEnabled: true,
+          gstInclusive: false,
+          subtotalCents: 50000,
+          gstCents: 5000,
+          totalCents: 55000,
+          currency: "AUD",
+          status: "draft",
+          pdfR2Key: "u/quotes/q1.pdf",
+          invoiceId,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          rev: 0,
+          lastEditedDeviceId: null,
+        },
+      },
+    ]);
+    expect(res.status).toBe(200);
+    const pushBody = (await res.json()) as any;
+    expect(pushBody.results[0].status).toBe("applied");
+
+    // Verify D1 persisted the two new columns with their snake_case names.
+    const row = await env.DB.prepare(
+      `SELECT pdf_r2_key, invoice_id FROM quotes WHERE id=?`,
+    ).bind(quoteId).first<any>();
+    expect(row.pdf_r2_key).toBe("u/quotes/q1.pdf");
+    expect(row.invoice_id).toBe(invoiceId);
+
+    // Pull must echo them back as camelCase (pdfR2Key, invoiceId).
+    const pulled = (await (await pull(accessToken)).json()) as any;
+    const q = pulled.changes.find((ch: any) => ch.type === "quote" && ch.id === quoteId);
+    expect(q).toBeTruthy();
+    expect(q.pdfR2Key).toBe("u/quotes/q1.pdf");
+    expect(q.invoiceId).toBe(invoiceId);
+  });
+});

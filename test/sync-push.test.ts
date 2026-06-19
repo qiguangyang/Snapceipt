@@ -725,6 +725,12 @@ describe("syncable table map", () => {
     expect(PROFILE_ID_REQUIRED.has("vehicleYear")).toBe(true);
   });
 
+  it("maps the new quote pdfR2Key + invoiceId columns (migration 0009)", () => {
+    const q = tableForEntityType("quote")!;
+    expect(q.columns.pdfR2Key).toBe("pdf_r2_key");
+    expect(q.columns.invoiceId).toBe("invoice_id");
+  });
+
   it("maps the new mileageTrip logbook columns", () => {
     const meta = tableForEntityType("mileageTrip")!;
     expect(meta.columns.vehicleId).toBe("vehicle_id");

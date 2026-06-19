@@ -151,6 +151,8 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       status: "status",
       validUntil: "valid_until",
       sentAt: "sent_at",
+      pdfR2Key: "pdf_r2_key",
+      invoiceId: "invoice_id",
     },
   },
   quoteLineItem: {
