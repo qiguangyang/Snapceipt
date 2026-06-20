@@ -15,7 +15,13 @@ struct EdgeAdjustView: View {
     /// The quad in IMAGE pixel coordinates (top-left origin). Detected on appear.
     @State private var quad: DocumentQuad?
 
-    private var imageSize: CGSize { image.size }
+    /// Work in PIXEL space (cgImage) so it matches the corners `DocumentScan.detect` returns
+    /// and the space `DocumentScan.dewarp` expects — `image.size` is in points and diverges
+    /// from pixels whenever the image scale isn't 1, which would push the overlay off-screen.
+    private var imageSize: CGSize {
+        if let cg = image.cgImage { return CGSize(width: cg.width, height: cg.height) }
+        return image.size
+    }
 
     var body: some View {
         ZStack {
