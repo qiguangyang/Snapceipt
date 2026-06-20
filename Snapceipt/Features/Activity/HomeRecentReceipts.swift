@@ -13,8 +13,10 @@ struct HomeRecentReceipts: View {
     init(profileId: String, onSeeAll: @escaping () -> Void, onOpenReceipt: @escaping (String) -> Void) {
         self.onSeeAll = onSeeAll
         self.onOpenReceipt = onOpenReceipt
+        // Sort by when the item was ADDED (createdAt), not the receipt's printed date, so the
+        // most recently captured/added item is always on top — even if its txn date is older.
         _txns = Query(filter: #Predicate<Transaction> { $0.profileId == profileId && $0.deletedAt == nil },
-                      sort: \.txnDate, order: .reverse)
+                      sort: \.createdAt, order: .reverse)
     }
 
     var body: some View {
