@@ -15,23 +15,25 @@ struct CaptureFlow: View {
             Palette.cream.ignoresSafeArea()
             switch vm.stage {
             case .camera:
-                // A capture (scan or import) goes to the Confirm/Retake step first; OCR is
-                // deferred to Confirm so a misframed shot can be retaken without processing.
+                // A capture (scan or import) goes to the edge-adjust step first; OCR is
+                // deferred to "Confirm scan" so a misframed shot can be retaken/adjusted
+                // without processing it.
                 CameraStep(
                     onScanned: { image in vm.presentCapture(image: image) },
                     onClose: onClose)
             case .confirm:
-                ConfirmStep(
-                    image: vm.capturedImage,
-                    onConfirm: {
-                        guard let image = vm.capturedImage else { return }
-                        Task {
-                            let lines = (try? await OCR.recognize(in: image)) ?? []
-                            await vm.onScanned(image: image, lines: lines)
-                        }
-                    },
-                    onRetake: { vm.retake() },
-                    onClose: onClose)
+                if let image = vm.capturedImage {
+                    EdgeAdjustView(
+                        image: image,
+                        onConfirm: { cleaned in
+                            Task {
+                                let lines = (try? await OCR.recognize(in: cleaned)) ?? []
+                                await vm.onScanned(image: cleaned, lines: lines)
+                            }
+                        },
+                        onRetake: { vm.retake() },
+                        onClose: onClose)
+                }
             case .scanning:
                 ScanStep(image: vm.capturedImage, draft: vm.draft, onClose: onClose)
             case .review:
