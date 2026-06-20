@@ -74,6 +74,37 @@ struct SyncEngineTests {
         #expect(outbox[0].payloadJSON.contains("The Grounds"))
     }
 
+    @Test func transientFailureAutoRetriesUntilItSucceeds() async throws {
+        struct Blip: Error {}
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let context = ModelContext(container)
+        let api = MockAPIClient()
+        // Tiny backoff so the auto-retry fires within the test.
+        let engine = SyncEngine(api: api, context: context, auth: AuthStore(), toast: ToastCenter(),
+                                retryBackoff: [0.02, 0.02])
+        UserDefaults.standard.removeObject(forKey: "sc.syncCursor")
+
+        // Pull (the cycle's last step) hits a transient failure first, then succeeds.
+        var attempts = 0
+        api.pullHandler = { _, _ in
+            attempts += 1
+            if attempts == 1 { throw Blip() }
+            return PullResponse(changes: [], nextCursor: "", hasMore: false, serverTime: 0)
+        }
+
+        await engine.sync()
+        #expect(engine.status == .offline)   // first cycle failed → offline + retry armed
+
+        // No manual trigger: the scheduled auto-retry must self-heal to .idle.
+        var waited = 0
+        while engine.status != .idle && waited < 300 {
+            try await Task.sleep(for: .milliseconds(10))
+            waited += 1
+        }
+        #expect(engine.status == .idle)
+        #expect(attempts >= 2)
+    }
+
     @Test func pushAppliedRemovesOutboxAndBumpsRev() async throws {
         let (engine, context, api, _, _) = try makeEngine()
         let txn = makeTxn()

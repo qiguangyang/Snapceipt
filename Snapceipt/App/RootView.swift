@@ -459,6 +459,13 @@ struct ShellView: View {
                 Task { await sync.sync() }
             }
         }
+        // When the network path returns (offline → online), re-sync immediately rather than
+        // waiting for the next foreground — clears a stale "Offline" the moment we're back.
+        .onChange(of: reachability.isOnline) { wasOnline, isOnline in
+            if isOnline && !wasOnline {
+                Task { await sync.sync() }
+            }
+        }
     }
 
     /// One-time GST-default backfill for the ACTIVE profile (spec §1/§4.2). Idempotent and

@@ -56,11 +56,20 @@ final class SyncEngine {
     /// authenticated calls. Holds the in-flight full-sync Task, if any.
     @ObservationIgnored private var syncTask: Task<Void, Never>?
 
-    init(api: APIClient, context: ModelContext, auth: AuthStore, toast: ToastCenter) {
+    /// Auto-retry after a transient (network / 5xx / 429 / timeout) sync failure. Without this
+    /// a single blip leaves a sticky `.offline` that only clears when the user reopens the app;
+    /// the retry self-heals it in seconds. Backoff in seconds; reset to the start on success.
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private var retryAttempt = 0
+    @ObservationIgnored private let retryBackoff: [Double]
+
+    init(api: APIClient, context: ModelContext, auth: AuthStore, toast: ToastCenter,
+         retryBackoff: [Double] = [3, 10, 30, 60]) {
         self.api = api
         self.context = context
         self.auth = auth
         self.toast = toast
+        self.retryBackoff = retryBackoff
     }
 
     // MARK: enqueue
@@ -247,6 +256,29 @@ final class SyncEngine {
         syncTask = task
         await task.value
         syncTask = nil
+        scheduleRetryIfNeeded()
+    }
+
+    /// After every `sync()` cycle: if it ended `.offline` (a transient failure), schedule an
+    /// automatic retry with backoff so the app self-heals without the user reopening it; any
+    /// other terminal state cancels the pending retry and resets the backoff. This is what
+    /// turns a sticky "Offline" pill into a few-seconds blip. Also re-armed by a foreground or
+    /// reachability-return `sync()` (each runs this on completion).
+    private func scheduleRetryIfNeeded() {
+        guard status == .offline else {
+            retryAttempt = 0
+            retryTask?.cancel()
+            retryTask = nil
+            return
+        }
+        retryTask?.cancel()
+        let delay = retryBackoff[min(retryAttempt, retryBackoff.count - 1)]
+        retryAttempt += 1
+        retryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            await self.sync()
+        }
     }
 
     /// Force the outbox up to the backend NOW and await it — used before an action
