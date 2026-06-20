@@ -220,6 +220,66 @@ function isNoiseItem(name: string): boolean {
   );
 }
 
+/** Deterministically parse line items from a structured receipt: a product-name line
+ * followed by a detail line ("0.977 kg NET @ $10.90/kg 10.65", "Qty 2 @ $7.50 each 15.00")
+ * pairs into name = the product, price = the line's LAST amount (the line total). Simple
+ * "Name 4.50" lines are taken directly. The cheap LLM mis-pairs these (name = the weight
+ * line, price = the /kg unit price), so this is used to override it when reliable. */
+export function parseStructuredLineItems(text: string): { name: string; price: number }[] {
+  const amountRe = /(-?\d{1,3}(?:[, ]\d{3})*\.\d{2})/g;
+  const detailRe = /\bkg\b.*@|@\s*\$?\d|\bqty\s+\d|\beach\b|\/kg/i;
+  const noiseRe =
+    /\b(sub ?total|total|gst|abn|tax invoice|eftpos|balance|change|approved|redemption|merch|term id|card|you saved|promotional|count of items|rounding|description)\b/i;
+  const lastAmount = (s: string): number | null => {
+    const m = [...s.matchAll(amountRe)];
+    return m.length ? parseFloat(m[m.length - 1][1].replace(/[, ]/g, "")) : null;
+  };
+  const strip = (s: string): string =>
+    s
+      .replace(/^[\^#*\s]+/, "")
+      .replace(/\s*\$?-?\d{1,3}(?:[, ]\d{3})*\.\d{2}\s*$/, "")
+      .trim();
+  const items: { name: string; price: number }[] = [];
+  let pendingName: string | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (noiseRe.test(line)) {
+      pendingName = null;
+      continue;
+    }
+    const amt = lastAmount(line);
+    if (amt == null) {
+      const n = strip(line);
+      pendingName = n.length >= 2 ? n : null;
+      continue;
+    }
+    const name = detailRe.test(line) ? pendingName ?? strip(line) : strip(line);
+    if (name.length >= 2) items.push({ name, price: amt });
+    pendingName = null;
+  }
+  return items;
+}
+
+/** Prefer the deterministic parse over the model's line items ONLY when it's clearly right:
+ * the parsed prices sum to the receipt total (within tolerance). Otherwise keep the model's
+ * (better for unstructured / photographed receipts). */
+function reconcileLineItems(
+  modelItems: { name: string; price: number }[],
+  text: string,
+  total: number,
+): { name: string; price: number }[] {
+  if (total <= 0) return modelItems;
+  const det = parseStructuredLineItems(text);
+  if (det.length >= 3) {
+    const sum = det.reduce((a, i) => a + i.price, 0);
+    if (Math.abs(sum - total) <= Math.max(1, total * 0.05)) {
+      return det.map((i) => ({ name: i.name, price: roundCents(i.price) }));
+    }
+  }
+  return modelItems;
+}
+
 /** Finalize a validated DeepSeek receipt: backfill deductible, infer GST, compute confidence. */
 function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt {
   const total = roundCents(Math.max(0, r.total));
@@ -255,9 +315,13 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
     gst,
     category: r.category,
     deductible,
-    lineItems: r.lineItems
-      .filter((li) => !isNoiseItem(li.name))
-      .map((li) => ({ name: li.name, price: roundCents(li.price) })),
+    lineItems: reconcileLineItems(
+      r.lineItems
+        .filter((li) => !isNoiseItem(li.name))
+        .map((li) => ({ name: li.name, price: roundCents(li.price) })),
+      trimReceiptTail(input.ocrText),
+      total,
+    ),
     confidence,
     needsReview: confidence < 0.8,
   };
@@ -274,7 +338,11 @@ export function fallback(input: ExtractionInput): ExtractedReceipt {
     gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, input.ocrText),
     category: h.category,
     deductible: h.deductible,
-    lineItems: h.lineItems.filter((li) => !isNoiseItem(li.name)),
+    lineItems: reconcileLineItems(
+      h.lineItems.filter((li) => !isNoiseItem(li.name)),
+      trimReceiptTail(input.ocrText),
+      h.total,
+    ),
     confidence: h.confidence,
     needsReview: h.needsReview,
   };

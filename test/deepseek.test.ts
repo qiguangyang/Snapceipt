@@ -5,6 +5,7 @@ import {
   reconcileGst,
   trimReceiptTail,
   detectMerchant,
+  parseStructuredLineItems,
 } from "../src/lib/deepseek";
 
 /** Real-world noisy PDF receipt: ABN starting with 88, mostly GST-free, a payment block (the
@@ -53,6 +54,76 @@ describe("GST reconcile + tail trim + merchant detect", () => {
   it("detects the real merchant brand from anywhere in the receipt", () => {
     expect(detectMerchant(WOOLIES)).toBe("Woolworths");
     expect(detectMerchant("Just a corner store\nTOTAL 5.00")).toBeNull();
+  });
+});
+
+/** The full Woolworths item block: product-name lines + weight/qty detail lines + simple
+ * lines + a discount, summing to the $176.98 total. */
+const FULL_WOOLIES = [
+  "Kiwifruit Gold New Zealand",
+  "0.977 kg NET @ $10.90/kg 10.65",
+  "Banana Cavendish",
+  "2.062 kg NET @ $4.50/kg 9.28",
+  "Capsicum Red",
+  "0.232 kg NET @ $7.90/kg 1.83",
+  "Broccoli",
+  "0.562 kg NET @ $4.50/kg 2.53",
+  "Mandarin Amorette Seedless",
+  "0.917 kg NET @ $3.90/kg 3.58",
+  "^Amaysim Sim Starter Kit 40 AUD 15.00",
+  "^Amaysim Sim Starter Kit 40 AUD 15.00",
+  "^Amaysim Sim Starter Kit 40 AUD 15.00",
+  "^SunRice Calrose Rice Med Grain 10kg 19.00",
+  "^#Huggies UD Nappy Pnts Girls Sz5 26pk 13.00",
+  "#Viva Select-A-Size Paper Towel 3pk 5.00",
+  "Bega Cheese Stringers 8pk 160g",
+  "Qty 2 @ $7.50 each 15.00",
+  "Macro FR Chicken Split Lemon & Garlic 12.01",
+  "Sweet Corn 500g P/P 4.50",
+  "Farmers Union Greek Pouch Peach 130g",
+  "Qty 2 @ $2.50 each 5.00",
+  "Farmers Union Yoghurt Pouch Pfruit 130g 2.50",
+  "Farmers Union Greek Yogurt Mango 130g",
+  "Qty 2 @ $2.50 each 5.00",
+  "FARMERS UNION OFFER -4.00",
+  "Pear The Odd Bunch 1kg PP 2.80",
+  "Persimmon",
+  "Qty 5 @ $2.00 each 10.00",
+  "Broccolini Bunch",
+  "Qty 2 @ $2.30 each 4.60",
+  "Carrot 1kg P/P 1.70",
+  "Berry Raspberry 125g P/P",
+  "Qty 2 @ $4.00 each 8.00",
+  "^Promotional Price",
+  "31 SUBTOTAL $176.98",
+  "TOTAL $176.98",
+].join("\n");
+
+describe("parseStructuredLineItems", () => {
+  const items = parseStructuredLineItems(FULL_WOOLIES);
+  const byName = (sub: string) => items.find((i) => i.name.includes(sub));
+
+  it("pairs a product name with its weight detail line + line total (not the /kg price)", () => {
+    expect(byName("Kiwifruit Gold New Zealand")).toEqual({
+      name: "Kiwifruit Gold New Zealand",
+      price: 10.65,
+    });
+    expect(byName("Banana Cavendish")?.price).toBe(9.28);
+  });
+
+  it("pairs qty detail lines and takes the line total", () => {
+    expect(byName("Bega Cheese Stringers")?.price).toBe(15.0);
+    expect(byName("Persimmon")?.price).toBe(10.0);
+  });
+
+  it("does not read a size token as a price (130g/125g)", () => {
+    expect(byName("Pfruit 130g")?.price).toBe(2.5);
+    expect(byName("Berry Raspberry 125g")?.price).toBe(8.0);
+  });
+
+  it("items sum to the receipt total", () => {
+    const sum = items.reduce((a, i) => a + i.price, 0);
+    expect(Math.abs(sum - 176.98)).toBeLessThan(0.02);
   });
 });
 
