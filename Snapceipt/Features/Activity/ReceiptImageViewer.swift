@@ -50,13 +50,30 @@ struct ReceiptImageViewer: View {
                         lastScale = scale
                     }
                 }
+                // Single-tap the receipt to exit (the second way out, besides the ✕).
+                .onTapGesture { onClose() }
                 .accessibilityIdentifier(AccessibilityID.receiptImageViewer)
 
             VStack {
+                // Close ✕ — top-right.
                 HStack {
+                    Spacer()
                     circleButton(system: "xmark", action: onClose)
                         .accessibilityIdentifier(AccessibilityID.receiptImageViewerClose)
-                    Spacer()
+                }
+                .padding(16)
+
+                Spacer()
+
+                // Save to Photos + result message — bottom.
+                VStack(spacing: 10) {
+                    if let saveMessage {
+                        Text(saveMessage)
+                            .font(.ui(13.5, .semibold)).foregroundStyle(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .transition(.opacity)
+                    }
                     Button(action: save) {
                         HStack(spacing: 6) {
                             if isSaving {
@@ -67,24 +84,13 @@ struct ReceiptImageViewer: View {
                             Text("Save to Photos").font(.ui(14, .semibold))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(.white.opacity(0.18), in: Capsule())
+                        .padding(.horizontal, 16).padding(.vertical, 11)
+                        .background(.white.opacity(0.2), in: Capsule())
                     }
                     .disabled(isSaving)
                     .accessibilityIdentifier(AccessibilityID.receiptImageSave)
                 }
-                .padding(16)
-
-                Spacer()
-
-                if let saveMessage {
-                    Text(saveMessage)
-                        .font(.ui(13.5, .semibold)).foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .padding(.bottom, 32)
-                        .transition(.opacity)
-                }
+                .padding(.bottom, 36)
             }
         }
         .statusBarHidden(true)
