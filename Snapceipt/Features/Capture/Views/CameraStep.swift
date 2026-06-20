@@ -17,6 +17,7 @@ struct CameraStep: View {
     @State private var camera = CameraController()
     @State private var flashOn = false
     @State private var accessDenied = false
+    @State private var liveQuad: NormalizedQuad?
     @State private var showingChooser = false
     @State private var showingPhotos = false
     @State private var showingFiles = false
@@ -74,13 +75,14 @@ struct CameraStep: View {
     }
 
     private var livePreview: some View {
-        CameraPreview(session: camera.session)
+        CameraPreview(session: camera.session, quad: liveQuad)
             .onAppear {
                 camera.onCapture = { onScanned($0) }
                 camera.onAccessDenied = { accessDenied = true }
+                camera.onLiveQuad = { liveQuad = $0 }
                 camera.start()
             }
-            .onDisappear { camera.stop() }
+            .onDisappear { camera.stop(); liveQuad = nil }
     }
 
     // MARK: Controls overlay
