@@ -28,6 +28,7 @@ final class CaptureViewModel {
     var diagnostics: ScanDiagnostics?
     private(set) var capturedImage: UIImage?
     private(set) var rawText: String = ""
+    private(set) var layoutText: String = ""
     private(set) var recognizedLines: [RecognizedLine] = []
     var errorMessage: String?
     /// The profile mode ("personal" | "business") the txn was actually filed under,
@@ -94,10 +95,13 @@ final class CaptureViewModel {
     func onScanned(image: UIImage, lines: [RecognizedLine]) async {
         self.capturedImage = image
         self.recognizedLines = lines
-        // Reconstruct visual rows (pair an item's left name with its right-column price)
-        // so the extractor gets reading-order text, not jumbled OCR observation order. For
-        // PDF text (zero-box lines, already in reading order) this is a no-op.
-        self.rawText = ReceiptRows.rows(from: lines).joined(separator: "\n")
+        // The model reads `rawText` (raw observation order) — safest for it, since merging a
+        // curved photo can split decimals ("19.90"→"19","90") and merge header lines, which
+        // confuses it. `layoutText` reconstructs visual rows (pairs name↔right-column price);
+        // the server's deterministic line-item parser uses it for structured receipts. For PDF
+        // text (zero-box lines, already in reading order) both are the same.
+        self.rawText = lines.map(\.text).joined(separator: "\n")
+        self.layoutText = ReceiptRows.rows(from: lines).joined(separator: "\n")
         self.stage = .scanning
         await extract()
     }
@@ -129,7 +133,7 @@ final class CaptureViewModel {
         }
 
         do {
-            let resp = try await api.extract(ocrText: rawText, source: "scan", capturedAt: capturedAt)
+            let resp = try await api.extract(ocrText: rawText, layoutText: layoutText, source: "scan", capturedAt: capturedAt)
             draft = ExtractedReceipt(response: resp)
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
@@ -245,7 +249,7 @@ final class CaptureViewModel {
 
     /// Reset to the camera for "Snap another".
     func reset() {
-        draft = nil; capturedImage = nil; rawText = ""; recognizedLines = []; errorMessage = nil
+        draft = nil; capturedImage = nil; rawText = ""; layoutText = ""; recognizedLines = []; errorMessage = nil
         diagnostics = nil
         stage = .camera
     }

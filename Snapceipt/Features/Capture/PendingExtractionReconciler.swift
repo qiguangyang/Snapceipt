@@ -41,7 +41,7 @@ final class PendingExtractionReconciler {
     private func reconcileOne(_ txn: Transaction, _ receipt: PendingReceipt) async {
         receipt.extractionAttempts += 1
         do {
-            let resp = try await api.extract(ocrText: receipt.ocrText, source: "scan",
+            let resp = try await api.extract(ocrText: receipt.ocrText, layoutText: nil, source: "scan",
                                              capturedAt: txn.txnDate)
             let r = resp.receipt
             txn.catKey = r.categoryKey

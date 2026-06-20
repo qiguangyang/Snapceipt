@@ -30,6 +30,10 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
  */
 export const extractRequestSchema = z.object({
   ocrText: z.string().min(1, "ocrText is required").max(20000, "ocrText too long"),
+  // Optional layout-reconstructed text (OCR observations merged into visual rows). The model
+  // reads `ocrText` (raw order — safest for it); the deterministic line-item parser reads
+  // this when present (rows pair name↔price for structured receipts). Falls back to ocrText.
+  layoutText: z.string().max(20000, "layoutText too long").optional(),
   source: z.enum(["scan", "email_in"]),
   defaultCurrency: z.string().length(3).default("AUD"),
   locale: z.string().min(2).default("en-AU"),

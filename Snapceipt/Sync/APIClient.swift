@@ -27,7 +27,7 @@ protocol APIClient {
     func recordPurchase(signedTransaction: String) async throws
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
-    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
+    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage
     /// GET /images/by-transaction/<txnId> — fetch the receipt JPEG from R2 by transaction
     /// id (the local copy is reclaimed after upload). Returns nil when none exists (404).
@@ -188,7 +188,7 @@ final class LiveAPIClient: APIClient {
                               body: NoBody(), authenticated: true)
     }
 
-    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         #if DEBUG
         // J18c offline seam (test-only): when -uiTestOffline is set the live client also
         // throws a transport error so the capture flow falls back to HeuristicParser +
@@ -201,7 +201,7 @@ final class LiveAPIClient: APIClient {
         #endif
         // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
         // (UUIDv7 from the same `ID` helper the model inits use).
-        let body = ExtractBody(ocrText: ocrText, source: source,
+        let body = ExtractBody(ocrText: ocrText, layoutText: layoutText, source: source,
                                defaultCurrency: "AUD", locale: "en-AU",
                                capturedAt: capturedAt, requestId: ID.uuidv7())
         return try await send("POST", "/extract", body: body, authenticated: true)
@@ -491,6 +491,7 @@ struct NoBody: Encodable {
 /// POST /extract request body. iOS hard-codes AUD/en-AU and always sends a requestId.
 private struct ExtractBody: Encodable {
     let ocrText: String
+    let layoutText: String?       // visual-row text for the line-item parser (nil → server uses ocrText)
     let source: String            // "scan" | "email_in"
     let defaultCurrency: String   // "AUD"
     let locale: String            // "en-AU"
