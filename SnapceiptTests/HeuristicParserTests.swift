@@ -44,6 +44,39 @@ struct HeuristicParserTests {
         #expect(p.total == Decimal(string: "38.61"))
     }
 
+    @Test("noisy PDF receipt (Woolworths): real total + printed GST, not total/11, despite promo tail")
+    func noisyWoolworthsReceipt() {
+        // Real-world PDF receipt text: mostly GST-free fresh food, separate name/price lines,
+        // a payment block with repeated totals, and a big BWS promo tail with its own prices.
+        let p = HeuristicParser.parse(lines([
+            "1129 Macquarie Ryde PH: 02 9308 7337",
+            "TAX INVOICE - ABN 88 000 014 675",
+            "Kiwifruit Gold New Zealand",
+            "0.977 kg NET @ $10.90/kg 10.65",
+            "Banana Cavendish",
+            "2.062 kg NET @ $4.50/kg 9.28",
+            "^SunRice Calrose Rice Med Grain 10kg 19.00",
+            "Sweet Corn 500g P/P 4.50",
+            "31 SUBTOTAL $176.98",
+            "TOTAL $176.98",
+            "REDEMPTION $176.98",
+            "TOTAL $176.98",
+            "BALANCE $0.00",
+            "X-2834 $176.98",
+            "Change $0.00",
+            "#Taxable Items",
+            "TOTAL includes GST $1.64",
+            "You saved $107.00",
+            "BUY ANY 2 WINES FOR $22 & SAVE $18",
+            "ONE 6 Pack $17 OR ONE 24 Pack $54",
+            "BEER OFFERS EXPIRE: 09.06.2026",
+        ]))
+        #expect(p.total == Decimal(string: "176.98"))
+        // The receipt prints "TOTAL includes GST $1.64" — must use it. The OLD logic grabbed
+        // the first tax/gst line ("TAX INVOICE", no amount) and fell back to total/11 = $16.09.
+        #expect(p.tax == Decimal(string: "1.64"))
+    }
+
     @Test("infers AU GST as total/11 when no GST line is present")
     func infersGSTWhenMissing() {
         let p = HeuristicParser.parse(lines([

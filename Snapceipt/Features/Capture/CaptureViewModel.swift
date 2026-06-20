@@ -224,6 +224,22 @@ final class CaptureViewModel {
         stage = .camera
     }
 
+    /// An imported file (Photos/Files). Imports skip the camera edge-adjust/dewarp (they're
+    /// already clean documents) and go straight to extract. PDFs pass their embedded `text`
+    /// so OCR is skipped entirely — far more accurate than re-OCRing a rendered page; photos
+    /// and scanned (image-only) PDFs pass nil and fall back to on-device OCR.
+    func ingestImport(image: UIImage, text: String?) async {
+        if let text, !text.isEmpty {
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map {
+                RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
+            }
+            await onScanned(image: image, lines: lines)
+        } else {
+            let lines = (try? await OCR.recognize(in: image)) ?? []
+            await onScanned(image: image, lines: lines)
+        }
+    }
+
     /// Reset to the camera for "Snap another".
     func reset() {
         draft = nil; capturedImage = nil; rawText = ""; recognizedLines = []; errorMessage = nil

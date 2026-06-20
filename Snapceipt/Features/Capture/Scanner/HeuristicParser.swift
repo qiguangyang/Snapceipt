@@ -129,8 +129,16 @@ enum HeuristicParser {
         // GST: word-boundary regex to avoid "Taxi" matching "tax".
         let gstRe = #"(?i)\b(gst|tax|vat)\b"#
         let gstPrinted: Bool
-        if let taxLine = texts.first(where: { $0.range(of: gstRe, options: .regularExpression) != nil }),
-           let taxVal = amounts(in: taxLine).max() {
+        // Only a GST/tax line that actually carries an amount counts — skip "TAX INVOICE",
+        // ABN lines, "#Taxable Items", etc. Prefer a line that explicitly says "GST" (e.g.
+        // "TOTAL includes GST $1.64") over a bare "tax" line. Many AU receipts are largely
+        // GST-free (fresh food), so a printed amount MUST win over the total/11 fallback —
+        // computing total/11 there massively overstates GST.
+        let gstAmountLines = texts.filter {
+            $0.range(of: gstRe, options: .regularExpression) != nil && !amounts(in: $0).isEmpty
+        }
+        let gstLine = gstAmountLines.first(where: { $0.lowercased().contains("gst") }) ?? gstAmountLines.first
+        if let line = gstLine, let taxVal = amounts(in: line).max() {
             result.tax = taxVal; gstPrinted = true
         } else if result.total > 0 {
             result.tax = roundedGST(result.total); gstPrinted = false
