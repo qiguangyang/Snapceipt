@@ -130,7 +130,14 @@ authRoutes.post(
         // E2E-only: ignore the missing/failing local SendEmail binding.
       }
     } else {
-      await sendMagicLinkEmail(c.env, { to: normalized, link });
+      // Send in the background (waitUntil) so the request returns immediately — a slow or
+      // failing email provider no longer blocks the client (which always gets 202 for
+      // anti-enumeration and can't act on a send error anyway). Failures are logged.
+      c.executionCtx.waitUntil(
+        sendMagicLinkEmail(c.env, { to: normalized, link }).catch((err) => {
+          console.error("magic-link email send failed", err);
+        }),
+      );
     }
 
     // E2E-ONLY SEAM — never enabled in production. When E2E_TEST_MODE === "1"
@@ -277,7 +284,13 @@ authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
     }
     return c.json({ devCode: code }, 202);
   }
-  await sendSignInCode(c.env, { to: normalized, code });
+  // Background send (waitUntil) so a slow/failing email provider can't block or time out
+  // the request; the client gets 202 regardless. Failures are logged for diagnosis.
+  c.executionCtx.waitUntil(
+    sendSignInCode(c.env, { to: normalized, code }).catch((err) => {
+      console.error("otp email send failed", err);
+    }),
+  );
   return c.body(null, 202);
 });
 
