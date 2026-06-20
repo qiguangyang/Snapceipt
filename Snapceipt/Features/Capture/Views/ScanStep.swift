@@ -60,8 +60,10 @@ struct ScanStep: View {
                 .frame(width: receiptW, height: receiptH)
                 .cardShadow()
             if let image {
+                // Fit (not fill) so the WHOLE scanned receipt shows — fill clipped the tall
+                // receipt's top (merchant) and bottom (date). Letterbox shows the paper behind.
                 Image(uiImage: image)
-                    .resizable().scaledToFill()
+                    .resizable().scaledToFit()
                     .frame(width: receiptW, height: receiptH)
                     .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             }
