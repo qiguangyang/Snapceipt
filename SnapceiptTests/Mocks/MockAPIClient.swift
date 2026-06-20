@@ -159,6 +159,12 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try await h(jpeg, transactionId, width, height)
     }
 
+    var fetchReceiptImageHandler: ((_ transactionId: String) async throws -> Data?)?
+    func fetchReceiptImage(transactionId: String) async throws -> Data? {
+        guard let h = fetchReceiptImageHandler else { return nil }
+        return try await h(transactionId)
+    }
+
     func export(profileId: String, format: String, from: String, to: String,
                 toEmail: String?) async throws -> ExportResult {
         exportCalls.append((profileId, format, from, to, toEmail))

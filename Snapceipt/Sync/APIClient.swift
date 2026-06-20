@@ -29,6 +29,9 @@ protocol APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
     func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage
+    /// GET /images/by-transaction/<txnId> — fetch the receipt JPEG from R2 by transaction
+    /// id (the local copy is reclaimed after upload). Returns nil when none exists (404).
+    func fetchReceiptImage(transactionId: String) async throws -> Data?
     /// POST /export — generate a CSV/PDF (share via the returned download url) or
     /// email the accountant pack. Returns the normalized `ExportResult`. (spec §4.2)
     func export(profileId: String, format: String, from: String, to: String,
@@ -69,6 +72,12 @@ protocol APIClient {
     /// POST /crash-reports — upload one MetricKit diagnostic (crash/hang). Best-effort;
     /// callers ignore failures (diagnostics are not critical-path). (ops)
     func reportDiagnostic(_ body: DiagnosticReportBody) async throws
+}
+
+extension APIClient {
+    /// Default: no remote receipt image. Live client overrides; stubs/previews/mocks
+    /// inherit this (their receipts display from the local file or not at all).
+    func fetchReceiptImage(transactionId: String) async throws -> Data? { nil }
 }
 
 /// URLSession-backed APIClient. Attaches the bearer + device id, decodes the backend
@@ -211,6 +220,15 @@ final class LiveAPIClient: APIClient {
         let data = try await performRawImage("/images", query: items, bytes: jpeg, contentType: "image/jpeg")
         do { return try decoder.decode(UploadedImage.self, from: data) }
         catch { throw APIError.decoding }
+    }
+
+    func fetchReceiptImage(transactionId: String) async throws -> Data? {
+        do {
+            return try await perform("GET", "/images/by-transaction/\(transactionId)",
+                                     query: [], body: NoBody(), authenticated: true, allowRefresh: true)
+        } catch let error as APIError where error.status == 404 {
+            return nil   // no receipt image linked to this txn
+        }
     }
 
     func export(profileId: String, format: String, from: String, to: String,

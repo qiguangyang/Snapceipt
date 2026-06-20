@@ -57,6 +57,7 @@ enum AccessibilityID {
     static let captureQueuedBadge = "capture.queued.badge"
     static let captureSnapAnother = "capture.snapAnother"
     static let captureDone = "capture.done"
+    static let captureShutter = "capture.shutter"
     static let captureImport = "capture.import"
     static let captureImportPhotos = "capture.import.photos"
     static let captureImportFiles = "capture.import.files"

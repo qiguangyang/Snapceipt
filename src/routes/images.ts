@@ -82,6 +82,28 @@ imageRoutes.post("/", async (c) => {
   return c.json({ imageKey: key, getUrl: `/images/${key}`, byteSize });
 });
 
+// Fetch a transaction's receipt image by transaction id. The client always has the txn
+// id but not the R2 key (the local JPEG is reclaimed after upload), so this resolves the
+// most recent non-deleted image linked to the txn for this user and streams it. Registered
+// before the wildcard so the static `by-transaction` segment wins.
+imageRoutes.get("/by-transaction/:transactionId", async (c) => {
+  const userId = c.var.userId;
+  const txnId = c.req.param("transactionId");
+  const row = await c.env.DB.prepare(
+    `SELECT r2_key FROM receipt_images
+       WHERE user_id = ? AND transaction_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+  ).bind(userId, txnId).first<{ r2_key: string }>();
+  if (!row) throw new ApiError("NOT_FOUND", "Image not found");
+  const obj = await c.env.RECEIPTS.get(row.r2_key);
+  if (!obj) throw new ApiError("NOT_FOUND", "Image not found");
+  const bytes = await obj.arrayBuffer();
+  return new Response(bytes, {
+    status: 200,
+    headers: { "content-type": obj.httpMetadata?.contentType ?? "image/jpeg" },
+  });
+});
+
 // Wildcard GET — Hono's :param is single-segment and can't match the slash-bearing
 // key, so we read the path tail directly.
 imageRoutes.get("/*", async (c) => {

@@ -202,3 +202,38 @@ describe("GET /images/*", () => {
     expect(get.status).toBe(404);
   });
 });
+
+describe("GET /images/by-transaction/:transactionId", () => {
+  it("streams the image linked to the txn for this user", async () => {
+    const userId = uuidv7();
+    const app = appAs(userId, uuidv7());
+    const txnId = await seedTxn(userId);
+    await app.request(`/images?transactionId=${txnId}`, {
+      method: "POST", headers: { "content-type": "image/jpeg" }, body: JPEG_BYTES,
+    });
+    const get = await app.request(`/images/by-transaction/${txnId}`);
+    expect(get.status).toBe(200);
+    expect(get.headers.get("content-type")).toBe("image/jpeg");
+    expect(new Uint8Array(await get.arrayBuffer()).byteLength).toBe(JPEG_BYTES.byteLength);
+  });
+
+  it("returns 404 when the txn has no image", async () => {
+    const userId = uuidv7();
+    const app = appAs(userId, uuidv7());
+    const txnId = await seedTxn(userId);
+    const get = await app.request(`/images/by-transaction/${txnId}`);
+    expect(get.status).toBe(404);
+  });
+
+  it("does not return another user's image for the same txn id", async () => {
+    const ownerA = uuidv7();
+    const appA = appAs(ownerA, uuidv7());
+    const txnId = await seedTxn(ownerA);
+    await appA.request(`/images?transactionId=${txnId}`, {
+      method: "POST", headers: { "content-type": "image/jpeg" }, body: JPEG_BYTES,
+    });
+    const appB = appAs(uuidv7(), uuidv7());
+    const get = await appB.request(`/images/by-transaction/${txnId}`);
+    expect(get.status).toBe(404);
+  });
+});
