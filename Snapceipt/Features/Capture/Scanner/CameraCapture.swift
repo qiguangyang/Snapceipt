@@ -212,10 +212,14 @@ struct CameraPreview: UIViewRepresentable {
 
 extension UIImage {
     /// Redraw to `.up` orientation so downstream OCR, cropping, and display don't have to
-    /// reason about EXIF orientation. No-op when already upright.
+    /// reason about EXIF orientation. No-op when already upright. Preserves the native scale
+    /// (the default renderer scale is the 3× screen scale, which would needlessly 9×-inflate
+    /// a full-res camera frame and desync points from pixels).
     func normalizedUp() -> UIImage {
         guard imageOrientation != .up else { return self }
-        let renderer = UIGraphicsImageRenderer(size: size)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = scale
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
         return renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
     }
 }
