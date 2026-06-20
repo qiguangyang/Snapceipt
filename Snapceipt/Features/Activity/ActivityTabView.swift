@@ -94,18 +94,28 @@ struct ActivityTabView: View {
         .padding(.horizontal, 18).padding(.top, 14)
     }
 
+    /// `""` = "All time" (no month filter); else "YYYY-MM".
+    private static let allTimeKey = ""
+
+    /// Months that actually have data, newest first, in the current sort mode — so every
+    /// month with transactions is reachable and empty months never appear (replaces the old
+    /// fixed 8-months-from-today window, which hid anything older than 8 months).
+    private func availableMonthKeys() -> [String] {
+        let keys = Set((vm?.rows ?? []).map { String(dateKey($0, mode: sortMode).prefix(7)) })
+        return keys.sorted(by: >)
+    }
+
     private var monthPicker: some View {
         Menu {
-            ForEach(ActivityDate.recentMonthKeys, id: \.self) { key in
-                Button { monthKey = key } label: {
-                    if key == monthKey { Label(ActivityDate.monthLabel(key), systemImage: "checkmark") }
-                    else { Text(ActivityDate.monthLabel(key)) }
-                }
+            Button { monthKey = Self.allTimeKey } label: { monthItem("All time", Self.allTimeKey) }
+            ForEach(availableMonthKeys(), id: \.self) { key in
+                Button { monthKey = key } label: { monthItem(ActivityDate.monthLabel(key), key) }
             }
         } label: {
             HStack(spacing: 7) {
                 Icon(name: "calendar", size: 18, color: accent.base)
-                Text(ActivityDate.monthLabel(monthKey)).font(.ui(13.5, .bold)).foregroundStyle(Palette.ink)
+                Text(monthKey.isEmpty ? "All time" : ActivityDate.monthLabel(monthKey))
+                    .font(.ui(13.5, .bold)).foregroundStyle(Palette.ink)
                 Icon(name: "chevD", size: 15, color: Palette.ink3)
             }
             .frame(height: 42).padding(.horizontal, 13)
@@ -114,6 +124,11 @@ struct ActivityTabView: View {
             .cardShadow()
         }
         .accessibilityIdentifier(AccessibilityID.activityMonthPicker)
+    }
+
+    @ViewBuilder
+    private func monthItem(_ title: String, _ key: String) -> some View {
+        if key == monthKey { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     private var sortMenu: some View {
@@ -246,6 +261,8 @@ struct ActivityTabView: View {
     /// Switch sort mode and re-land on the newest item's month in that mode so data shows.
     private func setSort(_ mode: SortMode) {
         sortMode = mode
+        guard !monthKey.isEmpty else { return }   // keep "All time" selected across modes
+        // A specific month may not exist in the new mode's dates — re-land on the newest.
         if let newest = (vm?.rows ?? []).max(by: { dateKey($0, mode: mode) < dateKey($1, mode: mode) }) {
             let d = dateKey(newest, mode: mode)
             if d.count >= 7 { monthKey = String(d.prefix(7)) }
@@ -263,12 +280,6 @@ struct ActivityTabView: View {
 enum ActivityDate {
     static var currentMonthKey: String { monthKeyFormatter.string(from: Date()) }
 
-    static var recentMonthKeys: [String] {
-        let cal = Calendar.current
-        return (0..<8).compactMap { i in
-            cal.date(byAdding: .month, value: -i, to: Date()).map { monthKeyFormatter.string(from: $0) }
-        }
-    }
 
     static func monthLabel(_ key: String) -> String {
         guard let d = monthKeyFormatter.date(from: key) else { return key }
