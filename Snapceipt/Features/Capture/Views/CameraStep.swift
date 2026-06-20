@@ -18,6 +18,7 @@ struct CameraStep: View {
     @State private var flashOn = false
     @State private var accessDenied = false
     @State private var liveQuad: NormalizedQuad?
+    @State private var bufferSize: CGSize = .zero
     @State private var showingChooser = false
     @State private var showingPhotos = false
     @State private var showingFiles = false
@@ -75,11 +76,11 @@ struct CameraStep: View {
     }
 
     private var livePreview: some View {
-        CameraPreview(session: camera.session, quad: liveQuad)
+        CameraPreview(session: camera.session, quad: liveQuad, bufferSize: bufferSize)
             .onAppear {
                 camera.onCapture = { onScanned($0) }
                 camera.onAccessDenied = { accessDenied = true }
-                camera.onLiveQuad = { liveQuad = $0 }
+                camera.onLiveQuad = { quad, size in liveQuad = quad; bufferSize = size }
                 camera.start()
             }
             .onDisappear { camera.stop(); liveQuad = nil }

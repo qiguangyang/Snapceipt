@@ -33,8 +33,9 @@ final class CameraController: NSObject, AVCapturePhotoCaptureDelegate,
     var onCapture: ((UIImage) -> Void)?
     /// Set true when access is denied so the UI can prompt for Settings.
     var onAccessDenied: (() -> Void)?
-    /// Live detected rectangle (or nil) delivered on the main thread for the preview overlay.
-    var onLiveQuad: ((NormalizedQuad?) -> Void)?
+    /// Live detected document (or nil) + the source buffer's pixel size, delivered on the
+    /// main thread for the preview overlay (the size drives the aspect-fill mapping).
+    var onLiveQuad: ((NormalizedQuad?, CGSize) -> Void)?
 
     // Apple's ML document detector (same family the system scanner uses) — far more accurate
     // on receipts/cluttered backgrounds than the geometric VNDetectRectanglesRequest.
@@ -133,13 +134,14 @@ final class CameraController: NSObject, AVCapturePhotoCaptureDelegate,
         let now = CACurrentMediaTime()
         guard now - lastDetect >= 0.1 else { return }   // ~10 fps cap (runs on the serial queue)
         lastDetect = now
+        let size = CGSize(width: CVPixelBufferGetWidth(pixel), height: CVPixelBufferGetHeight(pixel))
         let handler = VNImageRequestHandler(cvPixelBuffer: pixel, orientation: .up, options: [:])
         try? handler.perform([docRequest])
         let quad = docRequest.results?.first.map { obs in
             NormalizedQuad(topLeft: obs.topLeft, topRight: obs.topRight,
                            bottomRight: obs.bottomRight, bottomLeft: obs.bottomLeft)
         }
-        DispatchQueue.main.async { [weak self] in self?.onLiveQuad?(quad) }
+        DispatchQueue.main.async { [weak self] in self?.onLiveQuad?(quad, size) }
     }
 }
 
@@ -149,6 +151,7 @@ final class CameraController: NSObject, AVCapturePhotoCaptureDelegate,
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
     var quad: NormalizedQuad?
+    var bufferSize: CGSize
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
@@ -158,7 +161,7 @@ struct CameraPreview: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
-        uiView.showQuad(quad)
+        uiView.showQuad(quad, bufferSize: bufferSize)
     }
 
     final class PreviewView: UIView {
@@ -177,12 +180,21 @@ struct CameraPreview: UIViewRepresentable {
 
         override func layoutSubviews() { super.layoutSubviews(); shape.frame = bounds }
 
-        func showQuad(_ quad: NormalizedQuad?) {
-            guard let quad else { shape.path = nil; return }
-            let pl = videoPreviewLayer
-            // Vision: normalized, bottom-left origin. Capture-device space: top-left origin.
+        /// Map the Vision quad (normalized, bottom-left origin, in the portrait video buffer)
+        /// to view points by replicating the preview layer's `.resizeAspectFill` transform —
+        /// scale the buffer to fill the view (cropping overflow) and center it. This mirrors
+        /// exactly what the preview draws, so the overlay aligns regardless of the
+        /// capture-device coordinate-space ambiguity in `layerPointConverted`.
+        func showQuad(_ quad: NormalizedQuad?, bufferSize: CGSize) {
+            guard let quad, bufferSize.width > 0, bufferSize.height > 0,
+                  bounds.width > 0, bounds.height > 0 else { shape.path = nil; return }
+            let bw = bufferSize.width, bh = bufferSize.height
+            let scale = max(bounds.width / bw, bounds.height / bh)   // aspect-FILL
+            let ox = (bounds.width - bw * scale) / 2
+            let oy = (bounds.height - bh * scale) / 2
             func cv(_ p: CGPoint) -> CGPoint {
-                pl.layerPointConverted(fromCaptureDevicePoint: CGPoint(x: p.x, y: 1 - p.y))
+                // norm (bottom-left) → buffer px (top-left) → scaled+offset view point.
+                CGPoint(x: ox + (p.x * bw) * scale, y: oy + ((1 - p.y) * bh) * scale)
             }
             let path = UIBezierPath()
             path.move(to: cv(quad.topLeft))
