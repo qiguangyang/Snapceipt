@@ -6,12 +6,14 @@ protocol ImageReducing {
     func reduce(_ image: UIImage) -> Data
 }
 
-/// Bounds receipt uploads on-device: longest edge <= 2000 px (aspect preserved),
-/// then JPEG quality 0.6 stepping 0.5/0.4/0.3 until bytes <= 1_500_000 or the floor.
+/// Bounds receipt uploads on-device: longest edge <= 1600 px (aspect preserved),
+/// then JPEG quality 0.5 stepping 0.4/0.3/0.25 until bytes <= 800_000 or the floor.
+/// OCR runs on the full-res capture BEFORE this, so the upload is display/archive only —
+/// kept small to cut upload time + server storage while staying legible when zoomed.
 struct ImageReducer: ImageReducing {
-    private let maxEdge: CGFloat = 2000
-    private let maxBytes = 1_500_000
-    private let qualitySteps: [CGFloat] = [0.6, 0.5, 0.4, 0.3]
+    private let maxEdge: CGFloat = 1600
+    private let maxBytes = 800_000
+    private let qualitySteps: [CGFloat] = [0.5, 0.4, 0.3, 0.25]
 
     func reduce(_ image: UIImage) -> Data {
         let scaled = downscaled(image)
