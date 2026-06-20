@@ -38,6 +38,10 @@ const SYSTEM_PROMPT = [
 
 export interface ExtractionInput {
   ocrText: string;
+  // Layout-reconstructed text (visual rows). Used ONLY by the deterministic line-item parser
+  // — rows pair name↔price for structured receipts. The model still reads ocrText (raw order),
+  // because a bad merge on a curved photo (split decimals, merged header lines) confuses it.
+  layoutText?: string;
   source: "scan" | "email_in";
   defaultDate: string; // capturedAt or today, used for the date fallback
 }
@@ -346,7 +350,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
       r.lineItems
         .filter((li) => !isNoiseItem(li.name))
         .map((li) => ({ name: li.name, price: roundCents(li.price) })),
-      trimReceiptTail(input.ocrText),
+      trimReceiptTail(input.layoutText ?? input.ocrText),
       total,
     ),
     confidence,
@@ -367,7 +371,7 @@ export function fallback(input: ExtractionInput): ExtractedReceipt {
     deductible: h.deductible,
     lineItems: reconcileLineItems(
       h.lineItems.filter((li) => !isNoiseItem(li.name)),
-      trimReceiptTail(input.ocrText),
+      trimReceiptTail(input.layoutText ?? input.ocrText),
       h.total,
     ),
     confidence: h.confidence,

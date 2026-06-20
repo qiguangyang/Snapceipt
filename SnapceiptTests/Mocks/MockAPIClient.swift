@@ -147,7 +147,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return pullPages.removeFirst()
     }
 
-    func extract(ocrText: String, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         extractCalls.append((ocrText, source, capturedAt))
         guard let h = extractHandler else { throw MockAPIClientError.unscripted }
         return try await h(ocrText, source, capturedAt)

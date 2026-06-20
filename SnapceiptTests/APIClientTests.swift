@@ -208,7 +208,7 @@ struct APIClientTests {
             """))
         }
         let resp = try await client.extract(ocrText: "THE GROUNDS\nTOTAL 42.50",
-                                            source: "scan", capturedAt: "2026-05-28")
+                                            layoutText: nil, source: "scan", capturedAt: "2026-05-28")
         #expect(resp.receipt.categoryKey == "meals")
         #expect(resp.receipt.total == Decimal(string: "42.50"))
         #expect(MockURLProtocol.lastRequest?.url?.path == "/extract")

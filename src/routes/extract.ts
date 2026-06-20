@@ -91,6 +91,7 @@ extractRoutes.post("/", validate("json", extractRequestSchema), async (c) => {
       // 3a. Under cap: run DeepSeek (real LLM), then count the slot.
       const result = await runDeepseekExtraction(c.env, {
         ocrText: body.ocrText,
+        layoutText: body.layoutText,
         source: body.source,
         defaultDate,
       });

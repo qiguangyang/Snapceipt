@@ -197,6 +197,55 @@ describe("runDeepseekExtraction()", () => {
     expect(out.receipt.needsReview).toBe(false); // arithmetic consistent + high model conf
   });
 
+  it("sends raw ocrText to the model but parses line items from layoutText", async () => {
+    // Curved-photo case: the model is given the raw text and returns junk items (it grabbed
+    // header numbers); layoutText carries clean rows summing to the total, so the parser wins.
+    const junk = JSON.stringify({
+      merchant: "Japan City Chatswood",
+      date: "2026-06-20",
+      currencyCode: "AUD",
+      total: 48.68,
+      gst: 4.42,
+      category: "meals",
+      deductible: 0,
+      lineItems: [
+        { name: "ABN: 85 629 947", price: 85.0 },
+        { name: "Shop 601 Westfield", price: 601.0 },
+        { name: "NSW", price: 2067.0 },
+      ],
+      confidence: 0.6,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse(junk));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rawOcr = ["Japan City Chatswood", "ABN: 85 629 947 780", "(Udon) Fisherman", "19.90"].join("\n");
+    const layout = [
+      "(Udon) Fisherman  19.90  1  19.90",
+      "( DON ) Wagyu  19.90  1  19.90",
+      "Edamame  4.50  1  4.50",
+      "Dango  3.90  1  3.90",
+      "Credit Card Surch  0.48  1  0.48",
+      "TOTAL  $48.68",
+    ].join("\n");
+
+    const out = await runDeepseekExtraction(ENV, {
+      ocrText: rawOcr,
+      layoutText: layout,
+      source: "scan",
+      defaultDate: "2026-06-20",
+    });
+
+    // The model saw the RAW text, not the layout text.
+    const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sentBody.messages.at(-1).content).toContain("(Udon) Fisherman\n19.90");
+    expect(sentBody.messages.at(-1).content).not.toContain("19.90  1  19.90");
+    // The deterministic parser (layoutText) reconciled to $48.68 and replaced the junk.
+    const names = out.receipt.lineItems.map((li) => li.name);
+    expect(names).not.toContain("NSW");
+    expect(out.receipt.lineItems.some((li) => li.name.includes("Fisherman"))).toBe(true);
+    expect(out.receipt.lineItems.some((li) => li.price === 4.5)).toBe(true);
+  });
+
   it("retries once on invalid-then-valid (2 attempts)", async () => {
     const fetchMock = vi
       .fn()
