@@ -181,6 +181,10 @@ struct ShellView: View {
                 // edge; the remaining margin above the home indicator keeps it clear of
                 // the gesture zone.
                 .padding(.bottom, -8)
+                // Stay pinned to the bottom when a keyboard shows (e.g. the Activity
+                // search field) — without this the bar rides the keyboard up and SwiftUI
+                // can leave the inset stuck after dismissal. Matches the editor action bars.
+                .ignoresSafeArea(.keyboard, edges: .bottom)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
