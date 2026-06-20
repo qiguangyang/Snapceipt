@@ -293,6 +293,8 @@ enum AccessibilityID {
     static let paywallLoadError  = "paywall.loadError"   // empty/failed load message
     static let paywallRetry      = "paywall.retry"       // re-run loadProducts()
     static let paywallSubscribe  = "paywall.subscribe"   // CTA buying the selected plan
+    static let paywallClose      = "paywall.close"       // explicit dismiss (X)
+    static let paywallAutoRenewDisclosure = "paywall.autoRenewDisclosure"  // §3.1.2 copy
     // Activity tab (receipts list)
     static let activityScreen    = "activity.screen"
     static let activityRowPrefix = "activity.row."       // + transaction.id

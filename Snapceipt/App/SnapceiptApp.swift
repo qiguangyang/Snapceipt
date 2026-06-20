@@ -113,7 +113,10 @@ struct SnapceiptApp: App {
         _entitlement = State(initialValue: entitlement)
 
         _auth = State(initialValue: auth)
-        _authVM = State(initialValue: AuthViewModel(api: api, auth: auth))
+        _authVM = State(initialValue: AuthViewModel(
+            api: api, auth: auth,
+            // Wipe local financial data + receipt images on sign-out / account deletion.
+            onWipeLocalData: { LocalStore.wipe(context: context) }))
         _router = State(initialValue: router)
         _toasts = State(initialValue: toasts)
         _reachability = State(initialValue: Reachability())

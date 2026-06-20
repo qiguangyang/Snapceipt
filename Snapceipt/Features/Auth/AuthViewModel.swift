@@ -166,11 +166,17 @@ final class AuthViewModel {
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let auth: AuthStore
     @ObservationIgnored private let apple: AppleSignInCoordinator
+    /// Wipes local SwiftData + receipt images on sign-out / account-deletion. Injected
+    /// (rather than reaching into SwiftData here) so the auth layer stays storage-agnostic
+    /// and tests can omit it. Nil in previews/tests.
+    @ObservationIgnored private let onWipeLocalData: (() -> Void)?
 
-    init(api: APIClient, auth: AuthStore, apple: AppleSignInCoordinator = AppleSignInCoordinator()) {
+    init(api: APIClient, auth: AuthStore, apple: AppleSignInCoordinator = AppleSignInCoordinator(),
+         onWipeLocalData: (() -> Void)? = nil) {
         self.api = api
         self.auth = auth
         self.apple = apple
+        self.onWipeLocalData = onWipeLocalData
         // If a session was restored from the Keychain, start already signed in.
         if auth.session != nil { state = .signedIn }
     }
@@ -303,6 +309,9 @@ final class AuthViewModel {
     // MARK: Deep link
 
     func handleDeepLink(_ url: URL) async {
+        // Ignore magic-link taps while already signed in: a stray, forwarded, or stale
+        // link shouldn't silently tear down and replace the active session.
+        guard state != .signedIn else { return }
         guard let token = MagicLinkParser.token(from: url) else { return }
         await verifyMagicLink(token: token)
     }
@@ -312,6 +321,10 @@ final class AuthViewModel {
     func signOut() async {
         try? await api.signOut()
         auth.clear()
+        // Wipe local financial data + receipt images so nothing survives on the device
+        // after sign-out / account deletion (both paths funnel through here). A returning
+        // sign-in re-pulls from the server with a fresh cursor.
+        onWipeLocalData?()
         pendingEmail = nil
         state = .signedOut
     }

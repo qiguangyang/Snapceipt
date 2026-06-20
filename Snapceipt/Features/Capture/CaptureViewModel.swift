@@ -212,7 +212,10 @@ final class CaptureViewModel {
             .appendingPathComponent("receipts", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("\(transactionId).jpg")
-        try? data.write(to: url, options: .atomic)
+        // Receipts are the most sensitive on-device artifact: protect at rest with
+        // NSFileProtectionComplete (encrypted while the device is locked), not the
+        // default CompleteUntilFirstUnlock.
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
         return (url.path, Int(dims.size.width), Int(dims.size.height))
     }
 

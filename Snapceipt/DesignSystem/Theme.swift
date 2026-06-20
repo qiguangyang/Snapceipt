@@ -20,7 +20,10 @@ enum Palette {
     static let paper2 = Color(hex: 0xF6EEE4)
     static let ink = Color(hex: 0x211C18)
     static let ink2 = Color(hex: 0x6B6258)
-    static let ink3 = Color(hex: 0xA99F93)
+    // Darkened from #A99F93 (2.42:1 on cream — failed WCAG AA) to clear 4.5:1: ink3
+    // carries real content (transaction counts, day headers, empty-state copy), so it
+    // must be legible, including outdoors while photographing receipts.
+    static let ink3 = Color(hex: 0x7C7368)
     static let line = Color(hex: 0xECE3D8)
     static let line2 = Color(hex: 0xF3EBE1)
     static let income = Color(hex: 0x1F9D6B)

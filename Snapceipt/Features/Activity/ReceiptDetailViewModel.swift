@@ -72,7 +72,9 @@ final class ReceiptDetailViewModel {
         if let url = Self.localImageURL(for: transactionId) {
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: url, options: .atomic)
+            // Match the capture-time protection class (NSFileProtectionComplete) for the
+            // re-cached receipt JPEG.
+            try? data.write(to: url, options: [.atomic, .completeFileProtection])
         }
     }
 }

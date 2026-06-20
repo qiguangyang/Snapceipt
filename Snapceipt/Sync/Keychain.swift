@@ -10,8 +10,11 @@ enum KeychainKey: String, CaseIterable, Sendable {
 }
 
 /// Thin, typed wrapper over the Security framework's generic-password items.
-/// Items use service "app.snapceipt" and kSecAttrAccessibleAfterFirstUnlock so
-/// the app can read tokens during background sync after the first unlock.
+/// Items use service "app.snapceipt" and
+/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`: readable for background sync
+/// after the first unlock, but pinned to THIS device — so tokens + the bound deviceId
+/// can't ride an encrypted backup onto another device (which would undermine device
+/// binding / remote revocation).
 struct Keychain: Sendable {
     /// kSecAttrService for all items. Default is the app's bundle-style id;
     /// tests inject a unique value to stay isolated.
@@ -37,19 +40,27 @@ struct Keychain: Sendable {
         return value
     }
 
-    /// Upsert a UTF-8 string under `key` (add, or update if it already exists).
+    /// Upsert a UTF-8 string under `key`. Delete-then-add (not SecItemUpdate-on-duplicate)
+    /// so the accessibility attribute is (re)applied on every write — `SecItemUpdate`
+    /// cannot change `kSecAttrAccessible`, so an in-place update would strand a
+    /// pre-existing item on its old, weaker policy. This also makes any existing
+    /// token/deviceId self-migrate to ThisDeviceOnly the next time it's written.
     func set(_ value: String, _ key: KeychainKey) {
         let data = Data(value.utf8)
-
+        SecItemDelete(baseQuery(key) as CFDictionary)
         var addQuery = baseQuery(key)
         addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
 
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus == errSecDuplicateItem {
-            // Item exists — update just its data.
-            let update: [String: Any] = [kSecValueData as String: data]
-            SecItemUpdate(baseQuery(key) as CFDictionary, update as CFDictionary)
+    /// One-time migration: rewrite every present item so it picks up the current
+    /// (ThisDeviceOnly) accessibility policy. Needed because pre-existing items written
+    /// before this change keep their old policy until rewritten, and the rarely-rewritten
+    /// `deviceId` would otherwise never migrate. Idempotent; only touches present items.
+    func reapplyAccessibility() {
+        for key in KeychainKey.allCases where string(key) != nil {
+            set(string(key)!, key)
         }
     }
 

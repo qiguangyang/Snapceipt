@@ -31,6 +31,8 @@ struct ReviewStep: View {
     /// Gates item→total auto-recompute until after the initial seed, so loading the
     /// extracted draft doesn't overwrite the AI's detected total with the items sum.
     @State private var didSeed = false
+    /// Confirms before the close button throws away the scanned image + extraction + edits.
+    @State private var confirmingDiscard = false
 
     private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
     private func label(_ key: String) -> String {
@@ -68,7 +70,6 @@ struct ReviewStep: View {
                     // "Assign to profile" lives in its OWN block AFTER the details card.
                     profileBlock
                     lineItemsCard
-                    disabledChips
                 }
                 // Leave room for the fixed bottom save bar.
                 .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 120)
@@ -80,6 +81,15 @@ struct ReviewStep: View {
         // Save button pinned to a fixed bottom bar over a cream scrim.
         .overlay(alignment: .bottom) { saveBar }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        // Closing Review discards the captured image + extraction + every edit — confirm
+        // first so a single tap can't silently lose the receipt.
+        .confirmationDialog("Discard this receipt?", isPresented: $confirmingDiscard,
+                            titleVisibility: .visible) {
+            Button("Discard", role: .destructive, action: onClose)
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your scanned receipt and any edits will be lost.")
+        }
     }
 
     /// Top bar: a close button (the only cancel affordance on Review) + the
@@ -90,7 +100,7 @@ struct ReviewStep: View {
             Text("Review receipt")
                 .font(.ui(17, .bold)).foregroundStyle(Palette.ink)
             HStack {
-                CaptureCloseButton(onClose: onClose)
+                CaptureCloseButton(onClose: { confirmingDiscard = true })
                 Spacer()
             }
         }
@@ -173,10 +183,12 @@ struct ReviewStep: View {
     }
 
     /// Developer diagnostic line: which engine produced this draft + timing/confidence.
-    /// Visible to all users by product decision; reads `vm.diagnostics`. Suppressed in the
-    /// screenshot tour so marketing shots stay clean (DEBUG-only; production unchanged).
+    /// DEBUG-only — never rendered in a Release/App Store build (it leaks internal terms
+    /// like "stub"/"capped", an App Review 2.1 polish risk). Also suppressed in the
+    /// DEBUG screenshot tour so marketing shots stay clean.
     @ViewBuilder
     private var diagnosticLine: some View {
+        #if DEBUG
         if let d = vm.diagnostics, !isScreenshotTour {
             Text(d.summary)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -185,6 +197,7 @@ struct ReviewStep: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier(AccessibilityID.captureReviewDiagnostics)
         }
+        #endif
     }
 
     /// True only under the DEBUG screenshot-tour seam (never in Release).
@@ -244,7 +257,17 @@ struct ReviewStep: View {
                 TextField("Merchant", text: $draft.merchant)
                     .accessibilityIdentifier(AccessibilityID.captureReviewMerchant)
             }
-            field("Date") { TextField("YYYY-MM-DD", text: $draft.date) }
+            field("Date") {
+                DatePicker("", selection: dateBinding, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .tint(accent.base)
+                    // Guarantee a valid txnDate even if the user never opens the picker:
+                    // an unparseable extracted date would otherwise drop the transaction
+                    // from BAS/period/month grouping.
+                    .onAppear { if Self.isoDate.date(from: draft.date) == nil {
+                        draft.date = Self.isoDate.string(from: Date()) } }
+            }
             field("Category") {
                 Picker("Category", selection: $draft.categoryKey) {
                     ForEach(categoryKeys, id: \.self) { Text(label($0)).tag($0) }
@@ -405,8 +428,12 @@ struct ReviewStep: View {
                     Icon(name: "close", size: 13, color: Palette.ink3)
                         .frame(width: 26, height: 26)
                         .background(Palette.cream, in: Circle())
+                        // Keep the 26pt visual but extend the hit area to 44pt (HIG).
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove item")
                 .accessibilityIdentifier("\(AccessibilityID.captureReviewItemRemovePrefix)\(index)")
             }
             .padding(.vertical, 9).padding(.horizontal, 14)
@@ -453,27 +480,29 @@ struct ReviewStep: View {
         price == 0 ? "" : String(format: "%.2f", NSDecimalNumber(decimal: price).doubleValue)
     }
 
+    /// Two-way bridge between the draft's "yyyy-MM-dd" string and the DatePicker's `Date`,
+    /// so the saved txnDate is always well-formed.
+    private var dateBinding: Binding<Date> {
+        Binding(
+            get: { Self.isoDate.date(from: draft.date) ?? Date() },
+            set: { draft.date = Self.isoDate.string(from: $0) }
+        )
+    }
+
+    /// Stable "yyyy-MM-dd" (UTC) formatter for the date bridge — matches how txnDate is
+    /// stored elsewhere.
+    private static let isoDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     /// Parse the editable total text → Decimal (≥ 0).
     private static func parseAmount(_ text: String) -> Decimal {
         let raw = text.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces)
         return max(Decimal(string: raw) ?? 0, 0)
-    }
-
-    private var disabledChips: some View {
-        HStack(spacing: 8) {
-            chip("Add to mileage", icon: "car")
-            chip("Match to bank", icon: "link")
-        }
-        .opacity(0.45)
-    }
-
-    private func chip(_ title: String, icon: String) -> some View {
-        HStack(spacing: 6) {
-            Icon(name: icon, size: 14, color: Palette.ink2)
-            Text(title).font(.ui(12, .semibold)).foregroundStyle(Palette.ink2)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Palette.paper2, in: Capsule())
     }
 
     /// FIXED bottom bar: a clear→cream scrim behind the pinned Save button.

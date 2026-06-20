@@ -98,6 +98,35 @@ struct RootView: View {
         // profile is inserted mid-flow, letting needsOnboarding() re-evaluate after markComplete().
         .animation(.easeInOut(duration: 0.28), value: profileRows.count)
         .animation(.easeInOut(duration: 0.28), value: authVM.state)
+        // Privacy cover for the app-switcher snapshot: iOS captures the switcher
+        // thumbnail at `.inactive` (before `.background`), so cover ANY non-active phase
+        // with an opaque screen to keep financial content (amounts, BAS, receipts) out of
+        // the snapshot. Independent of the optional Face ID lock, which gates re-entry but
+        // does NOT prevent the inactive-phase snapshot on its own. (Cover only — we
+        // deliberately don't engage the lock on `.inactive` to avoid forcing a re-auth
+        // every time the photo picker / Files importer / share sheet briefly deactivates
+        // the scene during capture.)
+        .overlay {
+            if scenePhase != .active {
+                PrivacyCoverView()
+            }
+        }
+    }
+}
+
+/// Opaque cream cover shown whenever the scene isn't active, so the app-switcher
+/// snapshot never reveals financial content. Just the brand mark on the app's
+/// background — no data.
+private struct PrivacyCoverView: View {
+    var body: some View {
+        ZStack {
+            Palette.cream
+            Text("Snapceipt")
+                .font(.display(28, .bold))
+                .foregroundStyle(Palette.ink)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
     }
 }
 

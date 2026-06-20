@@ -76,9 +76,9 @@
 		<string>HankenGrotesk-SemiBold.ttf</string>
 		<string>HankenGrotesk-Bold.ttf</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<!-- No UIBackgroundModes: the backend sends only user-facing `alert` pushes
+	     (no `content-available`/silent push, no background handler), so declaring
+	     `remote-notification` would be an unused-background-mode rejection risk
+	     (App Review Guideline 2.5.4). Restore only if silent pushes are added. -->
 </dict>
 </plist>

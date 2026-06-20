@@ -37,7 +37,6 @@ struct MileageScreen: View {
                             hero(vm)
                             vehicleCard(vm).padding(.top, 14)
                             logbookCard(vm).padding(.top, 14)
-                            gpsCard.padding(.top, 14)
                             costsCard(vm).padding(.top, 14)
                             LbLabel(text: "Recent trips")
                             tripsList(vm)
@@ -141,24 +140,6 @@ struct MileageScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.mileageStartLogbook)
-    }
-
-    /// GPS auto-track — non-functional placeholder (no location, no network).
-    @ViewBuilder private var gpsCard: some View {
-        Card(padding: 14) {
-            HStack(spacing: 12) {
-                IconCircle(name: "pin", tint: accent.base, soft: accent.soft, size: 38, iconSize: 19)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Auto-track with GPS").font(.ui(14.5, .bold)).foregroundStyle(Palette.ink)
-                    Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
-                }
-                Spacer(minLength: 0)
-                // MiniSwitch (OFF / placeholder): 46x28 pill, white 22px knob.
-                Capsule().fill(Palette.line).frame(width: 46, height: 28)
-                    .overlay(Circle().fill(.white).frame(width: 22).padding(3), alignment: .leading)
-            }
-        }
-        .opacity(0.7)
     }
 
     @ViewBuilder private func costsCard(_ vm: MileageViewModel) -> some View {
