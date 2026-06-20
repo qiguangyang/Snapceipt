@@ -141,6 +141,65 @@ async function callDeepseek(
   }
 }
 
+/** Largest amount on a line that contains the word "GST" (e.g. "TOTAL includes GST $1.64"
+ * → 1.64); null when no GST line carries an amount. Deterministic — the LLM sometimes grabs
+ * an ABN ("TAX INVOICE - ABN 88 000 014 675") or a payment figure as GST. */
+function printedGst(ocrText: string): number | null {
+  let found: number | null = null;
+  for (const line of ocrText.split(/\r?\n/)) {
+    if (!/\bgst\b/i.test(line)) continue;
+    const amounts = [...line.matchAll(/(\d{1,3}(?:[ ,]\d{3})*\.\d{2})/g)].map((m) =>
+      parseFloat(m[1].replace(/[ ,]/g, "")),
+    );
+    if (amounts.length) found = amounts[amounts.length - 1];
+  }
+  return found;
+}
+
+/** GST on a GST-inclusive total can never exceed total/11. Prefer a printed "GST $X" line;
+ * otherwise clamp an impossible model value down to the cap. */
+export function reconcileGst(gst: number | null, total: number, ocrText: string): number | null {
+  if (total <= 0) return null;
+  const cap = roundCents(total / 11);
+  const printed = printedGst(ocrText);
+  if (printed != null && printed >= 0 && printed <= cap + 0.005) return roundCents(printed);
+  if (gst != null && gst > cap + 0.005) return cap;
+  return gst;
+}
+
+/** Trim the post-purchase tail (rewards, marketing, coupons) so the extractor sees items +
+ * totals, not noise. Only cuts AFTER the grand-total line and only at a known footer marker,
+ * so item lines are never lost. The payment block is kept (it carries the merchant name). */
+export function trimReceiptTail(text: string): string {
+  const lines = text.split(/\r?\n/);
+  let totalIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].toLowerCase();
+    if (/\btotal\b/.test(l) && !/sub ?total/.test(l)) {
+      totalIdx = i;
+      break;
+    }
+  }
+  if (totalIdx < 0) return text;
+  const footer =
+    /cookware|everyday extra|thank you for shopping|present your coupon|buy any \d|\bbws\b|rewards points|you (just )?collected|t&cs?\b.*(apply|online)/i;
+  for (let i = totalIdx + 1; i < lines.length; i++) {
+    if (footer.test(lines[i])) return lines.slice(0, i).join("\n");
+  }
+  return text;
+}
+
+/** A lineItem that is really payment/total/savings noise (e.g. "REDEMPTION", "Change",
+ * "You saved $107.00", a barcode). Conservative — real product names don't match. */
+function isNoiseItem(name: string): boolean {
+  const n = name.trim();
+  if (n.length < 2) return true;
+  if (/^\d[\d ]{7,}$/.test(n)) return true; // barcode / id digits
+  return /\b(sub ?total|total|eftpos|balance|change|approved|redemption|merch id|term id|tendered|rounding|you saved|present your|coupon|t&cs?)\b/i.test(
+    n,
+  );
+}
+
 /** Finalize a validated DeepSeek receipt: backfill deductible, infer GST, compute confidence. */
 function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt {
   const total = roundCents(Math.max(0, r.total));
@@ -150,6 +209,9 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
   if (total === 0) gst = null;
   else if (gst === null || gst === undefined) gst = roundCents(total / 11);
   else gst = roundCents(gst);
+  // Deterministic guard: trust a printed "GST $X" line over the model, and never let GST
+  // exceed total/11 (catches the model grabbing an ABN/payment figure, e.g. "$88").
+  gst = reconcileGst(gst, total, input.ocrText);
 
   // Deductible backfill from the per-category default when the model omitted it,
   // then coerce to an INTEGER literal so the wire never emits a float like 50.0
@@ -173,7 +235,9 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
     gst,
     category: r.category,
     deductible,
-    lineItems: r.lineItems.map((li) => ({ name: li.name, price: roundCents(li.price) })),
+    lineItems: r.lineItems
+      .filter((li) => !isNoiseItem(li.name))
+      .map((li) => ({ name: li.name, price: roundCents(li.price) })),
     confidence,
     needsReview: confidence < 0.8,
   };
@@ -181,16 +245,16 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 
 /** The deterministic fallback at the end of the ladder: heuristic + needsReview + graded confidence. */
 export function fallback(input: ExtractionInput): ExtractedReceipt {
-  const h = heuristicExtract(input.ocrText, input.defaultDate);
+  const h = heuristicExtract(trimReceiptTail(input.ocrText), input.defaultDate);
   return {
     merchant: h.merchant,
     date: h.date,
     currencyCode: "AUD",
     total: h.total,
-    gst: h.total === 0 ? null : h.gst,
+    gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, input.ocrText),
     category: h.category,
     deductible: h.deductible,
-    lineItems: h.lineItems,
+    lineItems: h.lineItems.filter((li) => !isNoiseItem(li.name)),
     confidence: h.confidence,
     needsReview: h.needsReview,
   };
@@ -207,7 +271,10 @@ export async function runDeepseekExtraction(env: Env, input: ExtractionInput): P
   // deepseek-chat deprecates 2026-07-24; default is now deepseek-v4-flash.
   // deepseek-v4-flash pricing: $0.14/M in (cache miss), $0.0028/M in (cache hit), $0.28/M out.
   const model = env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
-  const userPrompt = `Extract the receipt as json. OCR text:\n${input.ocrText}`;
+  // Trim the rewards/marketing/coupon tail so the model isn't tempted to extract promo
+  // products (e.g. the BWS wine/beer block) as line items. GST is reconciled from the FULL
+  // text in finalize(), so a trimmed GST line is fine.
+  const userPrompt = `Extract the receipt as json. OCR text:\n${trimReceiptTail(input.ocrText)}`;
 
   let attempts = 0;
   let lastRaw = "";
