@@ -139,8 +139,13 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try h(mutations)
     }
 
+    /// Optional scripted pull (e.g. throw a transient error then succeed). When nil the
+    /// `pullPages` queue is used, preserving existing tests.
+    var pullHandler: ((_ cursor: String?, _ limit: Int) throws -> PullResponse)?
+
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         pullCursors.append(cursor)
+        if let h = pullHandler { return try h(cursor, limit) }
         guard !pullPages.isEmpty else {
             return PullResponse(changes: [], nextCursor: cursor ?? "", hasMore: false, serverTime: 0)
         }
