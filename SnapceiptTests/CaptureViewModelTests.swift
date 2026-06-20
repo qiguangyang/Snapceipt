@@ -75,6 +75,23 @@ struct CaptureViewModelTests {
         }
     }
 
+    @Test("presentCapture -> confirm; retake -> camera; confirm(onScanned) -> review")
+    func confirmRetakeFlow() async throws {
+        let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }
+        let img = image()
+        vm.presentCapture(image: img)
+        #expect(vm.stage == .confirm)
+        #expect(vm.capturedImage != nil)
+        vm.retake()
+        #expect(vm.stage == .camera)
+        #expect(vm.capturedImage == nil)
+        // Re-capture then confirm (onScanned) advances to review.
+        vm.presentCapture(image: img)
+        #expect(vm.stage == .confirm)
+        await vm.onScanned(image: img, lines: zeroLines("CAFE\nTOTAL 10.00"))
+        #expect(vm.stage == .review)
+    }
+
     @Test("onScanned -> scanning -> review with the extracted draft on success")
     func successPath() async throws {
         let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse() }

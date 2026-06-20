@@ -28,6 +28,10 @@ enum AccessibilityID {
 
     // Capture flow
     static let captureClose = "capture.close"
+    static let captureConfirmScreen = "capture.confirm.screen"
+    static let captureConfirmImage = "capture.confirm.image"
+    static let captureConfirm = "capture.confirm"
+    static let captureRetake = "capture.retake"
     static let captureScanTitle = "capture.scan.title"
     static let captureReviewMerchant = "capture.review.merchant"
     static let captureReviewCategory = "capture.review.category"
