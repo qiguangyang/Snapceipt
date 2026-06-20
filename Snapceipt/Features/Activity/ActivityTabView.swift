@@ -19,8 +19,16 @@ struct ActivityTabView: View {
     @State private var query = ""
     @State private var kind: Kind = .all
     @State private var monthKey: String = ActivityDate.currentMonthKey
+    @State private var sortMode: SortMode = .receipt
 
     enum Kind: String { case all, expense, income }
+    /// Group/filter by the receipt's printed date, or by when the item was added.
+    enum SortMode: String { case receipt, added }
+
+    /// The date a row is filtered + grouped by, per the current sort mode.
+    private func dateKey(_ r: ReceiptRow, mode: SortMode) -> String {
+        mode == .receipt ? r.txnDate : r.createdDate
+    }
 
     var body: some View {
         let rows = filtered(vm?.rows ?? [])
@@ -71,6 +79,7 @@ struct ActivityTabView: View {
             HStack(spacing: 8) {
                 chip("All", .all); chip("Expenses", .expense); chip("Income", .income)
                 Spacer(minLength: 0)
+                sortMenu
             }
             .padding(.top, 12)
             HStack(alignment: .firstTextBaseline) {
@@ -105,6 +114,29 @@ struct ActivityTabView: View {
             .cardShadow()
         }
         .accessibilityIdentifier(AccessibilityID.activityMonthPicker)
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Button { setSort(.receipt) } label: { sortItem("Receipt date", .receipt) }
+            Button { setSort(.added) } label: { sortItem("Date added", .added) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(accent.base)
+                Text(sortMode == .receipt ? "Receipt date" : "Date added")
+                    .font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink2)
+            }
+            .frame(height: 34).padding(.horizontal, 11)
+            .background(Palette.paper, in: Capsule())
+            .overlay(Capsule().strokeBorder(Palette.line, lineWidth: 1))
+        }
+        .accessibilityIdentifier(AccessibilityID.activitySortToggle)
+    }
+
+    @ViewBuilder
+    private func sortItem(_ title: String, _ mode: SortMode) -> some View {
+        if sortMode == mode { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 
     private var searchField: some View {
@@ -190,7 +222,7 @@ struct ActivityTabView: View {
     private func filtered(_ rows: [ReceiptRow]) -> [ReceiptRow] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         return rows.filter { r in
-            guard r.txnDate.hasPrefix(monthKey) else { return false }
+            guard dateKey(r, mode: sortMode).hasPrefix(monthKey) else { return false }
             switch kind {
             case .all: break
             case .expense: if r.amountCents >= 0 { return false }
@@ -203,9 +235,20 @@ struct ActivityTabView: View {
     }
 
     private func groups(_ rows: [ReceiptRow]) -> [(key: String, label: String, rows: [ReceiptRow])] {
-        let byDate = Dictionary(grouping: rows, by: { $0.txnDate })
+        let byDate = Dictionary(grouping: rows, by: { dateKey($0, mode: sortMode) })
         return byDate.keys.sorted(by: >).map { key in
-            (key: key, label: ActivityDate.dayLabel(key), rows: byDate[key] ?? [])
+            // Within a day, newest-added first (stable for both modes).
+            let groupRows = (byDate[key] ?? []).sorted { $0.createdAt > $1.createdAt }
+            return (key: key, label: ActivityDate.dayLabel(key), rows: groupRows)
+        }
+    }
+
+    /// Switch sort mode and re-land on the newest item's month in that mode so data shows.
+    private func setSort(_ mode: SortMode) {
+        sortMode = mode
+        if let newest = (vm?.rows ?? []).max(by: { dateKey($0, mode: mode) < dateKey($1, mode: mode) }) {
+            let d = dateKey(newest, mode: mode)
+            if d.count >= 7 { monthKey = String(d.prefix(7)) }
         }
     }
 

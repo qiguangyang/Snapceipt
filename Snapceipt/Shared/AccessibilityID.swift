@@ -318,6 +318,7 @@ enum AccessibilityID {
     static let activityFilterExpenses = "activity.filter.expenses"
     static let activityFilterIncome   = "activity.filter.income"
     static let activityMonthPicker = "activity.monthPicker"
+    static let activitySortToggle = "activity.sortToggle"
     // Manual entry (design parity)
     static let manualScreen      = "manual.screen"
     static let manualMerchant    = "manual.merchant"

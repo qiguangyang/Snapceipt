@@ -35,7 +35,9 @@ struct ReceiptRow: Identifiable, Equatable {
     let merchant: String
     let amountCents: Int      // signed: expense < 0, income > 0
     let currency: String
-    let txnDate: String       // "YYYY-MM-DD"
+    let txnDate: String       // "YYYY-MM-DD" — the receipt's printed date
+    let createdDate: String   // "YYYY-MM-DD" — when the item was added (local)
+    let createdAt: Int        // epoch ms — precise add time for sorting
     let category: CategoryKey?
     let isAi: Bool
 
@@ -47,9 +49,17 @@ struct ReceiptRow: Identifiable, Equatable {
         amountCents = t.amountCents
         currency = t.currency.isEmpty ? "AUD" : t.currency
         txnDate = t.txnDate
+        createdAt = t.createdAt
+        createdDate = ReceiptRow.ymd(from: Date(timeIntervalSince1970: Double(t.createdAt) / 1000))
         category = CategoryKey(rawValue: t.catKey)
         isAi = t.isAi
     }
+
+    /// Local "YYYY-MM-DD" for an added-on date.
+    static func ymd(from date: Date) -> String { ymdFormatter.string(from: date) }
+    private static let ymdFormatter: DateFormatter = {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
 
     /// Localized amount, e.g. "$10.00" (sign is conveyed by colour/prefix in the row).
     var amountText: String {
