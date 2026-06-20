@@ -5,6 +5,7 @@ import {
   reconcileGst,
   trimReceiptTail,
   detectMerchant,
+  detectDate,
   parseStructuredLineItems,
 } from "../src/lib/deepseek";
 
@@ -54,6 +55,22 @@ describe("GST reconcile + tail trim + merchant detect", () => {
   it("detects the real merchant brand from anywhere in the receipt", () => {
     expect(detectMerchant(WOOLIES)).toBe("Woolworths");
     expect(detectMerchant("Just a corner store\nTOTAL 5.00")).toBeNull();
+  });
+
+  it("reads the transaction date (printed next to a time), not promo expiry dates", () => {
+    const txt = [
+      "TOTAL  $58.40",
+      "21/03/26 17:21  002573",
+      "TERM ID:  W1129088",
+      "POS 088 TRANS 2573 17:22 21/03/2026",
+      "BEER OFFERS EXPIRE: 09.06.2026",
+      "WINE OFFERS EXPIRE: 30.06.2026",
+    ].join("\n");
+    expect(detectDate(txt)).toBe("2026-03-21");
+  });
+
+  it("returns null when no date is present (keeps the model's date)", () => {
+    expect(detectDate("Woolworths\nTOTAL $58.40")).toBeNull();
   });
 });
 

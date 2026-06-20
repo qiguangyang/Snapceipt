@@ -208,6 +208,33 @@ export function detectMerchant(ocrText: string): string | null {
   return null;
 }
 
+/** The transaction date (YYYY-MM-DD) from the FULL receipt text — the trimmed item section
+ * usually has no date; it's in the payment block / footer ("21/03/26 17:21", "… 21/03/2026"),
+ * so the model defaults to "today". AU is day-first. Prefer a date printed next to a TIME (the
+ * transaction timestamp); skip promo/offer EXPIRY dates ("BEER OFFERS EXPIRE: 09.06.2026").
+ * null when nothing parseable, so the caller keeps the model's date. */
+export function detectDate(ocrText: string): string | null {
+  const dateRe = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/;
+  const timeRe = /\b\d{1,2}:\d{2}\b/;
+  const withTime: string[] = [];
+  const others: string[] = [];
+  for (const line of ocrText.split(/\r?\n/)) {
+    if (/expire|expiry|valid|offer|redeem|t&c|use by|best before/i.test(line)) continue;
+    const m = line.match(dateRe);
+    if (!m) continue;
+    let day = parseInt(m[1], 10);
+    let month = parseInt(m[2], 10);
+    let year = parseInt(m[3], 10);
+    if (day <= 12 && month > 12) [day, month] = [month, day]; // tolerate MM/DD
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    if (year < 100) year += 2000;
+    if (year < 2000 || year > 2100) continue;
+    const ymd = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    (timeRe.test(line) ? withTime : others).push(ymd);
+  }
+  return withTime[0] ?? others[0] ?? null;
+}
+
 /** A lineItem that is really payment/total/savings noise (e.g. "REDEMPTION", "Change",
  * "You saved $107.00", a barcode). Conservative — real product names don't match. */
 function isNoiseItem(name: string): boolean {
@@ -309,7 +336,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 
   return {
     merchant: detectMerchant(input.ocrText) ?? r.merchant,
-    date: r.date,
+    date: detectDate(input.ocrText) ?? r.date,
     currencyCode: "AUD",
     total,
     gst,
@@ -332,7 +359,7 @@ export function fallback(input: ExtractionInput): ExtractedReceipt {
   const h = heuristicExtract(trimReceiptTail(input.ocrText), input.defaultDate);
   return {
     merchant: detectMerchant(input.ocrText) ?? h.merchant,
-    date: h.date,
+    date: detectDate(input.ocrText) ?? h.date,
     currencyCode: "AUD",
     total: h.total,
     gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, input.ocrText),
