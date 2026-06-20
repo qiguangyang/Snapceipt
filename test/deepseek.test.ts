@@ -1,9 +1,14 @@
 // test/deepseek.test.ts
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runDeepseekExtraction, reconcileGst, trimReceiptTail } from "../src/lib/deepseek";
+import {
+  runDeepseekExtraction,
+  reconcileGst,
+  trimReceiptTail,
+  detectMerchant,
+} from "../src/lib/deepseek";
 
-/** Real-world noisy PDF receipt: ABN starting with 88, mostly GST-free, a payment block, a
- * printed "includes GST $1.64", and a BWS wine/beer promo tail. */
+/** Real-world noisy PDF receipt: ABN starting with 88, mostly GST-free, a payment block (the
+ * brand only appears here), a printed "includes GST $1.64", and a BWS wine/beer promo tail. */
 const WOOLIES = [
   "1129 Macquarie Ryde PH: 02 9308 7337",
   "TAX INVOICE - ABN 88 000 014 675",
@@ -12,18 +17,20 @@ const WOOLIES = [
   "^SunRice Calrose Rice Med Grain 10kg 19.00",
   "31 SUBTOTAL $176.98",
   "TOTAL $176.98",
-  "REDEMPTION $176.98",
-  "BALANCE $0.00",
+  "-------------------------",
+  "WOOLWORTHS 1129",
+  "NORTH RYDE NSW",
+  "CARD:.............2834 B",
+  "X-2834 $176.98",
   "#Taxable Items",
   "TOTAL includes GST $1.64",
   "You saved $107.00",
   "Cookware Credits",
   "BUY ANY 2 WINES FOR $22 & SAVE $18",
   "Cape Campbell Sauvignon Blanc",
-  "ONE 6 Pack $17 OR ONE 24 Pack $54",
 ].join("\n");
 
-describe("GST reconcile + receipt tail trim", () => {
+describe("GST reconcile + tail trim + merchant detect", () => {
   it("prefers the printed GST over an impossible model value (ABN $88)", () => {
     expect(reconcileGst(88, 176.98, WOOLIES)).toBe(1.64);
   });
@@ -33,12 +40,19 @@ describe("GST reconcile + receipt tail trim", () => {
   it("keeps a valid GST at or under total/11", () => {
     expect(reconcileGst(1.64, 176.98, WOOLIES)).toBe(1.64);
   });
-  it("trims the rewards/promo tail (BWS wine block) but keeps items + totals", () => {
+  it("trims the payment block + promo tail but keeps items + totals", () => {
     const t = trimReceiptTail(WOOLIES);
     expect(t).toContain("Kiwifruit Gold");
     expect(t).toContain("TOTAL $176.98");
+    // payment block + promo gone → can't leak as items
+    expect(t).not.toContain("WOOLWORTHS 1129");
+    expect(t).not.toContain("CARD:");
+    expect(t).not.toContain("X-2834");
     expect(t).not.toContain("Cape Campbell");
-    expect(t).not.toContain("BUY ANY 2 WINES");
+  });
+  it("detects the real merchant brand from anywhere in the receipt", () => {
+    expect(detectMerchant(WOOLIES)).toBe("Woolworths");
+    expect(detectMerchant("Just a corner store\nTOTAL 5.00")).toBeNull();
   });
 });
 

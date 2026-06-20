@@ -33,7 +33,7 @@ const SYSTEM_PROMPT = [
   '{ "merchant": string, "date": "YYYY-MM-DD", "currencyCode": "AUD", "total": number, "gst": number|null, "category": one of ["meals","groceries","fuel","software","office","home","health","travel","income"], "deductible": number 0-100|null, "lineItems": [{"name": string, "price": number}], "confidence": number 0-1 }',
   'Rules: AUD only. `category` MUST be exactly one of the nine keys above (no others). Set `deductible` to the per-category default unless the receipt clearly implies otherwise: meals 50, groceries 0, fuel 100, software 100, office 100, home 50, health 0, travel 100, income null. `total` is the GST-inclusive grand total as a positive number. Use `income` only for money received.',
   'GST: if a GST/tax amount is printed (e.g. "TOTAL includes GST $1.64"), use that EXACT printed value for `gst`. Only if no GST amount is printed, set `gst` to total/11 rounded to cents. Australian receipts are often largely GST-free (fresh food) — never overwrite a printed GST with total/11.',
-  '`lineItems` are ONLY actually-purchased products. EXCLUDE: payment/card/EFTPOS/balance/change/approval blocks; loyalty/rewards/points/credits; store/ABN/legal/contact/terminal details; barcodes; savings or "you saved" lines; subtotals and totals; and promotional/advertising/coupon offers (e.g. "BUY ANY 2 WINES", BWS beer/wine specials, "PRESENT YOUR COUPON"). A product name and its price may be on SEPARATE lines (e.g. weight-priced items: "Kiwifruit Gold" then "0.977 kg NET @ $10.90/kg 10.65") — pair them so name = the product and price = the line amount.',
+  '`lineItems` are ONLY actually-purchased products. EXCLUDE: payment/card/EFTPOS/balance/change/approval blocks; loyalty/rewards/points/credits; store/ABN/legal/contact/terminal details; barcodes; savings or "you saved" lines; subtotals and totals; and promotional/advertising/coupon offers (e.g. "BUY ANY 2 WINES", BWS beer/wine specials, "PRESENT YOUR COUPON"). A product name and its price may be on SEPARATE lines (e.g. "Kiwifruit Gold New Zealand" then "0.977 kg NET @ $10.90/kg 10.65") — pair them so `name` is the PRODUCT (\"Kiwifruit Gold New Zealand\"), not the weight/qty line. Each `price` is the line\'s RIGHTMOST dollar amount = the line total (10.65), NEVER a per-unit price ("$10.90/kg", "$2.50 each") and NEVER a size/weight token ("130g", "750ml", "1kg") — those are not prices.',
 ].join("\n");
 
 export interface ExtractionInput {
@@ -167,9 +167,11 @@ export function reconcileGst(gst: number | null, total: number, ocrText: string)
   return gst;
 }
 
-/** Trim the post-purchase tail (rewards, marketing, coupons) so the extractor sees items +
- * totals, not noise. Only cuts AFTER the grand-total line and only at a known footer marker,
- * so item lines are never lost. The payment block is kept (it carries the merchant name). */
+/** Trim everything after the grand total — the payment block (card, terminal, redemption…),
+ * rewards, and marketing/coupons — so the extractor only sees real purchased items. Cuts at
+ * the first divider or known footer/payment marker AFTER the grand-total line, so item lines
+ * are never lost. GST is read from the FULL text in reconcileGst, and the merchant from
+ * detectMerchant, so dropping those tail sections here is safe. */
 export function trimReceiptTail(text: string): string {
   const lines = text.split(/\r?\n/);
   let totalIdx = -1;
@@ -182,11 +184,28 @@ export function trimReceiptTail(text: string): string {
   }
   if (totalIdx < 0) return text;
   const footer =
-    /cookware|everyday extra|thank you for shopping|present your coupon|buy any \d|\bbws\b|rewards points|you (just )?collected|t&cs?\b.*(apply|online)/i;
+    /^\s*[-=_*]{8,}\s*$|merch id|term id|\bcard\s*:|approved|redemption|cookware|everyday extra|thank you|present your coupon|buy any \d|\bbws\b|rewards points|you (just )?collected|t&cs?\b/i;
   for (let i = totalIdx + 1; i < lines.length; i++) {
     if (footer.test(lines[i])) return lines.slice(0, i).join("\n");
   }
   return text;
+}
+
+/** Canonical AU retailer name when one is mentioned anywhere in the receipt — receipts often
+ * print the brand only in the (now-trimmed) payment/footer block, so the model picks the
+ * street address instead. Returns null when no known brand is present (keep the model's). */
+const KNOWN_MERCHANTS = [
+  "Woolworths", "Coles", "ALDI", "BWS", "Dan Murphy's", "Bunnings", "Kmart", "Target",
+  "Big W", "Officeworks", "Chemist Warehouse", "Priceline", "JB Hi-Fi", "Harvey Norman",
+  "7-Eleven", "Costco", "Myer", "David Jones", "Rebel", "Supercheap Auto", "Petbarn",
+  "IGA", "Ampol", "Caltex", "McDonald's", "KFC", "Subway", "Guzman y Gomez",
+];
+export function detectMerchant(ocrText: string): string | null {
+  const lower = ocrText.toLowerCase();
+  for (const m of KNOWN_MERCHANTS) {
+    if (lower.includes(m.toLowerCase())) return m;
+  }
+  return null;
 }
 
 /** A lineItem that is really payment/total/savings noise (e.g. "REDEMPTION", "Change",
@@ -195,7 +214,8 @@ function isNoiseItem(name: string): boolean {
   const n = name.trim();
   if (n.length < 2) return true;
   if (/^\d[\d ]{7,}$/.test(n)) return true; // barcode / id digits
-  return /\b(sub ?total|total|eftpos|balance|change|approved|redemption|merch id|term id|tendered|rounding|you saved|present your|coupon|t&cs?)\b/i.test(
+  if (/^[a-z]?-?\d{3,}\b/i.test(n)) return true; // terminal/card refs like "X-2834"
+  return /\b(sub ?total|total|eftpos|balance|change|approved|redemption|merch|term id|card|tendered|rounding|you saved|present your|coupon|t&cs?)\b/i.test(
     n,
   );
 }
@@ -228,7 +248,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
   );
 
   return {
-    merchant: r.merchant,
+    merchant: detectMerchant(input.ocrText) ?? r.merchant,
     date: r.date,
     currencyCode: "AUD",
     total,
@@ -247,7 +267,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 export function fallback(input: ExtractionInput): ExtractedReceipt {
   const h = heuristicExtract(trimReceiptTail(input.ocrText), input.defaultDate);
   return {
-    merchant: h.merchant,
+    merchant: detectMerchant(input.ocrText) ?? h.merchant,
     date: h.date,
     currencyCode: "AUD",
     total: h.total,
