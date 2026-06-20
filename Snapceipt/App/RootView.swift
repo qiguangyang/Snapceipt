@@ -236,7 +236,7 @@ struct ShellView: View {
             // inset:0). Presenting it as a `.sheet` from a deeply-nested Activity row
             // didn't reliably fire, so it lives here like the other detail screens.
             if case let .receiptDetail(id) = router.overlay {
-                ReceiptDetailView(context: profiles.context, sync: sync, transactionId: id,
+                ReceiptDetailView(context: profiles.context, sync: sync, api: captureAPI, transactionId: id,
                                   onEdit: { router.present(.manual(editId: $0)) },
                                   onClose: { router.dismissOverlay(); activityReloadToken += 1 })
                     .environment(\.accent, accent).transition(.opacity)

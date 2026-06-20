@@ -8,6 +8,7 @@ import SwiftData
 struct ReceiptDetailView: View {
     let context: ModelContext
     let sync: any SyncEnqueuing
+    let api: any APIClient
     let transactionId: String
     let onEdit: (String) -> Void
     let onClose: () -> Void
@@ -29,6 +30,10 @@ struct ReceiptDetailView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { showImageViewer = true }
                                 .accessibilityIdentifier(AccessibilityID.receiptImageTap)
+                        } else if vm.isLoadingImage {
+                            Card(padding: 24) {
+                                HStack { Spacer(); ProgressView(); Spacer() }
+                            }
                         }
                         if !vm.lineItems.isEmpty { lineItemsCard(vm.lineItems, currency: txn.currency) }
                         actions
@@ -40,7 +45,7 @@ struct ReceiptDetailView: View {
             }
             header
         }
-        .task { vm = ReceiptDetailViewModel(context: context, transactionId: transactionId) }
+        .task { vm = ReceiptDetailViewModel(context: context, transactionId: transactionId, api: api) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.receiptDetailScreen)
         .confirmationDialog("Delete this transaction?", isPresented: $confirmingDelete, titleVisibility: .visible) {
