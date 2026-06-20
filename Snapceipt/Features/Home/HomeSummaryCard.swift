@@ -90,10 +90,13 @@ struct HomeSummaryCard: View {
         (Decimal(cents) / 100).formatted(.currency(code: code).precision(.fractionLength(0)))
     }
 
+    // Epoch.now() (not Date()) so the hero respects the test/tour clock override and
+    // matches the rest of the app's "now" seams. In production Epoch.override is nil, so
+    // this is identical to Date().
     private static var monthPrefix: String {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM"; return f.string(from: Date())
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM"; return f.string(from: Epoch.now())
     }
     private static var monthName: String {
-        let f = DateFormatter(); f.dateFormat = "MMMM"; return f.string(from: Date())
+        let f = DateFormatter(); f.dateFormat = "MMMM"; return f.string(from: Epoch.now())
     }
 }
