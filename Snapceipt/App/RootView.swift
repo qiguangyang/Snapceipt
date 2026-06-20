@@ -119,6 +119,10 @@ struct ShellView: View {
     @Bindable var toasts: ToastCenter
     @Bindable var reachability: Reachability
 
+    /// Hides the floating tab bar while the keyboard is showing (it otherwise floats over
+    /// the keyboard during text entry, e.g. the Activity search).
+    @State private var keyboard = KeyboardObserver()
+
     /// Tracks whichever Reports period was active when the user tapped Export, so
     /// the sheet inherits the selected window (spec §2.8/§6) rather than hardcoding Month.
     @State private var exportPeriod: Period = .month
@@ -181,10 +185,13 @@ struct ShellView: View {
                 // edge; the remaining margin above the home indicator keeps it clear of
                 // the gesture zone.
                 .padding(.bottom, -8)
-                // Stay pinned to the bottom when a keyboard shows (e.g. the Activity
-                // search field) — without this the bar rides the keyboard up and SwiftUI
-                // can leave the inset stuck after dismissal. Matches the editor action bars.
                 .ignoresSafeArea(.keyboard, edges: .bottom)
+                // Hide the floating bar while the keyboard is up — a bottom-aligned floating
+                // bar otherwise rides the keyboard up and floats over it (you don't switch
+                // tabs mid-typing). Fades back in on dismissal.
+                .opacity(keyboard.isVisible ? 0 : 1)
+                .allowsHitTesting(!keyboard.isVisible)
+                .animation(.easeInOut(duration: 0.2), value: keyboard.isVisible)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(AccessibilityID.shellTabBar)
         }
