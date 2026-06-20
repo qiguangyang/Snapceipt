@@ -94,7 +94,10 @@ final class CaptureViewModel {
     func onScanned(image: UIImage, lines: [RecognizedLine]) async {
         self.capturedImage = image
         self.recognizedLines = lines
-        self.rawText = lines.map(\.text).joined(separator: "\n")
+        // Reconstruct visual rows (pair an item's left name with its right-column price)
+        // so the extractor gets reading-order text, not jumbled OCR observation order. For
+        // PDF text (zero-box lines, already in reading order) this is a no-op.
+        self.rawText = ReceiptRows.rows(from: lines).joined(separator: "\n")
         self.stage = .scanning
         await extract()
     }
