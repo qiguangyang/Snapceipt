@@ -3,8 +3,9 @@ import SwiftData
 import UIKit
 import Observation
 
-/// The 4-stage capture flow state.
-enum CaptureStage: Equatable { case camera, scanning, review, saved }
+/// The capture flow state. `.confirm` shows the just-captured image with Confirm/Retake
+/// before OCR runs, so a misframed scan can be retaken without processing it.
+enum CaptureStage: Equatable { case camera, confirm, scanning, review, saved }
 
 /// A pickable profile for the Review "Assign to profile" control.
 struct ProfileOption: Identifiable, Equatable {
@@ -209,6 +210,19 @@ final class CaptureViewModel {
     }
 
     // MARK: Flow control
+
+    /// A page was captured (scan or import): hold it for the Confirm/Retake step before
+    /// running OCR, so a misframed shot can be retaken without processing it.
+    func presentCapture(image: UIImage) {
+        capturedImage = image
+        stage = .confirm
+    }
+
+    /// "Retake" from the confirm step: discard the captured image and reopen the camera.
+    func retake() {
+        capturedImage = nil
+        stage = .camera
+    }
 
     /// Reset to the camera for "Snap another".
     func reset() {
