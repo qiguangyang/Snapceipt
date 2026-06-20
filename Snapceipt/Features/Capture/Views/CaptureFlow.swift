@@ -15,11 +15,12 @@ struct CaptureFlow: View {
             Palette.cream.ignoresSafeArea()
             switch vm.stage {
             case .camera:
-                // A capture (scan or import) goes to the edge-adjust step first; OCR is
-                // deferred to "Confirm scan" so a misframed shot can be retaken/adjusted
-                // without processing it.
+                // A live capture goes to the edge-adjust/dewarp step first; OCR is deferred
+                // to "Confirm scan". Imports (Photos/Files) skip dewarp and go straight to
+                // extract — PDFs pass their embedded text so OCR is skipped entirely.
                 CameraStep(
                     onScanned: { image in vm.presentCapture(image: image) },
+                    onImported: { image, text in Task { await vm.ingestImport(image: image, text: text) } },
                     onClose: onClose)
             case .confirm:
                 if let image = vm.capturedImage {

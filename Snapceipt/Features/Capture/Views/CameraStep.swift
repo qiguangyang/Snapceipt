@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 /// preview is a neutral placeholder and the controller is never started.
 struct CameraStep: View {
     let onScanned: (UIImage) -> Void
+    /// An imported file (Photos or Files). `text` is the PDF's embedded text when available
+    /// (skip OCR); nil for images. Imports skip the camera edge-adjust/dewarp.
+    let onImported: (UIImage, String?) -> Void
     let onClose: () -> Void
 
     @Environment(ToastCenter.self) private var toasts
@@ -45,7 +48,7 @@ struct CameraStep: View {
                 Task {
                     if let data = try? await item.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
-                        onScanned(image)
+                        onImported(image, nil)
                     } else {
                         toasts.show(Self.importFailureMessage, kind: .error)
                     }
@@ -184,9 +187,16 @@ struct CameraStep: View {
         // A cloud-provider URL may lack a `.pdf` extension, so don't key off pathExtension:
         // try PDF first (firstPage returns nil for non-PDF data), then fall back to a bitmap.
         // The importer already restricts selection to images + PDFs.
-        guard let image = PDFImageRenderer.firstPage(data) ?? UIImage(data: data) else {
-            toasts.show(Self.importFailureMessage, kind: .error); return
+        if let pdfImage = PDFImageRenderer.firstPage(data) {
+            // PDF: use the embedded digital text directly (skip lossy render→OCR) when present;
+            // scanned/image-only PDFs return nil text and fall back to OCR on the render.
+            onImported(pdfImage, PDFTextExtractor.text(data))
+            return
         }
-        onScanned(image)
+        if let image = UIImage(data: data) {
+            onImported(image, nil)
+            return
+        }
+        toasts.show(Self.importFailureMessage, kind: .error)
     }
 }
