@@ -173,10 +173,11 @@ struct ReviewStep: View {
     }
 
     /// Developer diagnostic line: which engine produced this draft + timing/confidence.
-    /// Visible to all users by product decision; reads `vm.diagnostics`.
+    /// Visible to all users by product decision; reads `vm.diagnostics`. Suppressed in the
+    /// screenshot tour so marketing shots stay clean (DEBUG-only; production unchanged).
     @ViewBuilder
     private var diagnosticLine: some View {
-        if let d = vm.diagnostics {
+        if let d = vm.diagnostics, !isScreenshotTour {
             Text(d.summary)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Palette.ink3)
@@ -184,6 +185,15 @@ struct ReviewStep: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier(AccessibilityID.captureReviewDiagnostics)
         }
+    }
+
+    /// True only under the DEBUG screenshot-tour seam (never in Release).
+    private var isScreenshotTour: Bool {
+        #if DEBUG
+        return AppLaunch.current.tour
+        #else
+        return false
+        #endif
     }
 
     /// Shown only when `vm.smartScanCapped && !entitlement.isPro`. Uses the free-plan

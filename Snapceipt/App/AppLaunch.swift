@@ -324,6 +324,24 @@ struct AppLaunch {
                                    deductiblePct: 100, gstCents: 2_72))
         context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Cafe",
                                    catKey: "meals", amountCents: -95_00, txnDate: dayISO(2)))
+        // Richer current-month demo data so the Home hero + Reports + Activity read as an
+        // active business month in marketing screenshots (a client payment + varied
+        // deductible expenses). Deterministic dates (monthStart-relative) keep the tour stable.
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Acme Pty Ltd",
+                                   catKey: "income", amountCents: 2_400_00, txnDate: dayISO(6),
+                                   note: "Invoice SN-0001"))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "JB Hi-Fi",
+                                   catKey: "office", amountCents: -129_00, txnDate: dayISO(7),
+                                   deductiblePct: 100, gstCents: 11_73))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Uber",
+                                   catKey: "travel", amountCents: -32_40, txnDate: dayISO(9),
+                                   deductiblePct: 100, gstCents: 2_95))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Canva Pro",
+                                   catKey: "software", amountCents: -21_99, txnDate: dayISO(10),
+                                   deductiblePct: 100, gstCents: 2_00))
+        context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "Bunnings",
+                                   catKey: "office", amountCents: -64_90, txnDate: dayISO(11),
+                                   deductiblePct: 100, gstCents: 5_90))
 
         // budgets on p1: over-cap (red), under-cap, and already-alerted
         context.insert(Budget(userId: DevAccount.userId, profileId: p1.id, categoryId: nil,
