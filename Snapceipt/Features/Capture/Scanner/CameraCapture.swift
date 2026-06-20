@@ -15,8 +15,8 @@ struct NormalizedQuad: Equatable {
 /// Single-shot camera for receipt capture. Owns an `AVCaptureSession` + photo output and
 /// hands the captured still (orientation-normalized to `.up`) to `onCapture`, which the
 /// capture flow routes into the edge-adjust step — no multi-page scanner loop. A video data
-/// output runs live rectangle detection (`onLiveQuad`) so the preview can highlight the
-/// receipt's edges before capture.
+/// output runs live document detection (`onLiveQuad`, via VNDetectDocumentSegmentation) so
+/// the preview can highlight the receipt's edges before capture.
 ///
 /// Device-only: the simulator has no camera, so `CameraStep` shows a neutral placeholder
 /// under the hermetic test seam and this controller is never started there.
@@ -36,15 +36,11 @@ final class CameraController: NSObject, AVCapturePhotoCaptureDelegate,
     /// Live detected rectangle (or nil) delivered on the main thread for the preview overlay.
     var onLiveQuad: ((NormalizedQuad?) -> Void)?
 
-    private lazy var rectRequest: VNDetectRectanglesRequest = {
-        let r = VNDetectRectanglesRequest()
-        r.maximumObservations = 1
-        r.minimumConfidence = 0.6
-        r.minimumAspectRatio = 0.3   // receipts are tall/narrow
-        r.minimumSize = 0.2
-        r.quadratureTolerance = 30
-        return r
-    }()
+    // Apple's ML document detector (same family the system scanner uses) — far more accurate
+    // on receipts/cluttered backgrounds than the geometric VNDetectRectanglesRequest.
+    private let docRequest = VNDetectDocumentSegmentationRequest()
+    /// Throttle live detection (segmentation is heavier than rectangle detection).
+    private var lastDetect: CFTimeInterval = 0
 
     func start() {
         requestAccess { [weak self] granted in
@@ -134,9 +130,12 @@ final class CameraController: NSObject, AVCapturePhotoCaptureDelegate,
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard onLiveQuad != nil, let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastDetect >= 0.1 else { return }   // ~10 fps cap (runs on the serial queue)
+        lastDetect = now
         let handler = VNImageRequestHandler(cvPixelBuffer: pixel, orientation: .up, options: [:])
-        try? handler.perform([rectRequest])
-        let quad = rectRequest.results?.first.map { obs in
+        try? handler.perform([docRequest])
+        let quad = docRequest.results?.first.map { obs in
             NormalizedQuad(topLeft: obs.topLeft, topRight: obs.topRight,
                            bottomRight: obs.bottomRight, bottomLeft: obs.bottomLeft)
         }
