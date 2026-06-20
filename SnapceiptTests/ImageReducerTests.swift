@@ -14,15 +14,15 @@ struct ImageReducerTests {
         }
     }
 
-    @Test("downscales the longest edge to <= 2000px and bounds bytes to <= 1_500_000")
+    @Test("downscales the longest edge to <= 1600px and bounds bytes to <= 800_000")
     func reducesDimensionsAndBytes() {
         let reducer = ImageReducer()
         let big = image(width: 4032, height: 3024)
         let data = reducer.reduce(big)
         #expect(!data.isEmpty)
-        #expect(data.count <= 1_500_000)
+        #expect(data.count <= 800_000)
         let out = UIImage(data: data)!
-        #expect(max(out.size.width, out.size.height) <= 2000)
+        #expect(max(out.size.width, out.size.height) <= 1600)
         // Aspect preserved (4:3 within rounding).
         #expect(abs(out.size.width / out.size.height - 4032.0 / 3024.0) < 0.02)
     }
