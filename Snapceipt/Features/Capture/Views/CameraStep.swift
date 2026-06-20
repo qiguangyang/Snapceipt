@@ -2,17 +2,21 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 
-/// Full-bleed VisionKit scanner with an import affordance overlaid bottom-leading.
-/// The scanner's own chrome (shutter, flash, filters, Cancel/Done) is native to
-/// VNDocumentCameraViewController and untouched. The import button opens a chooser
-/// (Photo Library / Files); each source resolves to a single `UIImage` (PDF → first
-/// page) and calls the SAME `onScanned(UIImage)` closure the scanner uses, so OCR →
-/// extract → review → save is identical to a live scan.
+/// Single-shot camera: one tap of the shutter captures a still and routes it straight to the
+/// Confirm/Retake step (no multi-page scanner loop). An import affordance (Photo Library /
+/// Files) resolves to a single `UIImage` (PDF → first page) and calls the SAME `onScanned`
+/// closure, so OCR → extract → review → save is identical to a live capture.
+///
+/// Device-only: `AVCaptureSession` needs a real camera, so under the hermetic test seam the
+/// preview is a neutral placeholder and the controller is never started.
 struct CameraStep: View {
     let onScanned: (UIImage) -> Void
     let onClose: () -> Void
 
     @Environment(ToastCenter.self) private var toasts
+    @State private var camera = CameraController()
+    @State private var flashOn = false
+    @State private var accessDenied = false
     @State private var showingChooser = false
     @State private var showingPhotos = false
     @State private var showingFiles = false
@@ -21,16 +25,9 @@ struct CameraStep: View {
     private static let importFailureMessage = "Couldn't read that file."
 
     var body: some View {
-        scannerLayer
+        cameraLayer
             .ignoresSafeArea()
-            .overlay(alignment: .bottomLeading) {
-                importButton
-                    // Bottom padding clears the home indicator and sits left of the
-                    // scanner's centered control cluster. Final value tuned on-device
-                    // (the simulator can't render the real scanner chrome).
-                    .padding(.leading, 20)
-                    .padding(.bottom, 40)
-            }
+            .overlay { controls }
             .confirmationDialog("Add a receipt", isPresented: $showingChooser, titleVisibility: .visible) {
                 // Defer the present-bool flip to the next runloop tick so the dialog's
                 // own dismissal doesn't swallow the picker/importer presentation.
@@ -60,32 +57,99 @@ struct CameraStep: View {
             }
     }
 
-    // MARK: Scanner / placeholder
+    // MARK: Camera / placeholder
 
-    /// The live scanner — or, under the hermetic camera seam, a neutral placeholder
-    /// (`VNDocumentCameraViewController` is unsupported in the simulator).
-    @ViewBuilder private var scannerLayer: some View {
+    /// The live preview — or, under the hermetic camera seam, a neutral placeholder
+    /// (`AVCaptureSession` is unsupported in the simulator).
+    @ViewBuilder private var cameraLayer: some View {
         #if DEBUG
         if AppLaunch.current.captureCamera {
             Color.black
         } else {
-            scanner
+            livePreview
         }
         #else
-        scanner
+        livePreview
         #endif
     }
 
-    private var scanner: some View {
-        DocumentScannerView { result in
-            switch result {
-            case .failure:
-                onClose()
-            case .success(let images):
-                guard let first = images.first else { onClose(); return }  // cancelled
-                onScanned(first)
+    private var livePreview: some View {
+        CameraPreview(session: camera.session)
+            .onAppear {
+                camera.onCapture = { onScanned($0) }
+                camera.onAccessDenied = { accessDenied = true }
+                camera.start()
+            }
+            .onDisappear { camera.stop() }
+    }
+
+    // MARK: Controls overlay
+
+    @ViewBuilder private var controls: some View {
+        ZStack {
+            VStack {
+                HStack {
+                    circleButton("xmark", action: onClose)
+                        .accessibilityIdentifier(AccessibilityID.captureClose)
+                    Spacer()
+                    circleButton(flashOn ? "bolt.fill" : "bolt.slash.fill") { flashOn.toggle() }
+                }
+                .padding(.horizontal, 18).padding(.top, 12)
+                Spacer()
+            }
+
+            VStack {
+                Spacer()
+                ZStack {
+                    HStack { importButton; Spacer() }
+                    shutterButton
+                }
+                .padding(.horizontal, 24).padding(.bottom, 40)
+            }
+
+            if accessDenied { accessDeniedOverlay }
+        }
+    }
+
+    private var shutterButton: some View {
+        Button { camera.capture(flashOn: flashOn) } label: {
+            ZStack {
+                Circle().stroke(.white, lineWidth: 4).frame(width: 78, height: 78)
+                Circle().fill(.white).frame(width: 64, height: 64)
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(AccessibilityID.captureShutter)
+        .accessibilityLabel("Capture receipt")
+    }
+
+    private func circleButton(_ system: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.black.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var accessDeniedOverlay: some View {
+        VStack(spacing: 12) {
+            Text("Camera access is off")
+                .font(.ui(16, .semibold)).foregroundStyle(.white)
+            Text("Enable the camera in Settings, or import a receipt instead.")
+                .font(.ui(13.5)).foregroundStyle(.white.opacity(0.85))
+                .multilineTextAlignment(.center)
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.ui(14, .semibold)).foregroundStyle(.white)
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(.white.opacity(0.2), in: Capsule())
+        }
+        .padding(28)
     }
 
     // MARK: Import affordance
@@ -106,7 +170,7 @@ struct CameraStep: View {
     }
 
     /// Resolve a Files selection to a single `UIImage` (PDF → first page) and feed the
-    /// pipeline; toast on an unreadable/unsupported file. Stays on the scanner on cancel.
+    /// pipeline; toast on an unreadable/unsupported file. Stays on the camera on cancel.
     private func handleFileImport(_ result: Result<[URL], Error>) {
         guard case let .success(urls) = result, let url = urls.first else { return }
         let didAccess = url.startAccessingSecurityScopedResource()
