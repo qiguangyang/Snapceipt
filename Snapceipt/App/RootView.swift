@@ -110,12 +110,6 @@ struct RootView: View {
         // profile is inserted mid-flow, letting needsOnboarding() re-evaluate after markComplete().
         .animation(.easeInOut(duration: 0.28), value: profileRows.count)
         .animation(.easeInOut(duration: 0.28), value: authVM.state)
-        // App-switcher snapshot privacy is handled by the window-level `PrivacyShield`
-        // (installed at launch): it covers on `willResignActive` and uncovers on
-        // `didBecomeActive`, so it protects the snapshot AND presented sheets without ever
-        // showing during launch. A scenePhase `.overlay` here is deliberately NOT used —
-        // scenePhase passes through `.inactive` on cold launch, which flashed the cover as
-        // a fake splash.
         // Recover from an unrecoverable auth failure: when a refresh fails (expired/revoked
         // refresh token, account deleted elsewhere, signing-key rotation), the APIClient
         // clears the session underneath us. authVM.state isn't otherwise re-synced, so the
@@ -126,23 +120,6 @@ struct RootView: View {
         .onChange(of: auth.session == nil) { _, isCleared in
             if isCleared { authVM.handleSessionInvalidated() }
         }
-    }
-}
-
-/// Opaque cream cover shown whenever the scene isn't active, so the app-switcher
-/// snapshot never reveals financial content. Just the brand mark on the app's
-/// background — no data. Used both by RootView's overlay (covers the shell) and by
-/// `PrivacyShield`'s window (covers presented sheets/fullScreenCovers too).
-struct PrivacyCoverView: View {
-    var body: some View {
-        ZStack {
-            Palette.cream
-            Text("Snapceipt")
-                .font(.display(28, .bold))
-                .foregroundStyle(Palette.ink)
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
     }
 }
 

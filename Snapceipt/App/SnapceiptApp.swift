@@ -156,9 +156,6 @@ struct SnapceiptApp: App {
                     Task { await authVM.handleDeepLink(url) }
                 }
                 .task {
-                    // Window-level privacy shield so the app-switcher snapshot never
-                    // reveals financial content, even with a sheet/cover presented.
-                    PrivacyShield.shared.install()
                     // Sync entitlements at launch: local StoreKit + backend plan.
                     await storekit.refreshEntitlements()
                     if let plan = try? await api.mePlan() {
