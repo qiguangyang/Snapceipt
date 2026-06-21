@@ -4,6 +4,26 @@ import { newRefreshToken, hashToken, signAccess, ACCESS_TTL_SECONDS } from "./jw
 
 export const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60-day sliding window
 
+/**
+ * True iff the session row exists, is not revoked, and has not expired. The access token
+ * is verified purely cryptographically (<=15-min lifetime), so revoking / signing-out a
+ * session doesn't stop an already-issued access token until it expires. Calling this on
+ * the highest-value state-changing routes (account delete, sync writes) turns
+ * revocation/sign-out into an IMMEDIATE kill-switch there. `now` is passed in so the
+ * check stays pure + unit-testable.
+ */
+export async function isSessionLive(
+  db: D1Database,
+  sessionId: string,
+  now: number,
+): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM sessions WHERE id = ? AND revoked_at IS NULL AND expires_at > ?")
+    .bind(sessionId, now)
+    .first();
+  return row != null;
+}
+
 export interface SessionRow {
   id: string;
   user_id: string;

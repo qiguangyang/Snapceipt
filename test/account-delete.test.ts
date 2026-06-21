@@ -154,4 +154,23 @@ describe("DELETE /account", () => {
     const bRows = await env.DB.prepare("SELECT COUNT(*) c FROM transactions WHERE user_id = ?").bind(b.userId).first<{ c: number }>();
     expect(bRows!.c).toBe(1);
   });
+
+  it("rejects deletion when the session has been revoked, even with a still-valid access token (S4)", async () => {
+    const userId = uuidv7();
+    const deviceId = uuidv7();
+    const t = nowMs();
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)`,
+    ).bind(userId, `${userId}@e.com`, t, t).run();
+    const { accessToken, sessionId } = await issueSession(env.DB, { userId, deviceId, signingKey: env.JWT_SIGNING_KEY });
+
+    // Sign-out / device-removal revokes the session row; the access token is still
+    // cryptographically valid for up to 15 min.
+    await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(t, sessionId).run();
+
+    const res = await SELF.fetch("https://x/account", { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } });
+    expect(res.status).toBe(401);
+    // The account must NOT have been deleted.
+    expect(await env.DB.prepare("SELECT 1 FROM users WHERE id = ?").bind(userId).first()).not.toBeNull();
+  });
 });

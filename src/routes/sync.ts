@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { serverStamp } from "../lib/time";
+import { serverStamp, nowMs } from "../lib/time";
 import { getProcessedMutation } from "../lib/db";
+import { isSessionLive } from "../lib/sessions";
+import { ApiError } from "../lib/errors";
 import {
   pushBodySchema,
   pullQuerySchema,
@@ -61,6 +63,12 @@ function normalize(v: unknown): string | number | null {
 }
 
 syncRoutes.post("/push", validate("json", pushBodySchema), async (c) => {
+  // S4: writes are gated on a still-live session so a signed-out / revoked device can't
+  // keep mutating data during the <=15-min access-token window. (Reads /pull are left
+  // ungated — the lag there is the accepted GA risk.)
+  if (!(await isSessionLive(c.env.DB, c.var.sessionId, nowMs()))) {
+    throw new ApiError("AUTH_INVALID_TOKEN", "Session is no longer valid");
+  }
   const userId = c.var.userId;
   const { deviceId, mutations } = c.req.valid("json");
   const results: MutationResult[] = [];

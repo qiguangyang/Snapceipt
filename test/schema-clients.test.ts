@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
 import { signAccess } from "../src/lib/jwt";
 import { uuidv7 } from "../src/lib/ids";
+import { seedSession } from "./helpers/session";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -105,6 +106,8 @@ describe("client round-trips via /sync", () => {
          sort_order, is_default, created_at, updated_at, rev)
        VALUES (?, ?, 'Biz', 'business', '#0', '#1', '#2', 0, 1, ?, ?, 1)`,
     ).bind(PROFILE, USER, now, now).run();
+    // /sync/push is gated on a live session (S4); seed one matching the signed token.
+    await seedSession({ id: SESSION, userId: USER, deviceId: DEVICE });
 
     const clientId = uuidv7();
     const headers = await authHeader();

@@ -41,18 +41,23 @@ describe("export download token", () => {
 });
 
 describe("quote-link token", () => {
-  it("round-trips quoteId + userId", async () => {
-    const token = await signQuoteLinkToken(KEY, "quote-1", "user-1");
+  it("round-trips quoteId + userId + link version", async () => {
+    const token = await signQuoteLinkToken(KEY, "quote-1", "user-1", 3);
     const out = await verifyQuoteLinkToken(KEY, token);
-    expect(out).toEqual({ quoteId: "quote-1", userId: "user-1" });
+    expect(out).toEqual({ quoteId: "quote-1", userId: "user-1", version: 3 });
   });
 
-  it("uses a 90-day TTL", () => {
-    expect(QUOTE_LINK_TTL_SECONDS).toBe(90 * 24 * 60 * 60);
+  it("defaults a legacy token (no version claim) to version 0", async () => {
+    const token = await signQuoteLinkToken(KEY, "quote-1", "user-1"); // omits version
+    expect((await verifyQuoteLinkToken(KEY, token)).version).toBe(0);
+  });
+
+  it("uses a 30-day TTL", () => {
+    expect(QUOTE_LINK_TTL_SECONDS).toBe(30 * 24 * 60 * 60);
   });
 
   it("rejects an expired token", async () => {
-    const token = await signQuoteLinkToken(KEY, "quote-1", "user-1", -10);
+    const token = await signQuoteLinkToken(KEY, "quote-1", "user-1", 0, -10); // version 0, ttl -10s
     await expect(verifyQuoteLinkToken(KEY, token)).rejects.toThrow();
   });
 
