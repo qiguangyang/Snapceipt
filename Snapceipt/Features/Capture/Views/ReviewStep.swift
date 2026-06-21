@@ -489,12 +489,13 @@ struct ReviewStep: View {
         )
     }
 
-    /// Stable "yyyy-MM-dd" (UTC) formatter for the date bridge — matches how txnDate is
-    /// stored elsewhere.
+    /// "yyyy-MM-dd" formatter for the date bridge, in the DEVICE-LOCAL calendar (not UTC):
+    /// a `.date` DatePicker emits/consumes local-midnight `Date`s, so a UTC formatter would
+    /// write the previous day for UTC+ users (all of AU) and mis-bucket BAS/period grouping.
+    /// Local keeps the round-trip idempotent — matching the AddManualView pattern.
     private static let isoDate: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()

@@ -59,12 +59,14 @@ function failedReceipt(date: string): ExtractedReceipt {
   };
 }
 
-/** Extraction with the same stub gate as POST /extract. */
+/** Extraction with the same stub gate as POST /extract. `usedLlm` mirrors the /extract
+ *  contract: true only when DeepSeek produced a parseable answer, so the caller charges a
+ *  smart-scan slot only then (a heuristic fallback during an outage is free). */
 async function runExtraction(
   env: Env,
   ocrText: string,
   defaultDate: string,
-): Promise<{ receipt: ExtractedReceipt; model: string }> {
+): Promise<{ receipt: ExtractedReceipt; model: string; usedLlm: boolean }> {
   const stubGate = env.E2E_EXTRACT_MODE === "1" || !env.DEEPSEEK_API_KEY;
   if (stubGate) {
     const h = heuristicExtract(ocrText, defaultDate);
@@ -75,10 +77,11 @@ async function runExtraction(
         lineItems: h.lineItems, confidence: 0.9, needsReview: false,
       },
       model: env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+      usedLlm: false,
     };
   }
   const result = await runDeepseekExtraction(env, { ocrText, source: "email_in", defaultDate });
-  return { receipt: result.receipt, model: result.meta.model };
+  return { receipt: result.receipt, model: result.meta.model, usedLlm: result.meta.usedLlm };
 }
 
 async function logInbound(
@@ -165,6 +168,7 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   let receipt: ExtractedReceipt;
   let extraction: "done" | "failed" = "done";
   let model: string | null = null;
+  let chargeSlot = false;
   if (overCap) {
     extraction = "failed";
     receipt = failedReceipt(defaultDate);
@@ -175,11 +179,18 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
       const out = await runExtraction(env, ocrText, defaultDate);
       receipt = out.receipt;
       model = out.model;
-      await incrementUsage(env.DB, owner.userId, period, now);
+      // Charge a slot only when DeepSeek actually ran (parity with /extract): a heuristic
+      // fallback during an outage is free.
+      chargeSlot = out.usedLlm;
     } catch {
       extraction = "failed";
       receipt = failedReceipt(defaultDate);
     }
+  }
+  // Increment usage OUTSIDE the extraction try so a transient counter-write failure can't
+  // discard an otherwise-good extraction. Best-effort: under-counting one slot is harmless.
+  if (chargeSlot) {
+    try { await incrementUsage(env.DB, owner.userId, period, now); } catch { /* best-effort */ }
   }
 
   // 7. Write rows.

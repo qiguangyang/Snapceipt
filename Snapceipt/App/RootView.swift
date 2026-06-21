@@ -116,8 +116,9 @@ struct RootView: View {
 
 /// Opaque cream cover shown whenever the scene isn't active, so the app-switcher
 /// snapshot never reveals financial content. Just the brand mark on the app's
-/// background — no data.
-private struct PrivacyCoverView: View {
+/// background — no data. Used both by RootView's overlay (covers the shell) and by
+/// `PrivacyShield`'s window (covers presented sheets/fullScreenCovers too).
+struct PrivacyCoverView: View {
     var body: some View {
         ZStack {
             Palette.cream
