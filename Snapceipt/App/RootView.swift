@@ -13,6 +13,7 @@ import SwiftData
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(AuthStore.self) private var auth
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
@@ -110,6 +111,16 @@ struct RootView: View {
             if scenePhase != .active {
                 PrivacyCoverView()
             }
+        }
+        // Recover from an unrecoverable auth failure: when a refresh fails (expired/revoked
+        // refresh token, account deleted elsewhere, signing-key rotation), the APIClient
+        // clears the session underneath us. authVM.state isn't otherwise re-synced, so the
+        // app would sit on a signed-in shell that 401s every call and shows a permanent
+        // "Offline". Bounce to sign-in instead. Guarded to the signed-in case so it never
+        // clobbers the transient sign-in flow states (.awaitingLink/.verifying have a nil
+        // session by design).
+        .onChange(of: auth.session == nil) { _, isCleared in
+            if isCleared && authVM.state == .signedIn { authVM.refreshAuthState() }
         }
     }
 }
