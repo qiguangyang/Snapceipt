@@ -2,6 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { signAccess } from "../src/lib/jwt";
 import { uuidv7 } from "../src/lib/ids";
+import { seedSession } from "./helpers/session";
 
 const USER_ID = "01890000-0000-7000-8000-000000000001";
 const DEVICE_ID = "01890000-0000-7000-8000-0000000000d1";
@@ -18,6 +19,8 @@ async function seedUserAndProfile() {
     `INSERT INTO profiles (id, user_id, name, type, accent_1, accent_2, accent_3, sort_order, is_default, created_at, updated_at, rev)
      VALUES (?, ?, 'Personal', 'personal', '#000', '#111', '#222', 0, 1, ?, ?, 1)`,
   ).bind(PROFILE_ID, USER_ID, now, now).run();
+  // /sync/push is gated on a live session (S4); seed one matching the signed token.
+  await seedSession({ id: SESSION_ID, userId: USER_ID, deviceId: DEVICE_ID });
 }
 
 async function authHeader() {
@@ -69,6 +72,7 @@ describe("POST /sync/push — budgets", () => {
     await env.DB.exec("DELETE FROM budgets");
     await env.DB.exec("DELETE FROM categories");
     await env.DB.exec("DELETE FROM profiles");
+    await env.DB.exec("DELETE FROM sessions");   // before users (FK)
     await env.DB.exec("DELETE FROM users");
     await seedUserAndProfile();
   });

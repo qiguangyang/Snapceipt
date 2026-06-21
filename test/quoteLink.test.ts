@@ -231,9 +231,29 @@ describe("GET /q/:token (public HTML quote)", () => {
   it("403 for an expired token", async () => {
     const { userId } = await seedAuthed();
     const { quoteId } = await seedQuote(userId);
-    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, -10);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, 0, -10); // version 0, ttl -10s
     const res = await SELF.fetch(`${BASE}/q/${token}`);
     expect(res.status).toBe(403);
+  });
+
+  it("403 once the quote link is revoked (link_version bumped past the token)", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    // Mint a link at the current version (0) and confirm it works.
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, 0);
+    expect((await SELF.fetch(`${BASE}/q/${token}`)).status).toBe(200);
+
+    // Revoke → link_version becomes 1; the old (v0) link no longer resolves.
+    const revoke = await SELF.fetch(`${BASE}/quotes/${quoteId}/link/revoke`, {
+      method: "POST", headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(revoke.status).toBe(200);
+    expect(((await revoke.json()) as { linkVersion: number }).linkVersion).toBe(1);
+    expect((await SELF.fetch(`${BASE}/q/${token}`)).status).toBe(403);
+
+    // A freshly-minted link (v1) works again.
+    const fresh = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, 1);
+    expect((await SELF.fetch(`${BASE}/q/${fresh}`)).status).toBe(200);
   });
 
   it("404 for a valid token whose quote was deleted", async () => {

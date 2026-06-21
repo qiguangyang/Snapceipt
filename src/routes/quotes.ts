@@ -10,7 +10,7 @@ import { signQuoteLinkToken } from "../lib/exportToken";
 import { type QuoteHtmlData } from "../lib/quoteHtml";
 
 /**
- * POST /quotes/:id/link  — Bearer; mint a 90-day signed link to the public HTML quote.
+ * POST /quotes/:id/link  — Bearer; mint a 30-day signed link to the public HTML quote.
  * POST /quotes/:id/send  — Bearer; mint number + email the client the link.
  * GET  /q/:token         — PUBLIC (separate group, quoteLink.ts); renders the HTML page.
  *
@@ -151,12 +151,12 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 1. Load the quote (scoped to the authed user).
   const quote = await c.env.DB.prepare(
-    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, gst_rate_bp
+    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, gst_rate_bp, link_version
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<{
     id: string; profile_id: string; number: string | null;
     client_name: string | null; client_email: string | null;
-    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null;
+    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null; link_version: number;
   }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
 
@@ -200,8 +200,8 @@ quotesRoutes.post("/:id/send", async (c) => {
       WHERE id = ? AND user_id = ?`,
   ).bind(number, now, totals.subtotalCents, totals.gstCents, totals.totalCents, now, quoteId, userId).run();
 
-  // 6. Mint the 90-day public quote link.
-  const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId);
+  // 6. Mint the public quote link (carries the quote's current link_version).
+  const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
   const url = `${API_ORIGIN}/q/${token}`;
 
   // 7. email_outbox row + gated send. export_format is NULL (a link, no file).
@@ -238,7 +238,7 @@ quotesRoutes.post("/:id/send", async (c) => {
   return c.json({ url, emailed, number });
 });
 
-// POST /quotes/:id/link — mint a 90-day signed link to the public HTML quote page.
+// POST /quotes/:id/link — mint a 30-day signed link to the public HTML quote page.
 // Validates the quote loads (owned + has line items) before minting; mints the quote
 // number if absent (sharing a link "issues" the quote — the HTML page must show #N).
 quotesRoutes.post("/:id/link", async (c) => {
@@ -246,8 +246,8 @@ quotesRoutes.post("/:id/link", async (c) => {
   const quoteId = c.req.param("id");
 
   const quote = await c.env.DB.prepare(
-    `SELECT number FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-  ).bind(quoteId, userId).first<{ number: string | null }>();
+    `SELECT number, link_version FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(quoteId, userId).first<{ number: string | null; link_version: number }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
 
   const items = await c.env.DB.prepare(
@@ -265,6 +265,22 @@ quotesRoutes.post("/:id/link", async (c) => {
     ).bind(number, nowMs(), quoteId, userId).run();
   }
 
-  const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId);
+  const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
   return c.json({ url: `${API_ORIGIN}/q/${token}`, number });
+});
+
+// POST /quotes/:id/link/revoke — invalidate every previously-minted public link for this
+// quote by bumping its link_version. The next /link or /send mints a fresh, working link.
+quotesRoutes.post("/:id/link/revoke", async (c) => {
+  const userId = c.var.userId;
+  const quoteId = c.req.param("id");
+  const res = await c.env.DB.prepare(
+    `UPDATE quotes SET link_version = link_version + 1, updated_at = ?
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(nowMs(), quoteId, userId).run();
+  if ((res.meta.changes ?? 0) === 0) throw new ApiError("NOT_FOUND", "Quote not found for this user");
+  const row = await c.env.DB.prepare(
+    `SELECT link_version FROM quotes WHERE id = ? AND user_id = ?`,
+  ).bind(quoteId, userId).first<{ link_version: number }>();
+  return c.json({ ok: true, linkVersion: row?.link_version ?? 0 });
 });

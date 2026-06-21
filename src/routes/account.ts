@@ -6,6 +6,7 @@ import { ApiError } from "../lib/errors";
 import { nowMs } from "../lib/time";
 import { validate } from "./auth";
 import { sendEmailChangeCode } from "../lib/email";
+import { isSessionLive } from "../lib/sessions";
 
 /**
  * Account routes (auth-gated; rate tier "account"):
@@ -130,6 +131,13 @@ accountRoutes.post("/users/me/email/verify", validate("json", verifyBody), async
 
 accountRoutes.delete("/account", async (c) => {
   const userId = c.var.userId;
+
+  // S4: require a still-live session. The access token is valid for up to 15 min after a
+  // sign-out / device-revocation, and account deletion is irreversible — so make
+  // revocation an immediate kill-switch here rather than honouring a stale token.
+  if (!(await isSessionLive(c.env.DB, c.var.sessionId, nowMs()))) {
+    throw new ApiError("AUTH_INVALID_TOKEN", "Session is no longer valid");
+  }
 
   // 1. Hard-delete every user-scoped row atomically (one transaction, FK-safe order).
   await c.env.DB.batch(

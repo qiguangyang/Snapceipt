@@ -5,6 +5,7 @@ import { uuidv7 } from "../src/lib/ids";
 import { SYNCABLE_TYPES } from "../src/schemas/entities";
 import { tableForEntityType, PROFILE_ID_REQUIRED } from "../src/lib/syncTables";
 import { getProcessedMutation, recordProcessedMutation } from "../src/lib/db";
+import { seedSession } from "./helpers/session";
 
 const USER_ID = "01890000-0000-7000-8000-000000000001";
 const OTHER_USER_ID = "01890000-0000-7000-8000-0000000000ff";
@@ -27,6 +28,8 @@ async function seedUserAndProfile() {
   )
     .bind(PROFILE_ID, USER_ID, now, now)
     .run();
+  // /sync/push is gated on a live session (S4); seed one matching the signed token.
+  await seedSession({ id: SESSION_ID, userId: USER_ID, deviceId: DEVICE_ID });
 }
 
 async function authHeader() {
@@ -85,6 +88,7 @@ describe("POST /sync/push", () => {
     await env.DB.exec("DELETE FROM processed_mutations");
     await env.DB.exec("DELETE FROM transactions");
     await env.DB.exec("DELETE FROM profiles");
+    await env.DB.exec("DELETE FROM sessions");   // before users (FK)
     await env.DB.exec("DELETE FROM users");
     await seedUserAndProfile();
   });

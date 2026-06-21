@@ -53,23 +53,25 @@ export async function verifyDownloadToken(
 /**
  * Signed token for the PUBLIC GET /q/:token HTML-quote page. Carries `qid` (quote id)
  * + `uid` (owning user id) so the route can load + tenant-scope the quote without an
- * access token. Long-lived (90 days) — a client may open the link days later. Signed
+ * access token. Long-lived (30 days) — a client may open the link days later. Signed
  * HS256 with the same JWT_SIGNING_KEY but a DISTINCT issuer/audience from both the
  * access token and the download token, so no token can be replayed across surfaces.
  */
-export const QUOTE_LINK_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
+export const QUOTE_LINK_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const QUOTE_LINK_ISSUER = "snapceipt-quote";
 const QUOTE_LINK_AUDIENCE = "snapceipt-quote-link";
 
-/** Sign a quote-link token. `ttlSeconds` defaults to 90 days; a negative value lets
- *  tests mint an already-expired token. */
+/** Sign a quote-link token. Carries `v` = the quote's link_version at mint time so the
+ *  public route can reject links from before a revoke/re-issue. `ttlSeconds` defaults to
+ *  30 days; a negative value lets tests mint an already-expired token. */
 export async function signQuoteLinkToken(
   signingKey: string,
   quoteId: string,
   userId: string,
+  linkVersion: number = 0,
   ttlSeconds: number = QUOTE_LINK_TTL_SECONDS,
 ): Promise<string> {
-  return new SignJWT({ qid: quoteId, uid: userId })
+  return new SignJWT({ qid: quoteId, uid: userId, v: linkVersion })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuer(QUOTE_LINK_ISSUER)
     .setAudience(QUOTE_LINK_AUDIENCE)
@@ -79,11 +81,13 @@ export async function signQuoteLinkToken(
 }
 
 /** Verify a quote-link token. Throws (jose JWTExpired / signature / claim error) on
- *  any failure — the route maps a throw to 403. */
+ *  any failure — the route maps a throw to 403. `version` defaults to 0 for legacy tokens
+ *  minted before the `v` claim existed (those stay valid until an explicit revoke bumps
+ *  the quote past version 0). */
 export async function verifyQuoteLinkToken(
   signingKey: string,
   token: string,
-): Promise<{ quoteId: string; userId: string }> {
+): Promise<{ quoteId: string; userId: string; version: number }> {
   const { payload } = await jwtVerify(token, keyBytes(signingKey), {
     issuer: QUOTE_LINK_ISSUER,
     audience: QUOTE_LINK_AUDIENCE,
@@ -91,8 +95,9 @@ export async function verifyQuoteLinkToken(
   });
   const qid = (payload as { qid?: unknown }).qid;
   const uid = (payload as { uid?: unknown }).uid;
+  const v = (payload as { v?: unknown }).v;
   if (typeof qid !== "string" || qid.length === 0 || typeof uid !== "string" || uid.length === 0) {
     throw new Error("quote-link token missing qid/uid claim");
   }
-  return { quoteId: qid, userId: uid };
+  return { quoteId: qid, userId: uid, version: typeof v === "number" ? v : 0 };
 }
