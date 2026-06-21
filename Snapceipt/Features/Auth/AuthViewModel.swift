@@ -320,18 +320,33 @@ final class AuthViewModel {
 
     func signOut() async {
         try? await api.signOut()
+        // Set state FIRST so the RootView session-cleared observer (handleSessionInvalidated)
+        // no-ops here — this path does its own wipe below; we don't want it to run twice.
+        state = .signedOut
         auth.clear()
         // Wipe local financial data + receipt images so nothing survives on the device
         // after sign-out / account deletion (both paths funnel through here). A returning
         // sign-in re-pulls from the server with a fresh cursor.
         onWipeLocalData?()
         pendingEmail = nil
-        state = .signedOut
     }
 
     /// Re-evaluates the state after an external session restore (used at launch).
     func refreshAuthState() {
         state = auth.session != nil ? .signedIn : .signedOut
+    }
+
+    /// The session was cleared out from under a signed-in shell — the APIClient does this
+    /// after an unrecoverable refresh failure (expired/revoked refresh token, account
+    /// deleted elsewhere, signing-key rotation). Wipe the prior user's local data (so a
+    /// different account on this device can't inherit it) and route to sign-in. Guarded to
+    /// `.signedIn` so it never fires during the transient magic-link/OTP flow (whose states
+    /// legitimately have a nil session), nor double-acts after an explicit `signOut()`
+    /// (which sets `.signedOut` first).
+    func handleSessionInvalidated() {
+        guard auth.session == nil, state == .signedIn else { return }
+        onWipeLocalData?()
+        state = .signedOut
     }
 
     // MARK: Helpers

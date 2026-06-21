@@ -23,8 +23,19 @@ struct RootView: View {
     /// The `.signedIn` shell is wrapped behind a `LockScreen` gated on `isLocked`.
     @Environment(AppLockController.self) private var appLock
 
-    /// Live count of non-deleted profiles drives the "needs onboarding" gate.
+    /// All non-deleted profiles (any user). The `@Query` keeps the gate reactive — it
+    /// re-fires when a profile is inserted — but the gate itself must scope to the
+    /// CURRENT user via `currentUserHasProfile`, never this global list.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
+
+    /// True when the SIGNED-IN user owns at least one non-deleted profile. Scoped to the
+    /// user (not the global `profileRows`) so a leftover profile from a prior account or
+    /// environment in the local store can't suppress onboarding for a new account — which
+    /// would drop them into the shell with no active profile.
+    private var currentUserHasProfile: Bool {
+        let uid = auth.session?.userId ?? ""
+        return !uid.isEmpty && profileRows.contains { $0.userId == uid }
+    }
 
     /// Observe the first-run completion flag so RootView re-renders into the shell the
     /// instant the notifications step calls `OnboardingGate.markComplete()`. Without this
@@ -35,10 +46,10 @@ struct RootView: View {
         Group {
             switch authVM.state {
             case .signedIn:
-                // Gate the shell behind onboarding AND having at least one profile: a
-                // first-run user, or one who somehow has no profile (e.g. all deleted /
-                // a fresh device with the flag already set), is guided to create one first.
-                if !onboardingComplete || profileRows.isEmpty {
+                // Gate the shell behind onboarding AND the CURRENT user owning a profile:
+                // a first-run user, a new account on a device with another account's data,
+                // or one whose profiles were all deleted, is guided to create one first.
+                if !onboardingComplete || !currentUserHasProfile {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.
@@ -120,7 +131,7 @@ struct RootView: View {
         // clobbers the transient sign-in flow states (.awaitingLink/.verifying have a nil
         // session by design).
         .onChange(of: auth.session == nil) { _, isCleared in
-            if isCleared && authVM.state == .signedIn { authVM.refreshAuthState() }
+            if isCleared { authVM.handleSessionInvalidated() }
         }
     }
 }
