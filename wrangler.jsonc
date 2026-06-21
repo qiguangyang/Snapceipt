@@ -36,5 +36,47 @@
     // Tests pin their own value in vitest.config.ts; this var is prod-only.
     "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
     "DEEPSEEK_MODEL": "deepseek-v4-flash"
+  },
+  // ───────────────────────────────────────────────────────────────────────────
+  // STAGING environment (`wrangler deploy --env staging`). A FULL mirror of prod on
+  // ISOLATED resources (its own D1/KV/R2), reachable at
+  // snapceipt-api-staging.<subdomain>.workers.dev — so post-release backend changes can
+  // be tested end-to-end without touching prod data. Named environments do NOT inherit
+  // bindings/vars, so everything is restated here. Secrets are per-env:
+  //   echo <key> | wrangler secret put JWT_SIGNING_KEY --env staging   (use a DIFFERENT
+  //   key from prod). DEEPSEEK_API_KEY is intentionally left UNSET so /extract uses the
+  //   free heuristic stub on staging; set it to test real extraction. Migrations:
+  //   wrangler d1 migrations apply snapceipt-staging --remote  (run BEFORE prod).
+  // See docs/STAGING.md for the full runbook.
+  "env": {
+    "staging": {
+      "name": "snapceipt-api-staging",
+      "workers_dev": true,
+      "observability": { "enabled": true },
+      "triggers": { "crons": ["0 * * * *"] },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "snapceipt-staging",
+          "database_id": "796b5f03-d508-45e2-9909-bf19dd0f0933",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "KV", "id": "b1f12526ee924dbdaecac00415eb49bf" }
+      ],
+      "r2_buckets": [
+        { "binding": "RECEIPTS", "bucket_name": "snapceipt-receipts-staging" },
+        { "binding": "BACKUPS", "bucket_name": "snapceipt-backups-staging" }
+      ],
+      "ai": { "binding": "AI" },
+      "send_email": [
+        { "name": "EMAIL", "allowed_sender_addresses": ["noreply@snapceipt.cc"] }
+      ],
+      "vars": {
+        "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
+        "DEEPSEEK_MODEL": "deepseek-v4-flash"
+      }
+    }
   }
 }
