@@ -140,7 +140,7 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
           }
         }
       } catch (err) {
-        console.warn(`[budgetAlert] sendPush failed for token ${d.apns_token}:`, err);
+        console.warn(`[budgetAlert] sendPush failed for token ${String(d.apns_token).slice(0, 8)}…:`, err);
       }
     }
 

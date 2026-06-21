@@ -75,6 +75,8 @@ export async function makeSignedTransaction(opts: {
   productId: string;
   originalTransactionId: string;
   expiresDate?: number;
+  /** epoch ms; present on a refunded/revoked transaction. */
+  revocationDate?: number;
   chain?: TestChain;
 }): Promise<string> {
   const chain = opts.chain ?? testChain();
@@ -83,6 +85,7 @@ export async function makeSignedTransaction(opts: {
     productId: opts.productId,
     originalTransactionId: opts.originalTransactionId,
     expiresDate: opts.expiresDate ?? 9_999_999_999_000,
+    ...(opts.revocationDate !== undefined ? { revocationDate: opts.revocationDate } : {}),
     transactionId: opts.originalTransactionId,
   });
 }

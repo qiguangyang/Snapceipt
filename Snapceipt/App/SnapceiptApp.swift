@@ -69,7 +69,7 @@ struct SnapceiptApp: App {
         // never blocks a seeded UI-test launch.
         let appLock = launch.makeAppLock()
 #else
-        let api: APIClient = LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.cc")!, auth: auth)
+        let api: APIClient = LiveAPIClient(baseURL: BackendConfig.configuredBaseURL, auth: auth)
         let container = makeSnapceiptContainer()
         let appLock = AppLockController()
 #endif
@@ -113,7 +113,10 @@ struct SnapceiptApp: App {
         _entitlement = State(initialValue: entitlement)
 
         _auth = State(initialValue: auth)
-        _authVM = State(initialValue: AuthViewModel(api: api, auth: auth))
+        _authVM = State(initialValue: AuthViewModel(
+            api: api, auth: auth,
+            // Wipe local financial data + receipt images on sign-out / account deletion.
+            onWipeLocalData: { LocalStore.wipe(context: context) }))
         _router = State(initialValue: router)
         _toasts = State(initialValue: toasts)
         _reachability = State(initialValue: Reachability())
@@ -153,6 +156,9 @@ struct SnapceiptApp: App {
                     Task { await authVM.handleDeepLink(url) }
                 }
                 .task {
+                    // Window-level privacy shield so the app-switcher snapshot never
+                    // reveals financial content, even with a sheet/cover presented.
+                    PrivacyShield.shared.install()
                     // Sync entitlements at launch: local StoreKit + backend plan.
                     await storekit.refreshEntitlements()
                     if let plan = try? await api.mePlan() {

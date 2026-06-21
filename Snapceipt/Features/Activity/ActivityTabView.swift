@@ -161,8 +161,14 @@ struct ActivityTabView: View {
                 .font(.ui(15)).foregroundStyle(Palette.ink)
                 .accessibilityIdentifier(AccessibilityID.activitySearch)
             if !query.isEmpty {
-                Button { query = "" } label: { Icon(name: "close", size: 17, color: Palette.ink3) }
-                    .buttonStyle(.plain)
+                Button { query = "" } label: {
+                    Icon(name: "close", size: 17, color: Palette.ink3)
+                        // Lift the bare 17pt glyph to the 44pt HIG minimum tap target.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 11)

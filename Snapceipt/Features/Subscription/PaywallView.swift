@@ -44,10 +44,29 @@ struct PaywallView: View {
                 .padding(.bottom, 48)
             }
         }
+        .overlay(alignment: .topTrailing) { closeButton }
         .task { await storekit.loadProducts() }
     }
 
     // MARK: - Sections
+
+    /// Explicit dismiss control: swipe-to-dismiss alone isn't discoverable for
+    /// VoiceOver / Switch Control users (and App Review has flagged paywalls with no
+    /// visible close affordance).
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Palette.ink2)
+                .frame(width: 32, height: 32)
+                .background(Palette.paper2, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 12)
+        .padding(.trailing, 16)
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier(AccessibilityID.paywallClose)
+    }
 
     private var headline: some View {
         VStack(spacing: 8) {
@@ -300,13 +319,22 @@ struct PaywallView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 16) {
-            Link("Terms", destination: URL(string: "https://snapceipt.cc/terms")!)
-            Text("·").foregroundStyle(Palette.ink3)
-            Link("Privacy", destination: URL(string: "https://snapceipt.cc/privacy")!)
+        VStack(spacing: 12) {
+            // Auto-renewal disclosure required by App Review Guideline 3.1.2.
+            Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel anytime in your App Store account settings.")
+                .font(.ui(11.5))
+                .foregroundStyle(Palette.ink3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier(AccessibilityID.paywallAutoRenewDisclosure)
+            HStack(spacing: 16) {
+                Link("Terms", destination: URL(string: "https://snapceipt.cc/terms")!)
+                Text("·").foregroundStyle(Palette.ink3)
+                Link("Privacy", destination: URL(string: "https://snapceipt.cc/privacy")!)
+            }
+            .font(.ui(13))
+            .foregroundStyle(Palette.ink3)
         }
-        .font(.ui(13))
-        .foregroundStyle(Palette.ink3)
     }
 }
 

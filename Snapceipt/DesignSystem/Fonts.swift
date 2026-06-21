@@ -13,13 +13,19 @@ enum Typeface {
 
 extension Font {
     /// Schibsted Grotesk at a point size + weight (default bold, matching the design).
-    static func display(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .custom(Typeface.display, size: size).weight(weight)
+    /// `relativeTo` ties the custom font to a Dynamic Type text style so it scales with
+    /// the user's Larger Text setting (default `.body`); without it the app ignored
+    /// Dynamic Type entirely. Pass an explicit style for very large/headline sizes.
+    static func display(_ size: CGFloat, _ weight: Font.Weight = .bold,
+                        relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(Typeface.display, size: size, relativeTo: style).weight(weight)
     }
 
-    /// Hanken Grotesk at a point size + weight (default regular).
-    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(Typeface.ui, size: size).weight(weight)
+    /// Hanken Grotesk at a point size + weight (default regular), scaled with Dynamic
+    /// Type relative to `style` (default `.body`).
+    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular,
+                   relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(Typeface.ui, size: size, relativeTo: style).weight(weight)
     }
 }
 

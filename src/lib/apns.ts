@@ -50,7 +50,9 @@ export async function sendPush(
   payload: ApnsPayload,
 ): Promise<SendPushResult> {
   if (!env.APNS_KEY) {
-    console.log(`[apns:stub] would push to ${apnsToken}: ${payload.aps.alert.title}`);
+    // Don't log the device token (a sensitive push credential); a short prefix is enough
+    // to correlate in stub mode.
+    console.log(`[apns:stub] would push to ${apnsToken.slice(0, 8)}…: ${payload.aps.alert.title}`);
     return { stub: true };
   }
   const jwt = await signApnsJwt(env);

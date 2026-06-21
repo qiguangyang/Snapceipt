@@ -5,16 +5,26 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
+# Build configurations. Staging is a DEBUG-type config (keeps DEBUG features + dev
+# signing) that bakes the staging API host into the build, so a Staging build always
+# talks to staging no matter how it's launched (icon tap, not just `devicectl --env`).
+configs:
+  Debug: debug
+  Staging: debug
+  Release: release
 settings:
   base:
     SWIFT_VERSION: "5.10"
+    # Empty by default -> the app falls back to the prod API. Overridden per-config
+    # (Staging) and surfaced to the app via Info.plist SNAPCEIPT_API_HOST.
+    SNAPCEIPT_API_HOST: ""
     # Release archives need (1) DEVELOPMENT_TEAM filled from beta-launch.env
     # (see beta-launch.env.example) and (2) `bundle exec fastlane certs` to
     # install the match profile. Don't fix signing in Xcode's UI — the
     # .xcodeproj is generated from this file.
     DEVELOPMENT_TEAM: "2SU47GHJQX"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   Snapceipt:
@@ -40,6 +50,9 @@ targets:
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
       configs:
+        Staging:
+          # Point a Staging build at the isolated staging worker (see docs/STAGING.md).
+          SNAPCEIPT_API_HOST: snapceipt-api-staging.techsiderau.workers.dev
         Release:
           CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.Release.entitlements
           CODE_SIGN_STYLE: Manual
@@ -92,3 +105,15 @@ schemes:
         - SnapceiptTests
         - SnapceiptUITests
       gatherCoverageData: false
+  # Staging scheme: builds/runs/archives the Staging config (dev-signed, DEBUG features,
+  # API_HOST baked to the staging worker). Build with:
+  #   xcodebuild -scheme "Snapceipt (Staging)" -configuration Staging ...
+  Snapceipt (Staging):
+    build:
+      targets:
+        Snapceipt: all
+    run:
+      config: Staging
+      storeKitConfiguration: Snapceipt/Snapceipt.storekit
+    archive:
+      config: Staging

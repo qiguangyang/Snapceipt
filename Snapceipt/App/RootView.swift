@@ -13,6 +13,7 @@ import SwiftData
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthViewModel.self) private var authVM
+    @Environment(AuthStore.self) private var auth
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
@@ -22,8 +23,19 @@ struct RootView: View {
     /// The `.signedIn` shell is wrapped behind a `LockScreen` gated on `isLocked`.
     @Environment(AppLockController.self) private var appLock
 
-    /// Live count of non-deleted profiles drives the "needs onboarding" gate.
+    /// All non-deleted profiles (any user). The `@Query` keeps the gate reactive — it
+    /// re-fires when a profile is inserted — but the gate itself must scope to the
+    /// CURRENT user via `currentUserHasProfile`, never this global list.
     @Query(filter: #Predicate<Profile> { $0.deletedAt == nil }) private var profileRows: [Profile]
+
+    /// True when the SIGNED-IN user owns at least one non-deleted profile. Scoped to the
+    /// user (not the global `profileRows`) so a leftover profile from a prior account or
+    /// environment in the local store can't suppress onboarding for a new account — which
+    /// would drop them into the shell with no active profile.
+    private var currentUserHasProfile: Bool {
+        let uid = auth.session?.userId ?? ""
+        return !uid.isEmpty && profileRows.contains { $0.userId == uid }
+    }
 
     /// Observe the first-run completion flag so RootView re-renders into the shell the
     /// instant the notifications step calls `OnboardingGate.markComplete()`. Without this
@@ -34,10 +46,10 @@ struct RootView: View {
         Group {
             switch authVM.state {
             case .signedIn:
-                // Gate the shell behind onboarding AND having at least one profile: a
-                // first-run user, or one who somehow has no profile (e.g. all deleted /
-                // a fresh device with the flag already set), is guided to create one first.
-                if !onboardingComplete || profileRows.isEmpty {
+                // Gate the shell behind onboarding AND the CURRENT user owning a profile:
+                // a first-run user, a new account on a device with another account's data,
+                // or one whose profiles were all deleted, is guided to create one first.
+                if !onboardingComplete || !currentUserHasProfile {
                     OnboardingView(onFinished: {
                         // No-op: OnboardingGate.markComplete() (set on the notifications step)
                         // flips needsOnboarding to false, re-rendering this view into the shell.
@@ -98,6 +110,46 @@ struct RootView: View {
         // profile is inserted mid-flow, letting needsOnboarding() re-evaluate after markComplete().
         .animation(.easeInOut(duration: 0.28), value: profileRows.count)
         .animation(.easeInOut(duration: 0.28), value: authVM.state)
+        // Privacy cover for the app-switcher snapshot: iOS captures the switcher
+        // thumbnail at `.inactive` (before `.background`), so cover ANY non-active phase
+        // with an opaque screen to keep financial content (amounts, BAS, receipts) out of
+        // the snapshot. Independent of the optional Face ID lock, which gates re-entry but
+        // does NOT prevent the inactive-phase snapshot on its own. (Cover only — we
+        // deliberately don't engage the lock on `.inactive` to avoid forcing a re-auth
+        // every time the photo picker / Files importer / share sheet briefly deactivates
+        // the scene during capture.)
+        .overlay {
+            if scenePhase != .active {
+                PrivacyCoverView()
+            }
+        }
+        // Recover from an unrecoverable auth failure: when a refresh fails (expired/revoked
+        // refresh token, account deleted elsewhere, signing-key rotation), the APIClient
+        // clears the session underneath us. authVM.state isn't otherwise re-synced, so the
+        // app would sit on a signed-in shell that 401s every call and shows a permanent
+        // "Offline". Bounce to sign-in instead. Guarded to the signed-in case so it never
+        // clobbers the transient sign-in flow states (.awaitingLink/.verifying have a nil
+        // session by design).
+        .onChange(of: auth.session == nil) { _, isCleared in
+            if isCleared { authVM.handleSessionInvalidated() }
+        }
+    }
+}
+
+/// Opaque cream cover shown whenever the scene isn't active, so the app-switcher
+/// snapshot never reveals financial content. Just the brand mark on the app's
+/// background — no data. Used both by RootView's overlay (covers the shell) and by
+/// `PrivacyShield`'s window (covers presented sheets/fullScreenCovers too).
+struct PrivacyCoverView: View {
+    var body: some View {
+        ZStack {
+            Palette.cream
+            Text("Snapceipt")
+                .font(.display(28, .bold))
+                .foregroundStyle(Palette.ink)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
     }
 }
 

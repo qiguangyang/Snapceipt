@@ -22,19 +22,14 @@ struct ProfileTabView: View {
     @Environment(\.accent) private var accent
     @Environment(\.openURL) private var openURL
 
-    /// Inert visual toggle (matches the prototype): defaults ON, drives no behaviour.
-    @State private var aiAutoCategorise = true
-
     /// Persisted Smart Scan AI toggle (default ON). Controls whether a scan calls
     /// DeepSeek (`/extract`) or uses the on-device heuristic — see CaptureViewModel.extract().
     @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = true
 
-    // Per-row icon tints (from the Claude design): purple categories, green tax,
-    // ocean-blue banks. App-group rows use the neutral ink/paper treatment.
+    // Per-row icon tints (from the Claude design): purple categories, green tax.
+    // App-group rows use the neutral ink/paper treatment.
     private let categoriesTint = Color(hex: 0x7B5BD6)
     private let categoriesSoft = Color(hex: 0xEBE5F8)
-    private let banksTint = Color(hex: 0x2F6FB0)
-    private let banksSoft = Color(hex: 0xE2ECF6)
 
     var body: some View {
         ScrollView {
@@ -87,8 +82,6 @@ struct ProfileTabView: View {
             groupLabel("Capture & tax")
             Card(padding: 16) {
                 VStack(spacing: 0) {
-                    aiAutoCategoriseRow
-                    rowDivider
                     smartScanRow
                     rowDivider
                     settingRow(icon: "tag", title: "Categories & rules", detail: nil,
@@ -98,8 +91,6 @@ struct ProfileTabView: View {
                     settingRow(icon: "shield", title: "Tax & GST settings", detail: nil,
                                tint: Palette.income, soft: Palette.incomeSoft,
                                id: AccessibilityID.profileRowTax, action: onOpenTax)
-                    rowDivider
-                    connectedBanksRow
                 }
             }
         }
@@ -120,8 +111,10 @@ struct ProfileTabView: View {
                   id: "profile.row.export", action: onOpenExport),
             .init(icon: "lock", title: "Privacy & security",
                   id: AccessibilityID.profileRowPrivacy, action: onOpenPrivacy),
-            .init(icon: "doc", title: "Terms & Privacy",
+            .init(icon: "doc", title: "Terms of Service",
                   id: AccessibilityID.profileRowLegal, action: openTerms),
+            .init(icon: "shield", title: "Privacy Policy",
+                  id: "profile.row.privacyPolicy", action: openPrivacyPolicy),
             .init(icon: "info", title: "Help & support",
                   id: AccessibilityID.profileRowHelp, action: openSupport),
         ]
@@ -247,19 +240,7 @@ struct ProfileTabView: View {
         .accessibilityIdentifier(id)
     }
 
-    /// Inert AI auto-categorise toggle (defaults ON; purely visual, drives no behaviour).
-    private var aiAutoCategoriseRow: some View {
-        HStack(spacing: 12) {
-            IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
-            Text("AI auto-categorise").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-            Spacer()
-            Toggle("", isOn: $aiAutoCategorise).labelsHidden().tint(Palette.income)
-        }
-        .padding(.vertical, 13)
-        .accessibilityIdentifier(AccessibilityID.profileAiAutoCategorise)
-    }
-
-    /// Real, persisted Smart Scan toggle (distinct from the inert aiAutoCategoriseRow).
+    /// Real, persisted Smart Scan toggle.
     private var smartScanRow: some View {
         HStack(spacing: 12) {
             IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
@@ -274,26 +255,15 @@ struct ProfileTabView: View {
         .accessibilityIdentifier(AccessibilityID.profileSmartScanToggle)
     }
 
-    /// Connected banks — Coming-soon placeholder. Disabled, no action, no network
-    /// (mirrors the MileageScreen GPS-card treatment: dimmed with a "Coming soon" label).
-    private var connectedBanksRow: some View {
-        HStack(spacing: 12) {
-            IconCircle(name: "bank", tint: banksTint, soft: banksSoft, size: 36, iconSize: 19)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Connected banks").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                Text("Coming soon").font(.ui(12.5)).foregroundStyle(Palette.ink3)
-            }
-            Spacer()
-        }
-        .padding(.vertical, 13)
-        .opacity(0.7)
-        .accessibilityIdentifier(AccessibilityID.profileRowConnectedBanks)
-    }
-
     /// Legal — opens the external Terms of Service page via the SwiftUI openURL action.
-    /// (The Privacy Policy is reachable from there and from the sign-in disclaimer.)
     private func openTerms() {
         if let url = URL(string: "https://snapceipt.cc/terms") { openURL(url) }
+    }
+
+    /// Privacy Policy — in-app access is required by App Review Guideline 5.1.1, so it
+    /// gets its own always-reachable row (not buried behind Terms or the paywall).
+    private func openPrivacyPolicy() {
+        if let url = URL(string: "https://snapceipt.cc/privacy") { openURL(url) }
     }
 
     /// Help & support — opens the external help site via the SwiftUI openURL action.

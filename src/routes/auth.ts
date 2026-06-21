@@ -294,6 +294,15 @@ authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
   return c.body(null, 202);
 });
 
+/** Length-independent-only constant-time compare of two equal-length hex digests, so
+ *  the OTP code check leaks no timing signal about how many leading bytes matched. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 /**
  * POST /auth/otp/verify
  * Consume the 6-digit code (single-use, 5-attempt cap), upsert the user by email
@@ -316,7 +325,7 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
     expiresAtMs: number;
   };
 
-  if ((await sha256Hex(code)) !== pending.codeHash) {
+  if (!constantTimeEqual(await sha256Hex(code), pending.codeHash)) {
     const attempts = (pending.attempts ?? 0) + 1;
     if (attempts >= OTP_MAX_ATTEMPTS) {
       await c.env.KV.delete(kvKey);
@@ -449,6 +458,18 @@ authRoutes.post("/apple", validate("json", appleBody), async (c) => {
   // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
   const claims = await verifyAppleIdentityToken(c.env, identityToken, rawNonce);
   const appleSub = claims.sub;
+
+  // 1b. Single-use nonce: the verified nonce (sha256 of the client raw nonce, embedded
+  // in the signed token) is consumed once, so a captured {identityToken, rawNonce} pair
+  // can't be replayed within the token's ~10-min validity to mint extra sessions / bind
+  // an attacker device. Mirrors the magic-link / OTP single-use discipline.
+  if (claims.nonce) {
+    const nonceKey = `apple_nonce:${claims.nonce}`;
+    if (await c.env.KV.get(nonceKey)) {
+      throw new ApiError("AUTH_INVALID_TOKEN", "Sign-in token already used");
+    }
+    await c.env.KV.put(nonceKey, "1", { expirationTtl: 900 });
+  }
   // SECURITY: use ONLY the email from the cryptographically-verified identity
   // token — never the client-supplied `email` JSON field. Trusting the client
   // value would let any Apple ID register (and mark `email_verified`) under a

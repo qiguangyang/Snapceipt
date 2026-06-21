@@ -28,7 +28,19 @@ final class AuthStore {
 
     init(keychain: Keychain = Keychain()) {
         self.keychain = keychain
+        migrateKeychainAccessibilityIfNeeded()
         restore()
+    }
+
+    /// Run the one-time Keychain accessibility migration (→ ThisDeviceOnly) once per
+    /// service. Pre-existing installs wrote tokens/deviceId with the old policy; this
+    /// rewrites them so device-binding holds. Namespaced by service so each test store
+    /// migrates independently and never collides with the app's flag.
+    private func migrateKeychainAccessibilityIfNeeded() {
+        let flag = "sc.keychain.tdo." + keychain.service
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        keychain.reapplyAccessibility()
+        UserDefaults.standard.set(true, forKey: flag)
     }
 
     /// Stable identifier for this install, generated once (UUIDv7) and persisted in
@@ -77,6 +89,10 @@ final class AuthStore {
         keychain.delete(.accessToken)
         keychain.delete(.refreshToken)
         clearPersistedUser()
+        // Reset the sync cursor so a later sign-in (possibly a different account on this
+        // device) does a FULL pull instead of resuming the prior account's cursor and
+        // silently skipping server changes.
+        UserDefaults.standard.removeObject(forKey: "sc.syncCursor")
         session = nil
     }
 

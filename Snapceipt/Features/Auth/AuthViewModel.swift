@@ -166,11 +166,17 @@ final class AuthViewModel {
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let auth: AuthStore
     @ObservationIgnored private let apple: AppleSignInCoordinator
+    /// Wipes local SwiftData + receipt images on sign-out / account-deletion. Injected
+    /// (rather than reaching into SwiftData here) so the auth layer stays storage-agnostic
+    /// and tests can omit it. Nil in previews/tests.
+    @ObservationIgnored private let onWipeLocalData: (() -> Void)?
 
-    init(api: APIClient, auth: AuthStore, apple: AppleSignInCoordinator = AppleSignInCoordinator()) {
+    init(api: APIClient, auth: AuthStore, apple: AppleSignInCoordinator = AppleSignInCoordinator(),
+         onWipeLocalData: (() -> Void)? = nil) {
         self.api = api
         self.auth = auth
         self.apple = apple
+        self.onWipeLocalData = onWipeLocalData
         // If a session was restored from the Keychain, start already signed in.
         if auth.session != nil { state = .signedIn }
     }
@@ -303,6 +309,9 @@ final class AuthViewModel {
     // MARK: Deep link
 
     func handleDeepLink(_ url: URL) async {
+        // Ignore magic-link taps while already signed in: a stray, forwarded, or stale
+        // link shouldn't silently tear down and replace the active session.
+        guard state != .signedIn else { return }
         guard let token = MagicLinkParser.token(from: url) else { return }
         await verifyMagicLink(token: token)
     }
@@ -311,14 +320,33 @@ final class AuthViewModel {
 
     func signOut() async {
         try? await api.signOut()
-        auth.clear()
-        pendingEmail = nil
+        // Set state FIRST so the RootView session-cleared observer (handleSessionInvalidated)
+        // no-ops here — this path does its own wipe below; we don't want it to run twice.
         state = .signedOut
+        auth.clear()
+        // Wipe local financial data + receipt images so nothing survives on the device
+        // after sign-out / account deletion (both paths funnel through here). A returning
+        // sign-in re-pulls from the server with a fresh cursor.
+        onWipeLocalData?()
+        pendingEmail = nil
     }
 
     /// Re-evaluates the state after an external session restore (used at launch).
     func refreshAuthState() {
         state = auth.session != nil ? .signedIn : .signedOut
+    }
+
+    /// The session was cleared out from under a signed-in shell — the APIClient does this
+    /// after an unrecoverable refresh failure (expired/revoked refresh token, account
+    /// deleted elsewhere, signing-key rotation). Wipe the prior user's local data (so a
+    /// different account on this device can't inherit it) and route to sign-in. Guarded to
+    /// `.signedIn` so it never fires during the transient magic-link/OTP flow (whose states
+    /// legitimately have a nil session), nor double-acts after an explicit `signOut()`
+    /// (which sets `.signedOut` first).
+    func handleSessionInvalidated() {
+        guard auth.session == nil, state == .signedIn else { return }
+        onWipeLocalData?()
+        state = .signedOut
     }
 
     // MARK: Helpers

@@ -204,7 +204,10 @@ final class LiveAPIClient: APIClient {
         let body = ExtractBody(ocrText: ocrText, layoutText: layoutText, source: source,
                                defaultCurrency: "AUD", locale: "en-AU",
                                capturedAt: capturedAt, requestId: ID.uuidv7())
-        return try await send("POST", "/extract", body: body, authenticated: true)
+        // 20s cap (vs URLSession's 60s default): a slow/stuck DeepSeek call falls back to
+        // the on-device heuristic for an instant, editable result — and the receipt is
+        // queued for a background server re-extract, so the AI result still lands later.
+        return try await send("POST", "/extract", body: body, authenticated: true, timeout: 20)
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
@@ -326,10 +329,12 @@ final class LiveAPIClient: APIClient {
         _ path: String,
         query: [URLQueryItem] = [],
         body: B?,
-        authenticated: Bool
+        authenticated: Bool,
+        timeout: TimeInterval? = nil
     ) async throws -> T {
         let data = try await perform(method, path, query: query, body: body,
-                                     authenticated: authenticated, allowRefresh: authenticated)
+                                     authenticated: authenticated, allowRefresh: authenticated,
+                                     timeout: timeout)
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
@@ -355,15 +360,18 @@ final class LiveAPIClient: APIClient {
         query: [URLQueryItem],
         body: B?,
         authenticated: Bool,
-        allowRefresh: Bool
+        allowRefresh: Bool,
+        timeout: TimeInterval? = nil
     ) async throws -> Data {
-        let request = try makeRequest(method, path, query: query, body: body, authenticated: authenticated)
+        let request = try makeRequest(method, path, query: query, body: body,
+                                      authenticated: authenticated, timeout: timeout)
         let (data, response) = try await dataResponse(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.transport }
 
         if http.statusCode == 401, allowRefresh, await tryRefresh() {
             // Rebuild with the fresh bearer and retry exactly once.
-            let retry = try makeRequest(method, path, query: query, body: body, authenticated: authenticated)
+            let retry = try makeRequest(method, path, query: query, body: body,
+                                        authenticated: authenticated, timeout: timeout)
             let (data2, response2) = try await dataResponse(for: retry)
             guard let http2 = response2 as? HTTPURLResponse else { throw APIError.transport }
             return try validate(data2, http2)
@@ -450,7 +458,8 @@ final class LiveAPIClient: APIClient {
         _ path: String,
         query: [URLQueryItem],
         body: B?,
-        authenticated: Bool
+        authenticated: Bool,
+        timeout: TimeInterval? = nil
     ) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path),
                                        resolvingAgainstBaseURL: false)
@@ -459,6 +468,10 @@ final class LiveAPIClient: APIClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // Per-request idle timeout (e.g. /extract): if no response arrives within this
+        // window the request fails -> transport error -> the caller's heuristic fallback,
+        // instead of spinning to URLSession's 60s default. Nil leaves the default.
+        if let timeout { request.timeoutInterval = timeout }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(auth.deviceId, forHTTPHeaderField: "X-Device-Id")
         if authenticated, let bearer = auth.bearer() {

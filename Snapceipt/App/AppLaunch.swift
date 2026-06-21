@@ -472,7 +472,9 @@ struct AppLaunch {
 
     func makeAPIClient(auth: AuthStore) -> APIClient {
         if useStub { return StubAPIClient(pro: pro) }
-        let base = apiBaseURLOverride ?? URL(string: "https://api.snapceipt.cc")!
+        // Precedence: process-env override (UI tests / quick redirects) > the host baked
+        // into this build config (Staging) > prod.
+        let base = apiBaseURLOverride ?? BackendConfig.configuredBaseURL
         return LiveAPIClient(baseURL: base, auth: auth)
     }
 

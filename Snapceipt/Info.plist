@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en_AU</string>
+	<!-- API host baked in per build config ($(SNAPCEIPT_API_HOST)): empty in Debug/Release
+	     → the app uses the prod API; set to the staging worker in the Staging config so a
+	     Staging build always talks to staging. Read via BackendConfig.configuredBaseURL. -->
+	<key>SNAPCEIPT_API_HOST</key>
+	<string>$(SNAPCEIPT_API_HOST)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -76,9 +81,9 @@
 		<string>HankenGrotesk-SemiBold.ttf</string>
 		<string>HankenGrotesk-Bold.ttf</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<!-- No UIBackgroundModes: the backend sends only user-facing `alert` pushes
+	     (no `content-available`/silent push, no background handler), so declaring
+	     `remote-notification` would be an unused-background-mode rejection risk
+	     (App Review Guideline 2.5.4). Restore only if silent pushes are added. -->
 </dict>
 </plist>

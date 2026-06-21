@@ -116,6 +116,18 @@ describe("POST /sync/push", () => {
     expect(row.last_edited_device_id).toBe(DEVICE_ID);
   });
 
+  it("rejects an upsert that references a profileId the caller does not own (FORBIDDEN)", async () => {
+    const foreignProfile = "01890000-0000-7000-8000-0000000000bb";
+    const m = txnMutation({ payload: { ...txnMutation().payload, profileId: foreignProfile } });
+    const json = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;
+    expect(json.results[0].status).toBe("rejected");
+    expect(json.results[0].reason).toBe("FORBIDDEN");
+    // Nothing persisted under the foreign profile.
+    const row = await env.DB.prepare(`SELECT 1 FROM transactions WHERE id = ?`)
+      .bind(m.entityId).first();
+    expect(row).toBeNull();
+  });
+
   it("replaying the same mutationId is a duplicate no-op", async () => {
     const m = txnMutation();
     const first = (await (await push({ deviceId: DEVICE_ID, mutations: [m] })).json()) as any;

@@ -40,6 +40,8 @@ interface VerifiedTransaction {
   originalTransactionId?: string;
   /** expiresDate is epoch ms for auto-renewable subscriptions. */
   expiresDate?: number;
+  /** revocationDate (epoch ms) is present iff the transaction was refunded/revoked. */
+  revocationDate?: number;
 }
 
 subscriptionRoutes.post("/", validate("json", purchaseBody), async (c) => {
@@ -68,11 +70,37 @@ subscriptionRoutes.post("/", validate("json", purchaseBody), async (c) => {
     return c.json({ ok: false, error: "MISSING_ORIGINAL_TRANSACTION_ID" }, 400);
   }
 
-  // 3. Derive the linkage fields FROM THE VERIFIED PAYLOAD and flip to pro.
-  const originalTransactionId = txn.originalTransactionId;
-  const expiresAtMs = typeof txn.expiresDate === "number" ? txn.expiresDate : null;
   const now = nowMs();
 
+  // 3. The transaction must still ENTITLE. Without this, a lapsed/refunded/cancelled
+  //    user could re-POST their old (but still validly-signed) JWS to restore Pro
+  //    indefinitely — a repeatable payment bypass. revocationDate => refunded/revoked;
+  //    expiresDate in the past => the subscription already lapsed.
+  if (typeof txn.revocationDate === "number") {
+    return c.json({ ok: false, error: "TRANSACTION_REVOKED" }, 400);
+  }
+  if (typeof txn.expiresDate === "number" && txn.expiresDate <= now) {
+    return c.json({ ok: false, error: "TRANSACTION_EXPIRED" }, 400);
+  }
+
+  // 4. Derive the linkage fields FROM THE VERIFIED PAYLOAD.
+  const originalTransactionId = txn.originalTransactionId;
+  const expiresAtMs = typeof txn.expiresDate === "number" ? txn.expiresDate : null;
+
+  // 5. One Apple subscription -> one account. If this originalTransactionId is already
+  //    bound to a DIFFERENT live user, reject (a backstop UNIQUE index also enforces it).
+  //    Prevents subscription sharing and stops one Apple lifecycle event from rewriting
+  //    multiple coupled rows.
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM users WHERE original_transaction_id = ? AND deleted_at IS NULL",
+  )
+    .bind(originalTransactionId)
+    .first<{ id: string }>();
+  if (existing && existing.id !== c.var.userId) {
+    return c.json({ ok: false, error: "SUBSCRIPTION_ALREADY_LINKED" }, 409);
+  }
+
+  // 6. Flip to pro.
   await c.env.DB.prepare(
     `UPDATE users
         SET original_transaction_id = ?,

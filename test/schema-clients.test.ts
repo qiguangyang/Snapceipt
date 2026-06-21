@@ -99,6 +99,12 @@ describe("client round-trips via /sync", () => {
       `INSERT OR IGNORE INTO users (id, email, email_verified, plan, created_at, updated_at)
        VALUES (?, ?, 1, 'free', ?, ?)`,
     ).bind(USER, `${USER}@example.com`, now, now).run();
+    // The client references PROFILE; sync push now verifies the caller owns it, so seed it.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO profiles (id, user_id, name, type, accent_1, accent_2, accent_3,
+         sort_order, is_default, created_at, updated_at, rev)
+       VALUES (?, ?, 'Biz', 'business', '#0', '#1', '#2', 0, 1, ?, ?, 1)`,
+    ).bind(PROFILE, USER, now, now).run();
 
     const clientId = uuidv7();
     const headers = await authHeader();

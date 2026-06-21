@@ -157,6 +157,18 @@ describe("POST /images", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("rejects bytes that aren't a real JPEG (magic-byte guard) with 400", async () => {
+    const app = appAs(uuidv7(), uuidv7());
+    const notJpeg = new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c]); // "<html"
+    const res = await app.request("/images", {
+      method: "POST",
+      headers: { "content-type": "image/jpeg" },
+      body: notJpeg,
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error.code).toBe("VALIDATION_FAILED");
+  });
 });
 
 describe("GET /images/*", () => {
@@ -174,6 +186,7 @@ describe("GET /images/*", () => {
     const get = await app.request(`/images/${imageKey}`);
     expect(get.status).toBe(200);
     expect(get.headers.get("content-type")).toBe("image/jpeg");
+    expect(get.headers.get("x-content-type-options")).toBe("nosniff");
     const bytes = new Uint8Array(await get.arrayBuffer());
     expect(bytes.byteLength).toBe(JPEG_BYTES.byteLength);
   });

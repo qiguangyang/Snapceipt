@@ -18,6 +18,7 @@ struct CaptureCloseButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Close")
         .accessibilityIdentifier(AccessibilityID.captureClose)
     }
 }
