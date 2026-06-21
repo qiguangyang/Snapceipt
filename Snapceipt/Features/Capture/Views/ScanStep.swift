@@ -12,6 +12,9 @@ struct ScanStep: View {
 
     @State private var scanY: CGFloat = 0
     @State private var revealed = 0
+    /// Flips on after a few seconds so a slow extraction shows reassurance instead of
+    /// looking stuck. The VM still caps the call (20s) and falls back to on-device parsing.
+    @State private var slowHint = false
 
     private let chips = ["Merchant", "Date", "GST", "Total", "Category"]
     /// Dark viewfinder backdrop (#0c0a09) — matches the native scanner feel.
@@ -39,13 +42,24 @@ struct ScanStep: View {
             receiptPreview
 
             // Title BELOW the receipt: leading filled accent sparkles + display(17) white.
-            HStack(spacing: 9) {
-                Icon(name: "sparkles", size: 20, color: accent.base, filled: true)
-                Text("Reading your receipt…")
-                    .font(.display(17))
-                    .foregroundStyle(.white)
+            VStack(spacing: 6) {
+                HStack(spacing: 9) {
+                    Icon(name: "sparkles", size: 20, color: accent.base, filled: true)
+                    Text("Reading your receipt…")
+                        .font(.display(17))
+                        .foregroundStyle(.white)
+                }
+                .accessibilityIdentifier(AccessibilityID.captureScanTitle)
+                if slowHint {
+                    Text("Still reading… we'll use an on-device read if it takes too long.")
+                        .font(.ui(12))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .transition(.opacity)
+                        .accessibilityIdentifier(AccessibilityID.captureScanSlowHint)
+                }
             }
-            .accessibilityIdentifier(AccessibilityID.captureScanTitle)
+            .animation(.easeInOut(duration: 0.25), value: slowHint)
 
             chipRows
         }
@@ -134,5 +148,9 @@ struct ScanStep: View {
                 revealed = i
             }
         }
+        // Reassure on a slow extraction (e.g. a sluggish DeepSeek call). The VM moves to
+        // Review the instant extraction resolves, tearing this view down — so the hint only
+        // ever shows when the call is genuinely taking a while.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { slowHint = true }
     }
 }

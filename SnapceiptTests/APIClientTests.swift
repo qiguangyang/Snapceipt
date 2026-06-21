@@ -213,6 +213,9 @@ struct APIClientTests {
         #expect(resp.receipt.total == Decimal(string: "42.50"))
         #expect(MockURLProtocol.lastRequest?.url?.path == "/extract")
         #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
+        // /extract carries a tightened 20s timeout (vs URLSession's 60s default) so a slow
+        // DeepSeek call falls back to the on-device heuristic quickly.
+        #expect(MockURLProtocol.lastRequest?.timeoutInterval == 20)
         let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
         let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         #expect(obj?["ocrText"] as? String == "THE GROUNDS\nTOTAL 42.50")

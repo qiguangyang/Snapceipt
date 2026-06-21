@@ -33,6 +33,7 @@ enum AccessibilityID {
     static let captureConfirm = "capture.confirm"
     static let captureRetake = "capture.retake"
     static let captureScanTitle = "capture.scan.title"
+    static let captureScanSlowHint = "capture.scan.slowHint"   // shown when extraction is slow
     static let captureReviewMerchant = "capture.review.merchant"
     static let captureReviewCategory = "capture.review.category"
     static let captureReviewBadge = "capture.review.badge"
