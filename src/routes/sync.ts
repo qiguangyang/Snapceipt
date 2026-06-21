@@ -189,6 +189,26 @@ async function applyMutation(
     });
   }
 
+  // (5b) Ownership of the referenced profile (CORE DATA RULE): profileId is taken
+  // verbatim from the client, so verify it belongs to the caller before persisting a
+  // row tagged with it. Without this, a known/guessed foreign profile UUID would create
+  // a dangling cross-tenant reference (no data leak — every read re-scopes by user_id —
+  // but it violates per-profile ownership).
+  if (meta.hasProfileId && payload.profileId != null) {
+    const ownProfile = await db
+      .prepare("SELECT 1 FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL")
+      .bind(payload.profileId, userId)
+      .first();
+    if (!ownProfile) {
+      return recordAndReturn(db, userId, deviceId, m, {
+        mutationId: m.mutationId,
+        status: "rejected",
+        reason: "FORBIDDEN",
+        entity: null,
+      });
+    }
+  }
+
   const writeStmt = buildUpsertStmt(db, meta, m, userId, now, newRev, deviceId, stored);
 
   // Build the canonical row we are persisting so we can echo + record it without

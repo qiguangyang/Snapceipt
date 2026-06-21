@@ -39,6 +39,15 @@ const email = async (
   _ctx: ExecutionContext,
 ): Promise<void> => {
   try {
+    // Sender authentication: reject only on an explicit DMARC failure (the domain
+    // owner's policy says this message is spoofed). pass/none/absent are accepted —
+    // legitimately-forwarded receipts commonly lack DMARC alignment, so a stricter gate
+    // would drop real receipts. Closes the clearest sender-spoofing vector.
+    const authResults = message.headers.get("authentication-results") ?? "";
+    if (/dmarc=fail/i.test(authResults)) {
+      message.setReject("Message failed DMARC authentication");
+      return;
+    }
     const result = await inboundEmailLogic(
       env,
       {
@@ -50,7 +59,13 @@ const email = async (
       Date.now(),
     );
     if (result.status === "rejected") {
-      message.setReject(result.reason === "no_image" ? "No receipt image attached" : "Unknown inbox address");
+      const reason =
+        result.reason === "no_image"
+          ? "No receipt image attached"
+          : result.reason === "rate_limited"
+            ? "Too many messages to this address; please try again later"
+            : "Unknown inbox address";
+      message.setReject(reason);
     }
   } catch (err) {
     console.error("inbound email failed", err);

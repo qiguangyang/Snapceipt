@@ -7,8 +7,24 @@ import { workersAiOcr } from "../lib/ocr";
 import { heuristicExtract } from "../lib/extractionHeuristic";
 import { runDeepseekExtraction, type ExtractedReceipt } from "../lib/deepseek";
 import { writeReceiptRows } from "../lib/receiptRows";
+import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smartScan";
 
 const MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors images.ts
+/** Max inbound emails accepted per inbox alias per hour (coarse flood throttle). */
+const INBOUND_RATE_LIMIT = 20;
+const INBOUND_WINDOW_MS = 60 * 60 * 1000;
+
+/** Fixed-window KV counter per inbox token. Returns true when the alias is over its
+ *  hourly limit (so the email() wrapper can bounce it) — bounds Workers-AI/DeepSeek
+ *  spend from a flood against a single (possibly leaked) alias. */
+async function overInboundRateLimit(kv: KVNamespace, token: string, now: number): Promise<boolean> {
+  const bucket = Math.floor(now / INBOUND_WINDOW_MS);
+  const key = `rl:inbound:${token}:${bucket}`;
+  const current = Number((await kv.get(key)) ?? "0");
+  if (current >= INBOUND_RATE_LIMIT) return true;
+  await kv.put(key, String(current + 1), { expirationTtl: Math.ceil(INBOUND_WINDOW_MS / 1000) + 60 });
+  return false;
+}
 
 /** The shape the email() wrapper hands to the pure core. */
 export interface InboundMessage {
@@ -19,7 +35,7 @@ export interface InboundMessage {
 }
 
 export type InboundResult =
-  | { status: "rejected"; reason: "unknown_inbox" | "no_image" }
+  | { status: "rejected"; reason: "unknown_inbox" | "no_image" | "rate_limited" }
   | { status: "duplicate" }
   | { status: "created"; transactionId: string; extraction: "done" | "failed" };
 
@@ -102,6 +118,14 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const dup = await env.DB.prepare("SELECT 1 FROM inbound_email_log WHERE message_id = ?").bind(messageId).first();
   if (dup) return { status: "duplicate" };
 
+  // 2b. Coarse per-alias rate limit (after dedup so redeliveries don't count). Bounds
+  // Workers-AI/DeepSeek spend from a flood against a (possibly leaked) alias; the email()
+  // wrapper bounces the over-limit message.
+  if (await overInboundRateLimit(env.KV, token, now)) {
+    await logInbound(env.DB, messageId, owner, null, "rejected", "rate_limited", now);
+    return { status: "rejected", reason: "rate_limited" };
+  }
+
   // 3. Parse MIME; pick the first image attachment under the size cap.
   const parsed = await new PostalMime().parse(msg.raw);
   const image = (parsed.attachments ?? []).find((att) => isImage(att.mimeType));
@@ -126,19 +150,36 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const profileType = prof?.type ?? "personal";
   const defaultDate = todayIso(now);
 
-  // 6. OCR (gated) -> extraction (gated). Any failure => failed transaction, image kept.
+  // 6. Cap gate: email-in extractions count against the SAME monthly smart-scan budget
+  // as POST /extract, checked BEFORE the expensive Workers-AI OCR + DeepSeek calls. Over
+  // cap → store the image + a needs-review transaction (never lose the receipt) with no AI
+  // spend, so a free user can't mail their alias for unlimited extractions.
+  const period = currentPeriod(now);
+  const planRow = await env.DB.prepare("SELECT plan FROM users WHERE id = ?")
+    .bind(owner.userId)
+    .first<{ plan: string }>();
+  const cap = capForPlan(planRow?.plan, env);
+  const overCap = (await getUsage(env.DB, owner.userId, period)) >= cap;
+
   let ocrText: string | null = null;
   let receipt: ExtractedReceipt;
   let extraction: "done" | "failed" = "done";
   let model: string | null = null;
-  try {
-    ocrText = await workersAiOcr(env, buf, contentType);
-    const out = await runExtraction(env, ocrText, defaultDate);
-    receipt = out.receipt;
-    model = out.model;
-  } catch {
+  if (overCap) {
     extraction = "failed";
     receipt = failedReceipt(defaultDate);
+  } else {
+    // OCR (gated) -> extraction (gated). Any failure => failed transaction, image kept.
+    try {
+      ocrText = await workersAiOcr(env, buf, contentType);
+      const out = await runExtraction(env, ocrText, defaultDate);
+      receipt = out.receipt;
+      model = out.model;
+      await incrementUsage(env.DB, owner.userId, period, now);
+    } catch {
+      extraction = "failed";
+      receipt = failedReceipt(defaultDate);
+    }
   }
 
   // 7. Write rows.
@@ -148,6 +189,10 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
     extractionStatus: extraction, extractionModel: model, nowMs: now,
   });
 
-  await logInbound(env.DB, messageId, owner, transactionId, extraction === "done" ? "created" : "failed", null, now);
+  await logInbound(
+    env.DB, messageId, owner, transactionId,
+    extraction === "done" ? "created" : "failed",
+    overCap ? "over_cap" : null, now,
+  );
   return { status: "created", transactionId, extraction };
 }

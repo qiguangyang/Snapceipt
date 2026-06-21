@@ -4,6 +4,7 @@ import { uuidv7 } from "../src/lib/ids";
 import { nowMs } from "../src/lib/time";
 import { mintInboxToken, addressForToken } from "../src/lib/inboxToken";
 import { inboundEmailLogic } from "../src/email/inbound";
+import { currentPeriod } from "../src/lib/smartScan";
 import * as deepseek from "../src/lib/deepseek";
 
 // A multipart/mixed MIME with one base64 image/jpeg attachment.
@@ -73,6 +74,7 @@ beforeEach(async () => {
   await env.DB.exec("DELETE FROM transactions");
   await env.DB.exec("DELETE FROM inbound_email_log");
   await env.DB.exec("DELETE FROM profile_inbox_tokens");
+  await env.DB.exec("DELETE FROM smart_scan_usage");
   await env.DB.exec("DELETE FROM profiles");
   await env.DB.exec("DELETE FROM users");
 });
@@ -129,6 +131,50 @@ describe("inboundEmailLogic", () => {
     expect(second).toEqual({ status: "duplicate" });
     const c = await env.DB.prepare("SELECT COUNT(*) c FROM transactions").first<{ c: number }>();
     expect(c!.c).toBe(1);
+  });
+
+  it("skips AI extraction when the user is over the monthly smart-scan cap (no spend, image kept)", async () => {
+    const { userId, address } = await seedProfileWithInbox();
+    const t = nowMs();
+    // Seed usage AT the free cap (10) so the next email-in is over cap.
+    await env.DB.prepare(
+      "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, ?, ?, ?)",
+    ).bind(userId, currentPeriod(t), 10, t).run();
+
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<cap1>", raw: mimeWithImage("cap1"),
+    }, t);
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.extraction).toBe("failed"); // AI skipped -> needs-review txn
+    // The receipt image is still stored (never lost).
+    const img = await env.DB.prepare("SELECT COUNT(*) c FROM receipt_images WHERE transaction_id = ?")
+      .bind(res.transactionId).first<{ c: number }>();
+    expect(img!.c).toBe(1);
+    // Usage was NOT incremented past the cap.
+    const usage = await env.DB.prepare("SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = ?")
+      .bind(userId, currentPeriod(t)).first<{ count: number }>();
+    expect(usage!.count).toBe(10);
+    const log = await env.DB.prepare("SELECT reason FROM inbound_email_log WHERE message_id = ?")
+      .bind("<cap1>").first<{ reason: string | null }>();
+    expect(log!.reason).toBe("over_cap");
+  });
+
+  it("rate-limits a flood to one alias (rejected: rate_limited)", async () => {
+    const { userId, profileId } = await seedProfileWithInbox();
+    const t = nowMs();
+    const token = await mintInboxToken(env.DB, userId, profileId, t);
+    // Pre-seed the per-alias hourly counter at the limit (20).
+    const bucket = Math.floor(t / (60 * 60 * 1000));
+    await env.KV.put(`rl:inbound:${token}:${bucket}`, "20");
+
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: addressForToken(token), from: "x@e.com", messageId: "<rl1>", raw: mimeWithImage("rl1"),
+    }, t);
+    expect(res).toEqual({ status: "rejected", reason: "rate_limited" });
+    // No transaction created for the throttled message.
+    const c = await env.DB.prepare("SELECT COUNT(*) c FROM transactions").first<{ c: number }>();
+    expect(c!.c).toBe(0);
   });
 
   it("creates a failed transaction (image preserved) when extraction throws", async () => {
