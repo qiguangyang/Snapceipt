@@ -110,19 +110,12 @@ struct RootView: View {
         // profile is inserted mid-flow, letting needsOnboarding() re-evaluate after markComplete().
         .animation(.easeInOut(duration: 0.28), value: profileRows.count)
         .animation(.easeInOut(duration: 0.28), value: authVM.state)
-        // Privacy cover for the app-switcher snapshot: iOS captures the switcher
-        // thumbnail at `.inactive` (before `.background`), so cover ANY non-active phase
-        // with an opaque screen to keep financial content (amounts, BAS, receipts) out of
-        // the snapshot. Independent of the optional Face ID lock, which gates re-entry but
-        // does NOT prevent the inactive-phase snapshot on its own. (Cover only — we
-        // deliberately don't engage the lock on `.inactive` to avoid forcing a re-auth
-        // every time the photo picker / Files importer / share sheet briefly deactivates
-        // the scene during capture.)
-        .overlay {
-            if scenePhase != .active {
-                PrivacyCoverView()
-            }
-        }
+        // App-switcher snapshot privacy is handled by the window-level `PrivacyShield`
+        // (installed at launch): it covers on `willResignActive` and uncovers on
+        // `didBecomeActive`, so it protects the snapshot AND presented sheets without ever
+        // showing during launch. A scenePhase `.overlay` here is deliberately NOT used —
+        // scenePhase passes through `.inactive` on cold launch, which flashed the cover as
+        // a fake splash.
         // Recover from an unrecoverable auth failure: when a refresh fails (expired/revoked
         // refresh token, account deleted elsewhere, signing-key rotation), the APIClient
         // clears the session underneath us. authVM.state isn't otherwise re-synced, so the
