@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en_AU</string>
+	<!-- API host baked in per build config ($(SNAPCEIPT_API_HOST)): empty in Debug/Release
+	     → the app uses the prod API; set to the staging worker in the Staging config so a
+	     Staging build always talks to staging. Read via BackendConfig.configuredBaseURL. -->
+	<key>SNAPCEIPT_API_HOST</key>
+	<string>$(SNAPCEIPT_API_HOST)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

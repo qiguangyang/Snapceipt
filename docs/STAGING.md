@@ -40,15 +40,37 @@ Applying migrations to staging first is the safety net: a migration that would a
 
 ## Point the iOS app at staging
 
-The app reads an `API_BASE_URL` env override (`AppLaunch.swift`), **DEBUG builds only**:
+The base URL is resolved by `BackendConfig.configuredBaseURL`:
+process-env `API_BASE_URL` (DEBUG only) → the `SNAPCEIPT_API_HOST` baked into the build
+config (Info.plist) → prod default.
 
-- **Xcode:** Scheme → Run → Arguments → Environment Variables → add
-  `API_BASE_URL = https://snapceipt-api-staging.techsiderau.workers.dev`, then run on device/sim.
-- **`wrangler dev` instead:** set `API_BASE_URL = http://<your-mac-LAN-ip>:8787`.
+### Durable: the **Staging** build (recommended)
 
-> A TestFlight (Release) build **cannot** be pointed at staging today — Release hardcodes
-> `api.snapceipt.cc`. If you want a TestFlight-on-staging build, add a dedicated Staging
-> build configuration that injects the base URL (not yet set up).
+There's a dedicated `Staging` build configuration + `Snapceipt (Staging)` scheme that bakes
+`SNAPCEIPT_API_HOST = snapceipt-api-staging.techsiderau.workers.dev` into the app. A Staging
+build **always** talks to staging — home-screen tap, `devicectl`, or TestFlight — no env var
+needed. Debug/Release builds leave the host empty and use prod.
+
+```bash
+# Build + install the Staging build on a connected device:
+xcodebuild build -scheme "Snapceipt (Staging)" -configuration Staging \
+  -destination 'platform=iOS,id=<DEVICE_ID>' -derivedDataPath /tmp/snapceipt-staging \
+  -allowProvisioningUpdates
+xcrun devicectl device install app --device <DEVICE_ID> \
+  /tmp/snapceipt-staging/Build/Products/Staging-iphoneos/Snapceipt.app
+```
+
+In Xcode: pick the **Snapceipt (Staging)** scheme and Run/Archive. (Staging is dev-signed
+with DEBUG features on; for a TestFlight-on-staging build, give the Staging config the same
+Manual/Distribution signing the Release config uses.)
+
+### Quick one-off: env override (DEBUG builds)
+
+- **Xcode:** Run scheme → Arguments → Environment Variables →
+  `API_BASE_URL = https://snapceipt-api-staging.techsiderau.workers.dev`.
+- **`wrangler dev` instead:** `API_BASE_URL = http://<your-mac-LAN-ip>:8787`.
+- **`devicectl`:** `--environment-variables '{"API_BASE_URL":"https://…workers.dev"}'`
+  (only lasts for that launch; a home-screen tap reverts to the build's baked host).
 
 ## Inspect / reset staging data
 

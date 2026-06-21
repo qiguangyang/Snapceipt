@@ -69,7 +69,7 @@ struct SnapceiptApp: App {
         // never blocks a seeded UI-test launch.
         let appLock = launch.makeAppLock()
 #else
-        let api: APIClient = LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.cc")!, auth: auth)
+        let api: APIClient = LiveAPIClient(baseURL: BackendConfig.configuredBaseURL, auth: auth)
         let container = makeSnapceiptContainer()
         let appLock = AppLockController()
 #endif
