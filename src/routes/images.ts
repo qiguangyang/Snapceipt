@@ -42,6 +42,13 @@ imageRoutes.post("/", async (c) => {
   if (byteSize > MAX_BYTES) {
     throw new ApiError("VALIDATION_FAILED", `Image exceeds ${MAX_BYTES} bytes`);
   }
+  // Magic-byte guard: the declared Content-Type is client-controlled, so verify the
+  // bytes actually start with the JPEG SOI marker (FF D8 FF) before storing — don't
+  // let arbitrary bytes be persisted under the user's prefix.
+  const head = new Uint8Array(buf.slice(0, 3));
+  if (head[0] !== 0xff || head[1] !== 0xd8 || head[2] !== 0xff) {
+    throw new ApiError("VALIDATION_FAILED", "Body is not a JPEG image");
+  }
 
   // 3. Query metadata.
   const pageIndex = intParam(c, "pageIndex") ?? 0;
@@ -100,7 +107,10 @@ imageRoutes.get("/by-transaction/:transactionId", async (c) => {
   const bytes = await obj.arrayBuffer();
   return new Response(bytes, {
     status: 200,
-    headers: { "content-type": obj.httpMetadata?.contentType ?? "image/jpeg" },
+    headers: {
+      "content-type": obj.httpMetadata?.contentType ?? "image/jpeg",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 });
 
@@ -121,6 +131,9 @@ imageRoutes.get("/*", async (c) => {
   const bytes = await obj.arrayBuffer();
   return new Response(bytes, {
     status: 200,
-    headers: { "content-type": obj.httpMetadata?.contentType ?? "image/jpeg" },
+    headers: {
+      "content-type": obj.httpMetadata?.contentType ?? "image/jpeg",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 });

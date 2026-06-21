@@ -139,6 +139,53 @@ describe("POST /me/subscription (verified purchase link)", () => {
     expect((await planOf(userId))?.plan).toBe("pro");
   });
 
+  it("rejects a REVOKED (refunded) transaction (400) and does NOT flip the plan", async () => {
+    const { bearer, userId } = await seedUser("free");
+    const signedTransaction = await makeSignedTransaction({
+      bundleId: BUNDLE_ID,
+      productId: "app.snapceipt.pro.monthly",
+      originalTransactionId: "1000002000",
+      revocationDate: 1_700_000_000_000,
+    });
+    const res = await post(bearer, { signedTransaction });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe("TRANSACTION_REVOKED");
+    expect((await planOf(userId))?.plan).toBe("free");
+  });
+
+  it("rejects an EXPIRED transaction (400) and does NOT flip the plan", async () => {
+    const { bearer, userId } = await seedUser("free");
+    const signedTransaction = await makeSignedTransaction({
+      bundleId: BUNDLE_ID,
+      productId: "app.snapceipt.pro.monthly",
+      originalTransactionId: "1000002001",
+      expiresDate: 1_000_000_000_000, // 2001 — long past
+    });
+    const res = await post(bearer, { signedTransaction });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe("TRANSACTION_EXPIRED");
+    expect((await planOf(userId))?.plan).toBe("free");
+  });
+
+  it("rejects binding one Apple subscription to a SECOND account (409)", async () => {
+    const a = await seedUser("free");
+    const b = await seedUser("free");
+    const otid = "1000002002";
+    const txnA = await makeSignedTransaction({
+      bundleId: BUNDLE_ID, productId: "app.snapceipt.pro.monthly", originalTransactionId: otid,
+    });
+    expect((await post(a.bearer, { signedTransaction: txnA })).status).toBe(200);
+    expect((await planOf(a.userId))?.plan).toBe("pro");
+
+    const txnB = await makeSignedTransaction({
+      bundleId: BUNDLE_ID, productId: "app.snapceipt.pro.monthly", originalTransactionId: otid,
+    });
+    const res = await post(b.bearer, { signedTransaction: txnB });
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe("SUBSCRIPTION_ALREADY_LINKED");
+    expect((await planOf(b.userId))?.plan).toBe("free");
+  });
+
   it("requires authentication (401 without bearer)", async () => {
     const res = await SELF.fetch("https://api.test/me/subscription", {
       method: "POST",

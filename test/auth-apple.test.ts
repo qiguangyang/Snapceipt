@@ -115,6 +115,26 @@ describe("POST /auth/apple", () => {
     expect(row?.email).toBe("real@privaterelay.appleid.com");
   });
 
+  it("rejects a REPLAYED identity token (single-use nonce)", async () => {
+    const rawNonce = "raw-nonce-replay-001";
+    const { jwks, token } = await makeAppleIdToken({
+      aud: BUNDLE_ID,
+      rawNonce,
+      sub: "000777.apple.replay",
+      email: "replay@privaterelay.appleid.com",
+    });
+    // Pre-seed the JWKS cache so both verifies read KV (no network), keeping this test
+    // independent of fetch-mock interceptor accounting.
+    await env.KV.put(JWKS_KV_KEY, JSON.stringify(jwks));
+
+    const first = await post({ identityToken: token, authorizationCode: "auth-code-xyz", rawNonce });
+    expect(first.status).toBe(200);
+
+    // Replaying the same {identityToken, rawNonce} must be rejected (nonce consumed).
+    const second = await post({ identityToken: token, authorizationCode: "auth-code-xyz", rawNonce });
+    expect(second.status).toBe(401);
+  });
+
   it("reuses the existing user on a second sign-in (Apple omits name/email)", async () => {
     const first = await makeAppleIdToken({
       aud: BUNDLE_ID,
