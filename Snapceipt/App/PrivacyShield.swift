@@ -3,17 +3,17 @@ import SwiftUI
 
 /// Window-level privacy shield for the app-switcher snapshot.
 ///
-/// RootView also shows a `PrivacyCoverView` overlay, but a SwiftUI `.overlay` lives
-/// inside the root hosting controller and therefore renders BENEATH anything presented
-/// modally (sheets / fullScreenCovers — receipt image viewer, export, BAS history,
-/// invoice/quote editors). Those would leak into the switcher thumbnail when the app is
-/// backgrounded with one open. This shield raises an opaque cover in its OWN top-level
-/// `UIWindow`, which sits above every presented controller, closing that gap.
+/// Raises an opaque cover in its OWN top-level `UIWindow` (above every presented
+/// controller, so sheets / fullScreenCovers are covered too) only when the app actually
+/// enters the BACKGROUND, and removes it on return to the foreground.
 ///
-/// Keyed to `willResignActive` / `didBecomeActive` (the same foreground/background
-/// transition as scenePhase), so the cover is up before iOS captures the snapshot and is
-/// always torn down on return — `didBecomeActive` fires reliably, so the cover can't get
-/// stuck.
+/// Keyed to `didEnterBackground` / `willEnterForeground` — NOT `willResignActive`. iOS
+/// takes the app-switcher snapshot shortly AFTER `didEnterBackground` returns, so covering
+/// there still protects the snapshot. Crucially, in-app system UI (Sign in with Apple, the
+/// photo picker, Files importer, share sheet) only fires `willResignActive` — never
+/// `didEnterBackground` — so the cover no longer flashes behind those sheets. (Control
+/// Center / notification pulldown are also `willResignActive`-only and intentionally not
+/// covered.)
 @MainActor
 final class PrivacyShield {
     static let shared = PrivacyShield()
@@ -21,15 +21,15 @@ final class PrivacyShield {
     private var installed = false
     private init() {}
 
-    /// Begin observing foreground/background transitions. Idempotent.
+    /// Begin observing background/foreground transitions. Idempotent.
     func install() {
         guard !installed else { return }
         installed = true
         let nc = NotificationCenter.default
         nc.addObserver(self, selector: #selector(cover),
-                       name: UIApplication.willResignActiveNotification, object: nil)
+                       name: UIApplication.didEnterBackgroundNotification, object: nil)
         nc.addObserver(self, selector: #selector(uncover),
-                       name: UIApplication.didBecomeActiveNotification, object: nil)
+                       name: UIApplication.willEnterForegroundNotification, object: nil)
     }
 
     @objc private func cover() {
