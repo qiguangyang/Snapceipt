@@ -52,6 +52,12 @@
     "staging": {
       "name": "snapceipt-api-staging",
       "workers_dev": true,
+      // GUARD: a named env that omits `routes` INHERITS the top-level `routes`, which would
+      // bind staging to the PROD custom domain (api.snapceipt.cc) on every `deploy --env
+      // staging` — serving prod traffic from the staging code + isolated staging DB. An
+      // explicit empty list overrides that inheritance so staging is reachable ONLY via its
+      // workers.dev URL. DO NOT remove.
+      "routes": [],
       "observability": { "enabled": true },
       "triggers": { "crons": ["0 * * * *"] },
       "d1_databases": [
