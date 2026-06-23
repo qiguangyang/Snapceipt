@@ -139,47 +139,42 @@ final class CaptureViewModel {
         await task.value
     }
 
-    /// Routes extraction by device capability (on-device Foundation Models) + Smart Scan +
-    /// network, per the behavior matrix:
-    /// - Smart Scan OFF: on-device AI if available (no cloud upgrade), else a manual empty
-    ///   draft ("done"). Never calls the cloud.
-    /// - Smart Scan ON + FM-capable: run FM; a low-confidence result upgrades via the cloud
-    ///   (online) or is left "pending" for the reconciler (offline).
-    /// - Smart Scan ON + non-FM + online: cloud `/extract`.
-    /// - Smart Scan ON + non-FM + offline: an empty "pending" draft queued for the reconciler.
+    /// Routes extraction by the Cloud AI toggle (`smartScanEnabled`; ON = Cloud) + device
+    /// capability (on-device Foundation Models) + network, per the behavior matrix:
+    /// - ON + online: cloud `/extract`.
+    /// - ON + offline + FM: on-device FM; a low-confidence (< 0.8) result is marked "pending"
+    ///   so the reconciler cloud-upgrades it when back online; a confident one stays "done".
+    /// - ON + offline + non-FM: an empty "pending" draft queued for the reconciler.
+    /// - OFF + FM: on-device FM only — the result stands ("done") even if low-confidence
+    ///   (`needsReview` surfaces it). Never cloud, never pending.
+    /// - OFF + non-FM: a manual empty draft ("done"). Never cloud.
     /// Every branch sets `draft`/`diagnostics`, advances `.scanning → .review` (the in-place
     /// refresh guard), and bumps `draftRevision` so an open Review screen re-seeds.
     func extract() async {
         let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
         let started = Date()
-        let smartScan = AppSettings.smartScanEnabled
+        let cloudMode = AppSettings.smartScanEnabled   // toggle ON = Cloud AI
 
-        // Smart Scan OFF: on-device AI if available, else manual entry. Never cloud.
-        if !smartScan {
+        if cloudMode {
+            // Cloud AI: online -> cloud /extract; offline -> on-device FM if available, else queue pending.
+            if isOnline() {
+                await runCloud(capturedAt: capturedAt, started: started)
+            } else if let fm = onDeviceExtractor {
+                await runFoundationModel(fm, capturedAt: capturedAt, started: started, offlineCloudFallback: true)
+            } else {
+                applyPendingDraft(capturedAt: capturedAt, started: started)
+            }
+        } else {
+            // On-device: FM if available, else manual entry. Never cloud.
             if let fm = onDeviceExtractor {
-                await runFoundationModel(fm, capturedAt: capturedAt, started: started, allowCloudUpgrade: false)
+                await runFoundationModel(fm, capturedAt: capturedAt, started: started, offlineCloudFallback: false)
             } else {
                 applyManualDraft(capturedAt: capturedAt, started: started)
             }
-            return
-        }
-
-        // Smart Scan ON.
-        if let fm = onDeviceExtractor {
-            await runFoundationModel(fm, capturedAt: capturedAt, started: started, allowCloudUpgrade: true)
-        } else if isOnline() {
-            await runCloud(capturedAt: capturedAt, started: started)   // existing cloud path
-        } else {
-            // non-FM offline: queue an empty pending draft for the reconciler.
-            applyPendingDraft(capturedAt: capturedAt, started: started)
         }
     }
 
-    /// Run the on-device Foundation Models extractor. On success applies the FM draft; a
-    /// low-confidence result (< 0.8) either upgrades via the cloud in place (online +
-    /// `allowCloudUpgrade`) or is left "pending" for the reconciler. A mid-run FM failure
-    /// (context overflow / availability flip) falls back like a non-FM device.
-    private func runFoundationModel(_ fm: OnDeviceExtracting, capturedAt: String, started: Date, allowCloudUpgrade: Bool) async {
+    private func runFoundationModel(_ fm: OnDeviceExtracting, capturedAt: String, started: Date, offlineCloudFallback: Bool) async {
         do {
             let r = try await fm.extract(ocrText: rawText, layoutText: layoutText, capturedAt: capturedAt)
             if Task.isCancelled || draftUserEdited { return }
@@ -190,19 +185,17 @@ final class CaptureViewModel {
                 stub: nil, capped: nil, confidence: r.confidence)
             if stage == .scanning { stage = .review }
             draftRevision += 1
-            // Low-confidence: upgrade via cloud (online) or queue pending (offline).
-            if r.confidence < 0.8 {
-                if allowCloudUpgrade && isOnline() {
-                    await runCloud(capturedAt: capturedAt, started: started)   // in-place upgrade
-                } else {
-                    draft?.extractionStatus = "pending"
-                }
+            // Cloud mode but offline: queue a low-confidence FM result so the reconciler cloud-upgrades it
+            // when back online. On-device mode: the FM result stands (needsReview surfaces low confidence); never cloud.
+            if offlineCloudFallback && r.confidence < 0.8 {
+                draft?.extractionStatus = "pending"
             }
         } catch {
             if error is CancellationError || Task.isCancelled || draftUserEdited { return }
-            // FM failed (overflow / unavailable mid-run): fall back like a non-FM device.
-            if AppSettings.smartScanEnabled && isOnline() { await runCloud(capturedAt: capturedAt, started: started) }
-            else { applyPendingDraft(capturedAt: capturedAt, started: started) }
+            // FM failed (overflow / unavailable mid-run): cloud mode -> queue pending for the reconciler;
+            // on-device mode -> manual entry. Never cloud here.
+            if offlineCloudFallback { applyPendingDraft(capturedAt: capturedAt, started: started) }
+            else { applyManualDraft(capturedAt: capturedAt, started: started) }
         }
     }
 

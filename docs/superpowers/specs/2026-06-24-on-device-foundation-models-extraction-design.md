@@ -16,16 +16,25 @@ Replace the brittle on-device regex parser (`HeuristicParser`) with **Apple Foun
 
 ## Behavior matrix
 
-| Device | Smart Scan | Network | Behavior |
+> **Supersedes the original FM-first design below.** The `smartScanEnabled` toggle is now
+> surfaced as **"Cloud AI"**: **ON = Cloud mode** (cloud first, on-device only as the offline
+> fallback), **OFF = on-device-only / private mode** (never cloud). Cloud is never used in OFF
+> mode or while offline.
+
+| Toggle (Cloud AI) | Network | Device | Behavior |
 |---|---|---|---|
-| FM-capable | ON | online | FM on-device; if `confidence < UPGRADE_THRESHOLD` → cloud re-extract → in-place upgrade |
-| FM-capable | ON | offline | FM on-device; if low-confidence → mark `pending` → reconciler cloud-upgrades when online |
-| FM-capable | OFF | any | FM on-device only (never cloud) |
-| non-FM | ON | online | cloud (today's `/extract` path) |
-| non-FM | ON | offline | empty/typed draft saved `pending` → reconciler cloud-fills when online |
-| non-FM | OFF | any | manual entry (no AI, no cloud) |
+| ON | online | any | cloud `/extract` (`.deepseek`) |
+| ON | offline | FM-capable | FM on-device; if `confidence < UPGRADE_THRESHOLD` → mark `pending` → reconciler cloud-upgrades when online; else `done` |
+| ON | offline | non-FM | empty draft saved `pending` → reconciler cloud-fills when online |
+| OFF | any | FM-capable | FM on-device only — result stays `done` even if low-confidence (`needsReview` surfaces it). Never cloud, never pending |
+| OFF | any | non-FM | manual empty draft (`done`). No AI, no cloud |
 
 `UPGRADE_THRESHOLD = 0.8` to start (matches the server's `needsReview` line); tune on device.
+
+Key change from the original design: when Cloud AI is ON **and online**, the cloud runs first
+(it is the more accurate engine) — FM is the **offline** fallback, not the first choice. In OFF
+mode an FM result is never escalated to the cloud and never marked `pending`, regardless of
+confidence.
 
 ## Architecture
 
