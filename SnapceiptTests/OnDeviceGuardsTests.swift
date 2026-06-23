@@ -41,6 +41,14 @@ struct OnDeviceGuardsTests {
         #expect(out.total == 0)
     }
 
+    @Test("recovers a printed GST whose decimal was split by OCR (4. 42 -> 4.42)")
+    func recoversSplitDecimalGst() {
+        let out = OnDeviceGuards.reconcile(
+            receipt(total: 48.70, gst: 0),
+            ocrText: "Subtotal 48.20\nGST $4. 42\n* GST Free Item\nTotal 48.68\nCARD (EFTPOS) 48.70")
+        #expect(out.gst == Decimal(string: "4.42"))
+    }
+
     @Test("FMReceipt maps to ExtractedReceipt (Double->Decimal exact, nil date backfills to capturedAt) under guards")
     func fmMapping() {
         let mapped = FoundationModelMapping.toReceipt(

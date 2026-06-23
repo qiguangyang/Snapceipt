@@ -21,9 +21,14 @@ enum OnDeviceGuards {
         var found: Decimal?
         for line in ocrText.split(whereSeparator: \.isNewline) {
             guard line.range(of: #"\bgst\b"#, options: [.regularExpression, .caseInsensitive]) != nil else { continue }
-            let matches = line.matches(of: Self.amountRegex)
+            // OCR sometimes splits a decimal with whitespace ("GST $4. 42"). Collapse only the
+            // space(s) adjacent to a dot that sits BETWEEN digits so the contiguous amount regex
+            // can recover it; nothing else on the line is touched, and the contiguous case is
+            // already a no-op here.
+            let normalized = String(line).replacing(#/(\d)\s*\.\s*(\d)/#) { "\($0.1).\($0.2)" }
+            let matches = normalized.matches(of: Self.amountRegex)
             if let last = matches.last,
-               let v = Decimal(string: String(line[last.range]).replacingOccurrences(of: ",", with: "").replacingOccurrences(of: " ", with: "")) {
+               let v = Decimal(string: String(normalized[last.range]).replacingOccurrences(of: ",", with: "").replacingOccurrences(of: " ", with: "")) {
                 found = v
             }
         }
