@@ -208,6 +208,38 @@ describe("runDeepseekExtraction()", () => {
     expect(out.receipt.needsReview).toBe(false); // arithmetic consistent + high model conf
   });
 
+  it("accepts a valid receipt with date:null (backfills the date) instead of discarding it", async () => {
+    // Regression: the model returns date:null (date in the trimmed footer). Previously the
+    // strict isoDate rejected the whole — otherwise perfect — extraction, forcing a retry and
+    // then the much worse heuristic fallback. Now it is accepted and the date backfills.
+    const withNullDate = JSON.stringify({
+      merchant: "Japan City", date: null, currencyCode: "AUD", total: 48.68, gst: 4.42,
+      category: "meals", deductible: 50,
+      lineItems: [
+        { name: "Udon Fisherman", price: 19.9 },
+        { name: "Wagyu Don", price: 19.9 },
+        { name: "Edamame", price: 4.5 },
+        { name: "Dango", price: 3.9 },
+      ],
+      confidence: 0.85,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse(withNullDate));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await runDeepseekExtraction(ENV, {
+      ocrText: "Japan City\nno date on this receipt\nTOTAL 48.68",
+      source: "scan",
+      defaultDate: "2026-06-20",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);          // accepted on attempt 1, no retry
+    expect(out.meta.usedLlm).toBe(true);                 // the AI result, NOT the heuristic fallback
+    expect(out.receipt.date).toBe("2026-06-20");         // backfilled to capturedAt/today
+    expect(out.receipt.merchant).toBe("Japan City");
+    expect(out.receipt.lineItems.map((l) => l.name)).toContain("Udon Fisherman");
+    expect(out.receipt.lineItems.map((l) => l.name)).not.toContain("ABN"); // no heuristic junk
+  });
+
   it("sends the row-paired layoutText to the model and parses line items from it", async () => {
     // Two-column case: raw OCR order separates names from amounts, so the model must read the
     // row-paired layoutText. Here the model still returns junk; layoutText carries clean rows

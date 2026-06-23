@@ -50,7 +50,11 @@ export type ExtractRequest = z.infer<typeof extractRequestSchema>;
  */
 export const deepseekReceiptSchema = z.object({
   merchant: z.string(),
-  date: isoDate,
+  // Nullable: the date is often in the trimmed footer / faded / ambiguous, so the model
+  // legitimately returns null. Don't reject the whole (otherwise-perfect) extraction over it
+  // — finalize() backfills via detectDate() ?? capturedAt/today. (Before this, a null date
+  // discarded a correct receipt and fell back to the much worse heuristic.)
+  date: isoDate.nullable(),
   currencyCode: z.string().length(3),
   total: z.number().nonnegative(),
   gst: z.number().nullable(),
