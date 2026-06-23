@@ -191,8 +191,9 @@ final class LiveAPIClient: APIClient {
     func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         #if DEBUG
         // J18c offline seam (test-only): when -uiTestOffline is set the live client also
-        // throws a transport error so the capture flow falls back to HeuristicParser +
-        // outbox queue against the REAL backend. Compiled out of Release entirely.
+        // throws a transport error so the capture flow falls back to the queued-for-the-
+        // cloud path (empty draft + outbox queue) against the REAL backend — on-device AI
+        // if available, else queued for the cloud reconciler. Compiled out of Release entirely.
         // Seam scope: only extract/uploadImage are gated — push/pull still reach the live
         // Worker, so the transaction row syncs while just the image + re-extract queue.
         if AppLaunch.current.offline {

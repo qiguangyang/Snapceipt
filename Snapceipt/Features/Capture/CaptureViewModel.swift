@@ -438,10 +438,10 @@ enum AppSettings {
 }
 
 /// Which engine produced the current Review draft, plus timing/confidence, surfaced
-/// on the Review screen so DeepSeek (Smart Scan ON) and the on-device heuristic
-/// (Smart Scan OFF / offline fallback) can be compared back-to-back.
+/// on the Review screen so the cloud reconciler (Smart Scan ON), on-device AI (Apple
+/// Foundation Models), and the queued-for-cloud path can be compared back-to-back.
 struct ScanDiagnostics: Equatable {
-    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic, onDeviceQueued, foundationModel }
+    enum Engine: String, Equatable { case deepseek, onDeviceQueued, foundationModel }
     var engine: Engine
     var model: String?      // meta.model (ON path only)
     var clientMs: Int       // client-measured wall time (all paths)
@@ -456,8 +456,6 @@ struct ScanDiagnostics: Equatable {
         var parts: [String] = []
         switch engine {
         case .deepseek:          parts.append("Snapceipt AI")
-        case .onDeviceHeuristic: parts.append("on-device heuristic")
-        case .offlineHeuristic:  parts.append("on-device (offline)")
         case .onDeviceQueued:    parts.append("on-device · finishing with AI…")
         case .foundationModel:   parts.append("On-device AI")
         }
@@ -467,7 +465,6 @@ struct ScanDiagnostics: Equatable {
         parts.append(String(format: "conf %.2f", confidence))
         if stub == true { parts.append("stub") }
         if capped == true { parts.append("capped") }
-        if engine == .offlineHeuristic { parts.append("queued") }
         return parts.joined(separator: " · ")
     }
 }

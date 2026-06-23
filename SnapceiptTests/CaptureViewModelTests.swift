@@ -208,14 +208,6 @@ struct CaptureViewModelTests {
         #expect(d.summary == "Snapceipt AI · 1 try · 700ms srv · 850ms · conf 0.91")
     }
 
-    @Test("ScanDiagnostics.summary renders the on-device heuristic line")
-    func diagnosticsSummaryHeuristic() {
-        let d = ScanDiagnostics(engine: .onDeviceHeuristic, model: nil,
-                                clientMs: 12, serverMs: nil, attempts: nil,
-                                stub: nil, capped: nil, confidence: 0.55)
-        #expect(d.summary == "on-device heuristic · 12ms · conf 0.55")
-    }
-
     @Test("Smart Scan OFF, non-FM -> manual empty draft, status done, no /extract call, diagnostics onDeviceQueued")
     func smartScanOffUsesHeuristic() async throws {
         defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }

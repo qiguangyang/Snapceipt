@@ -1,7 +1,7 @@
 import Foundation
 
 /// Keyword -> CategoryKey map shared (by value) with src/lib/receiptCategory.ts.
-/// Kept in sync via the golden corpus in HeuristicParserTests / extractionHeuristic.test.ts.
+/// Kept in sync via ReceiptCategoryHeuristicTests / extractionHeuristic.test.ts.
 enum ReceiptCategoryHeuristic {
     private static let table: [(CategoryKey, [String])] = [
         (.groceries, ["woolworths", "coles", "aldi", "iga", "foodland", "costco", "supabarn"]),

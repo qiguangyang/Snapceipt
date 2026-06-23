@@ -44,7 +44,8 @@ final class StubAPIClient: APIClient {
     }
     func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         // J18b offline seam: throw a transport error BEFORE the canned result so the
-        // capture flow falls back to HeuristicParser and enqueues the receipt (outbox).
+        // capture flow falls back to the queued-for-the-cloud path (empty draft) and
+        // enqueues the receipt (outbox) — on-device AI if available, else cloud reconciler.
         // NOTE: `-uiTestOffline` gates only extract/uploadImage — push/pull still succeed,
         // so the transaction row itself syncs; only the image upload + server re-extract
         // are genuinely queued. Reachability.isOnline also stays true (no reconnect flip is
