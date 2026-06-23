@@ -42,7 +42,10 @@ struct CaptureViewModelTests {
                          extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
-        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        // Default these tests to Cloud (ON) — the cloud path (MockAPIClient) is their extraction
+        // vehicle. The product default is now OFF (on-device), so set it explicitly here.
+        // OFF / on-device tests set it false after fixture().
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         let profile = Profile(userId: "u1", name: "Me", type: activeType,
@@ -194,10 +197,10 @@ struct CaptureViewModelTests {
         #expect(vm.savedMode == "business")
     }
 
-    @Test("AppSettings.smartScanEnabled defaults to true when the key is unset")
-    func smartScanDefaultsOn() {
+    @Test("AppSettings.smartScanEnabled defaults to false (on-device) when the key is unset")
+    func smartScanDefaultsOff() {
         UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
-        #expect(AppSettings.smartScanEnabled == true)
+        #expect(AppSettings.smartScanEnabled == false)
     }
 
     @Test("ScanDiagnostics.summary renders the DeepSeek engine line")
@@ -358,7 +361,8 @@ struct CaptureViewModelTests {
     @Test("autosaveOnExitIfScanning() with NO resolvable profile surfaces an error and persists nothing")
     func autosaveOnExitNoProfile() async throws {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
-        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        // Cloud (ON) so the slow extractHandler keeps the scan in .scanning for the autosave.
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         // No profiles inserted -> activeProfile == nil and profiles.isEmpty.

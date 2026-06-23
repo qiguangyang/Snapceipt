@@ -22,9 +22,9 @@ struct ProfileTabView: View {
     @Environment(\.accent) private var accent
     @Environment(\.openURL) private var openURL
 
-    /// Persisted Smart Scan AI toggle (default ON). Controls whether a scan calls
-    /// DeepSeek (`/extract`) or uses the on-device heuristic — see CaptureViewModel.extract().
-    @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = true
+    /// Persisted Cloud AI toggle (default OFF = on-device). ON = cloud DeepSeek (`/extract`);
+    /// OFF = on-device Foundation Models (or manual on older devices) — see CaptureViewModel.extract().
+    @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = false
 
     // Per-row icon tints (from the Claude design): purple categories, green tax.
     // App-group rows use the neutral ink/paper treatment.

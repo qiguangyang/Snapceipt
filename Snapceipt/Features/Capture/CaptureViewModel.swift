@@ -421,11 +421,11 @@ enum AppSettings {
     /// Persisted "Smart Scan AI" toggle key.
     static let smartScanEnabledKey = "sc.smartScan.enabled"
 
-    /// Whether scans use DeepSeek (`/extract`) vs the on-device heuristic.
-    /// Default ON: `UserDefaults.bool` returns false for a missing key, so read
-    /// the object and fall back to `true`.
+    /// Cloud AI toggle: ON = cloud DeepSeek (`/extract`); OFF = on-device Foundation Models
+    /// (or manual on older devices). Default OFF (on-device): private, offline, and on tested
+    /// receipts more accurate than cloud. Missing key falls back to `false`.
     static var smartScanEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? true }
+        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? false }
         set { UserDefaults.standard.set(newValue, forKey: smartScanEnabledKey) }
     }
 }
