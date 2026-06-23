@@ -23,6 +23,10 @@ struct ProfileOption: Identifiable, Equatable {
 final class CaptureViewModel {
     private(set) var stage: CaptureStage = .camera
     var draft: ExtractedReceipt?
+    /// True once the user has edited the draft on the Review screen. When the user taps
+    /// "Review now" the AI keeps running and updates the draft in place — but only while this
+    /// is false, so a late AI result never clobbers edits the user already made.
+    private(set) var draftUserEdited = false
     /// Which engine produced the current draft (Smart Scan ON = DeepSeek, OFF =
     /// on-device heuristic, ON-but-offline = offline heuristic). Read by ReviewStep.
     var diagnostics: ScanDiagnostics?
@@ -101,6 +105,7 @@ final class CaptureViewModel {
     func onScanned(image: UIImage, lines: [RecognizedLine]) async {
         self.capturedImage = image
         self.recognizedLines = lines
+        self.draftUserEdited = false   // fresh scan — the AI result may apply in place
         // The model reads `rawText` (raw observation order) — safest for it, since merging a
         // curved photo can split decimals ("19.90"→"19","90") and merge header lines, which
         // confuses it. `layoutText` reconstructs visual rows (pairs name↔right-column price);
@@ -146,10 +151,11 @@ final class CaptureViewModel {
 
         do {
             let resp = try await api.extract(ocrText: rawText, layoutText: layoutText, source: "scan", capturedAt: capturedAt)
-            // If the user hit "Review now" (or we auto-saved on exit) while this call was
-            // landing, honor that choice — don't overwrite their on-device draft with the
-            // late AI result. Keeps "Review now" deterministic.
-            if Task.isCancelled { return }
+            // Cancelled (saved on exit / dismissed) → drop the result. Edited → the user has
+            // taken over the draft on Review, so don't clobber it. Otherwise the AI result is
+            // applied in place — including when the user tapped "Review now" and is still on
+            // Review, so the screen refreshes from the on-device draft to the AI result.
+            if Task.isCancelled || draftUserEdited { return }
             draft = ExtractedReceipt(response: resp)
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
@@ -160,11 +166,12 @@ final class CaptureViewModel {
                 attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
                 confidence: draft?.confidence ?? 0)
         } catch {
-            // A deliberate cancellation (reviewNow / autosaveOnExitIfScanning / reset)
-            // already set the UI state it wants — do NOT overwrite it with an "offline"
-            // draft. Only a GENUINE transport/decode failure falls back below. This is the
-            // fix for the spurious "offline" that the old catch-all produced on teardown.
-            if error is CancellationError || Task.isCancelled { return }
+            // A deliberate cancellation (autosaveOnExitIfScanning / dismiss / reset) already
+            // set the UI state it wants, and an edited draft is the user's — do NOT overwrite
+            // either with an "offline" draft. Only a GENUINE transport/decode failure on an
+            // untouched draft falls back below. (Also fixes the spurious "offline" the old
+            // catch-all produced on teardown.)
+            if error is CancellationError || Task.isCancelled || draftUserEdited { return }
             // Use the stored recognizedLines (with real bounding boxes) so the
             // offline parser benefits from OCR geometry when available.
             let parsed = HeuristicParser.parse(recognizedLines)
@@ -179,7 +186,10 @@ final class CaptureViewModel {
                 attempts: nil, stub: nil, capped: nil,
                 confidence: draft?.confidence ?? 0)
         }
-        stage = .review
+        // First resolution advances Scan → Review. If the user already tapped "Review now"
+        // (stage == .review) we stay put and only the draft refreshed above; if they've moved
+        // on to .saved, never yank them back.
+        if stage == .scanning { stage = .review }
     }
 
     /// Client-measured wall time in ms (never negative).
@@ -198,6 +208,7 @@ final class CaptureViewModel {
         let capturedAt = ExtractedReceipt.ymd(from: Date())
         draft = ExtractedReceipt(parsed: HeuristicParser.parse(recognizedLines),
                                  capturedAt: capturedAt ?? "")   // defaults to "pending"
+        draftUserEdited = false   // this is the on-device draft, not a user edit
         smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
         diagnostics = ScanDiagnostics(
             engine: .onDeviceQueued, model: nil,
@@ -205,6 +216,22 @@ final class CaptureViewModel {
             attempts: nil, stub: nil, capped: nil,
             confidence: draft?.confidence ?? 0)
         stage = .review
+        // NOTE: do NOT cancel extractTask — let the AI finish and refresh the Review screen in
+        // place (extract() applies the result while draftUserEdited is false). If the user
+        // edits or saves first, those paths stop it (draftUserEdited guard / save() cancels).
+    }
+
+    /// Apply a user edit from the Review screen, marking the draft user-owned so a late AI
+    /// result won't clobber it. Compares first so a spurious binding write (no real change)
+    /// doesn't suppress the in-place AI refresh.
+    func editDraft(_ newDraft: ExtractedReceipt) {
+        if newDraft != draft { draftUserEdited = true }
+        draft = newDraft
+    }
+
+    /// Cancel the in-flight AI extraction (e.g. the user dismissed the Review screen without
+    /// saving) so it doesn't keep running / burn a smart-scan slot. No-op if already done.
+    func cancelExtraction() {
         extractTask?.cancel()
     }
 
@@ -240,6 +267,9 @@ final class CaptureViewModel {
     /// Application Support). Guards on an active profile.
     func save(toProfileId profileId: String? = nil, autoSaved: Bool = false) {
         guard let draft else { return }
+        // The receipt is now persisted; if the AI is still in-flight (saved straight after
+        // "Review now"), stop it — the PendingExtractionReconciler owns the upgrade from here.
+        extractTask?.cancel()
         // File under the chosen profile (Review "Assign to profile"); fall back to the
         // active profile when no explicit target is given (callers/tests that omit it).
         let targetId = profileId ?? profiles.activeProfileId
@@ -321,6 +351,7 @@ final class CaptureViewModel {
     /// Reset to the camera for "Snap another".
     func reset() {
         extractTask?.cancel()
+        draftUserEdited = false
         draft = nil; capturedImage = nil; rawText = ""; layoutText = ""; recognizedLines = []; errorMessage = nil
         diagnostics = nil
         stage = .camera

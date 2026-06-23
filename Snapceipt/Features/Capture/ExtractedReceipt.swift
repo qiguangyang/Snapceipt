@@ -68,7 +68,7 @@ struct ExtractedLineItem: Decodable {
 /// (`paymentMethod`, `taxLabel`) and the local `extractionStatus`. Decodable so the
 /// response's nested `receipt` object decodes straight into it (Codable key
 /// `category` -> `categoryKey`).
-struct ExtractedReceipt: Decodable {
+struct ExtractedReceipt: Decodable, Equatable {
     var merchant: String
     var date: String                 // "YYYY-MM-DD"
     var total: Decimal               // dollars, >= 0
