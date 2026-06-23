@@ -42,6 +42,17 @@ describe("GST reconcile + tail trim + merchant detect", () => {
   it("keeps a valid GST at or under total/11", () => {
     expect(reconcileGst(1.64, 176.98, WOOLIES)).toBe(1.64);
   });
+  it("honors a printed GST slightly above total/11 (surcharge/rounding), not just at/under it", () => {
+    // Yakitori case: GST 11.55 on a 115.50 subtotal, total 117.23 includes a 1.73 surcharge,
+    // so 11.55 > total/11 (10.66) yet is the merchant's printed GST — must be kept, not clamped.
+    const txt = "Subtotal (9) 115.50\nGST 11.55\nVISA 1.73\nTotal 117.23";
+    expect(reconcileGst(11.55, 117.23, txt)).toBe(11.55);
+  });
+  it("still rejects a gross GST mis-read above ~12% of total and clamps to total/11", () => {
+    // A "GST" line carrying an absurd figure (e.g. an ABN/payment grab) is not trusted; with
+    // no valid printed line the model value clamps to total/11.
+    expect(reconcileGst(11.55, 117.23, "GST 88.00\nTotal 117.23")).toBe(10.66); // 117.23/11 rounded
+  });
   it("trims the payment block + promo tail but keeps items + totals", () => {
     const t = trimReceiptTail(WOOLIES);
     expect(t).toContain("Kiwifruit Gold");
@@ -197,9 +208,10 @@ describe("runDeepseekExtraction()", () => {
     expect(out.receipt.needsReview).toBe(false); // arithmetic consistent + high model conf
   });
 
-  it("sends raw ocrText to the model but parses line items from layoutText", async () => {
-    // Curved-photo case: the model is given the raw text and returns junk items (it grabbed
-    // header numbers); layoutText carries clean rows summing to the total, so the parser wins.
+  it("sends the row-paired layoutText to the model and parses line items from it", async () => {
+    // Two-column case: raw OCR order separates names from amounts, so the model must read the
+    // row-paired layoutText. Here the model still returns junk; layoutText carries clean rows
+    // summing to the total, so the deterministic parser wins.
     const junk = JSON.stringify({
       merchant: "Japan City Chatswood",
       date: "2026-06-20",
@@ -235,10 +247,10 @@ describe("runDeepseekExtraction()", () => {
       defaultDate: "2026-06-20",
     });
 
-    // The model saw the RAW text, not the layout text.
+    // The model is given the LAYOUT text (rows pair name↔price), not the scrambled raw order.
     const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(sentBody.messages.at(-1).content).toContain("(Udon) Fisherman\n19.90");
-    expect(sentBody.messages.at(-1).content).not.toContain("19.90  1  19.90");
+    expect(sentBody.messages.at(-1).content).toContain("19.90  1  19.90");
+    expect(sentBody.messages.at(-1).content).not.toContain("ABN: 85 629 947");
     // The deterministic parser (layoutText) reconciled to $48.68 and replaced the junk.
     const names = out.receipt.lineItems.map((li) => li.name);
     expect(names).not.toContain("NSW");
