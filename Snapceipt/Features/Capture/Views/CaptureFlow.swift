@@ -45,8 +45,11 @@ struct CaptureFlow: View {
                          onUseOnDevice: { vm.reviewNow() })
             case .review:
                 if let binding = draftBinding {
+                    // Closing Review without saving cancels any still-running AI extraction
+                    // (e.g. after "Review now") so it doesn't keep working in the background.
                     ReviewStep(draft: binding, selectedProfileId: $selectedProfileId, vm: vm,
-                               onSave: { vm.save(toProfileId: selectedProfileId) }, onClose: onClose)
+                               onSave: { vm.save(toProfileId: selectedProfileId) },
+                               onClose: { vm.cancelExtraction(); onClose() })
                 }
             case .saved:
                 // The summary names the ACTUAL save target (`vm.savedMode`, captured
@@ -73,9 +76,10 @@ struct CaptureFlow: View {
         }
     }
 
-    /// Non-nil binding to the draft once it exists.
+    /// Non-nil binding to the draft once it exists. Writes go through `editDraft` so a user
+    /// edit marks the draft user-owned (a late AI result then won't overwrite it).
     private var draftBinding: Binding<ExtractedReceipt>? {
         guard vm.draft != nil else { return nil }
-        return Binding(get: { vm.draft! }, set: { vm.draft = $0 })
+        return Binding(get: { vm.draft! }, set: { vm.editDraft($0) })
     }
 }

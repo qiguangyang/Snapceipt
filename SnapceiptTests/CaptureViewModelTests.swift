@@ -20,6 +20,18 @@ struct CaptureViewModelTests {
         func reduce(_ image: UIImage) -> Data { Data([0xFF, 0xD8, 0xFF]) }
     }
 
+    /// Lets a test hold a mock /extract call mid-flight, then release it on demand — so we can
+    /// observe the "Review now" on-device state BEFORE the AI lands, then let it land.
+    @MainActor final class Gate {
+        private var cont: CheckedContinuation<Void, Never>?
+        private var opened = false
+        func wait() async {
+            if opened { return }
+            await withCheckedContinuation { cont = $0 }
+        }
+        func open() { opened = true; cont?.resume(); cont = nil }
+    }
+
     private func image() -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { ctx in
             UIColor.gray.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
@@ -254,7 +266,49 @@ struct CaptureViewModelTests {
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.draft?.total == Decimal(string: "22.00"))
         #expect(vm.diagnostics?.engine == .onDeviceQueued)
-        await scan.value   // let the cancelled extraction unwind
+        vm.cancelExtraction()   // reviewNow no longer cancels; stop the in-flight call for the test
+        await scan.value
+    }
+
+    @Test("Review now: when the AI lands it refreshes the open Review screen in place")
+    func reviewNowRefreshesInPlace() async throws {
+        let gate = Gate()
+        let (vm, _, _, _) = try fixture { _, _, _ in
+            await gate.wait()
+            return self.okResponse(merchant: "AICafe")
+        }
+        let scan = Task { await vm.onScanned(image: self.image(), lines: self.zeroLines("WOOLWORTHS\nTOTAL 22.00")) }
+        while vm.stage != .scanning { await Task.yield() }
+        vm.reviewNow()
+        #expect(vm.stage == .review)
+        #expect(vm.draft?.extractionStatus == "pending")
+        #expect(vm.draft?.merchant != "AICafe")          // on-device shown first
+        gate.open()                                       // AI result lands
+        await scan.value
+        #expect(vm.stage == .review)                      // stayed on Review (not yanked)
+        #expect(vm.draft?.merchant == "AICafe")           // refreshed in place
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.diagnostics?.engine == .deepseek)
+    }
+
+    @Test("Review now: a user edit before the AI lands is NOT clobbered by the AI result")
+    func reviewNowEditNotClobbered() async throws {
+        let gate = Gate()
+        let (vm, _, _, _) = try fixture { _, _, _ in
+            await gate.wait()
+            return self.okResponse(merchant: "AICafe")
+        }
+        let scan = Task { await vm.onScanned(image: self.image(), lines: self.zeroLines("WOOLWORTHS\nTOTAL 22.00")) }
+        while vm.stage != .scanning { await Task.yield() }
+        vm.reviewNow()
+        var edited = vm.draft!
+        edited.merchant = "My Edit"
+        vm.editDraft(edited)
+        #expect(vm.draftUserEdited == true)
+        gate.open()                                       // AI lands AFTER the edit
+        await scan.value
+        #expect(vm.draft?.merchant == "My Edit")          // user's edit preserved
+        #expect(vm.diagnostics?.engine == .onDeviceQueued) // AI result discarded
     }
 
     @Test("reviewNow() is a no-op once the AI has already resolved (stage left .scanning)")
