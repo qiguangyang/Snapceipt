@@ -359,7 +359,9 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 
   return {
     merchant: detectMerchant(input.ocrText) ?? r.merchant,
-    date: detectDate(input.ocrText) ?? r.date,
+    // r.date may be null (schema allows it now); backfill from the OCR text, else the
+    // capture date (capturedAt/today) so the wire date is always a valid YYYY-MM-DD.
+    date: detectDate(input.ocrText) ?? r.date ?? input.defaultDate,
     currencyCode: "AUD",
     total,
     gst,
