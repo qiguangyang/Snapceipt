@@ -40,4 +40,21 @@ struct OnDeviceGuardsTests {
         #expect(out.gst == nil)
         #expect(out.total == 0)
     }
+
+    @Test("FMReceipt maps to ExtractedReceipt (Double->Decimal exact, nil date backfills to capturedAt) under guards")
+    func fmMapping() {
+        let mapped = FoundationModelMapping.toReceipt(
+            merchant: "Cafe", date: nil, total: 10.0, gst: 0.91,
+            category: "meals", deductible: 50,
+            items: [("Latte", 5.0), ("Tart", 5.0)], confidence: 0.85,
+            capturedAt: "2026-06-24",
+            ocrText: "Cafe\nGST 0.91\nTotal 10.00")
+        #expect(mapped.merchant == "Cafe")
+        #expect(mapped.date == "2026-06-24")          // nil date backfills to capturedAt
+        #expect(mapped.total == Decimal(string: "10.00"))
+        #expect(mapped.gst == Decimal(string: "0.91"))
+        #expect(mapped.lineItems.count == 2)
+        #expect(mapped.confidence == 0.85)
+        #expect(mapped.needsReview == false)          // confidence 0.85 >= 0.8
+    }
 }
