@@ -246,7 +246,7 @@ struct ProfileTabView: View {
             IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Smart Scan AI").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                Text("Use AI to read receipts").font(.ui(12)).foregroundStyle(Palette.ink3)
+                Text("Use on-device AI when available, otherwise enter details manually.").font(.ui(12)).foregroundStyle(Palette.ink3)
             }
             Spacer()
             Toggle("", isOn: $smartScanEnabled).labelsHidden().tint(Palette.income)

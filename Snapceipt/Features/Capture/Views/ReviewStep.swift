@@ -169,6 +169,15 @@ struct ReviewStep: View {
             Text(body).font(.ui(13)).foregroundStyle(Palette.ink2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier(AccessibilityID.captureReviewBanner)
+            // Queued offline placeholder: an empty "pending" draft (no AI reachable). Tell
+            // the user the AI pass will finish automatically once they reconnect — they can
+            // still fill the fields in by hand right now.
+            if isQueuedPlaceholder {
+                Text("We'll finish this automatically when you're back online.")
+                    .font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier(AccessibilityID.captureReviewQueuedNote)
+            }
         }
         .padding(14)
         .background(
@@ -243,6 +252,16 @@ struct ReviewStep: View {
             RoundedRectangle(cornerRadius: Radius.inner, style: .continuous)
                 .stroke(accent.base.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    /// True when the draft is the empty offline "pending" placeholder: queued for the
+    /// reconciler with nothing extracted yet (no merchant, no items, zero total). Drives
+    /// the "we'll finish this automatically" banner note. Editing any field doesn't flip
+    /// this — only the merchant/items/total emptiness gates it, so a user who starts typing
+    /// keeps the reassurance until they've actually entered something.
+    private var isQueuedPlaceholder: Bool {
+        draft.extractionStatus == "pending"
+            && draft.merchant.isEmpty && draft.lineItems.isEmpty && draft.total == 0
     }
 
     private var bannerTemplate: String {
