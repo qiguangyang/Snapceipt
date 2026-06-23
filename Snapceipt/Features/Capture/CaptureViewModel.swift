@@ -328,6 +328,13 @@ final class CaptureViewModel {
         // The receipt is now persisted; if the AI is still in-flight (saved straight after
         // "Review now"), stop it — the PendingExtractionReconciler owns the upgrade from here.
         extractTask?.cancel()
+        // A queued (`pending`) draft the user never edited — non-FM offline, FM low-confidence
+        // offline, or "Review now" — holds only on-device/heuristic guesses, not trusted user
+        // values. Flag it `autoSaved` so the reconciler FULLY replaces it with the cloud result
+        // (not the classification-only enrich). A user-edited draft (`draftUserEdited`) keeps its
+        // values — the reconciler's enrich path preserves them. The exit-autosave caller already
+        // forces `autoSaved: true`; OR-ing preserves that.
+        let autoSaved = autoSaved || (draft.extractionStatus == "pending" && !draftUserEdited)
         // File under the chosen profile (Review "Assign to profile"); fall back to the
         // active profile when no explicit target is given (callers/tests that omit it).
         let targetId = profileId ?? profiles.activeProfileId
