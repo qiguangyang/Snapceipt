@@ -44,10 +44,22 @@ final class PendingExtractionReconciler {
             let resp = try await api.extract(ocrText: receipt.ocrText, layoutText: nil, source: "scan",
                                              capturedAt: txn.txnDate)
             let r = resp.receipt
+            // Always enrich the classification/GST/deductible from the AI result.
             txn.catKey = r.categoryKey
             txn.gstCents = r.gst.map(ReceiptMapper.cents)
             txn.gstSource = r.gst != nil ? "printed" : nil
             txn.deductiblePct = r.deductible
+            // A receipt auto-saved on exit (mid-scan) was NEVER reviewed, so the AI result
+            // should fully replace the on-device placeholder — including merchant/total/date.
+            // A normal (reviewed) pending txn keeps those: the user saw/confirmed them on
+            // Review, so we must not stomp them — only enrich above. (Line items are left
+            // as-is in both cases; see the spec's deferred follow-up.)
+            if receipt.autoSaved {
+                txn.merchant = r.merchant
+                let magnitude = ReceiptMapper.cents(r.total)
+                txn.amountCents = r.categoryKey == CategoryKey.income.rawValue ? magnitude : -magnitude
+                txn.txnDate = r.date
+            }
             txn.isAi = true
             txn.extractionStatus = "done"
             txn.updatedAt = Epoch.nowMs()

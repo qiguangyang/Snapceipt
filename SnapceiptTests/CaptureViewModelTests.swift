@@ -240,6 +240,96 @@ struct CaptureViewModelTests {
         #expect(vm.diagnostics?.engine == .offlineHeuristic)
     }
 
+    @Test("reviewNow() quits waiting -> review with a PENDING on-device draft + onDeviceQueued diagnostics")
+    func reviewNowQuitsWaiting() async throws {
+        // Handler stays in-flight (cancellable sleep) so we can act mid-scanning.
+        let (vm, _, _, _) = try fixture { _, _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return self.okResponse()
+        }
+        let scan = Task { await vm.onScanned(image: self.image(), lines: self.zeroLines("WOOLWORTHS\nTOTAL 22.00")) }
+        while vm.stage != .scanning { await Task.yield() }
+        vm.reviewNow()
+        #expect(vm.stage == .review)
+        #expect(vm.draft?.extractionStatus == "pending")
+        #expect(vm.draft?.total == Decimal(string: "22.00"))
+        #expect(vm.diagnostics?.engine == .onDeviceQueued)
+        await scan.value   // let the cancelled extraction unwind
+    }
+
+    @Test("reviewNow() is a no-op once the AI has already resolved (stage left .scanning)")
+    func reviewNowNoOpAfterResolved() async throws {
+        let (vm, _, _, _) = try fixture { _, _, _ in self.okResponse(merchant: "Cafe") }
+        await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
+        #expect(vm.stage == .review)
+        #expect(vm.draft?.extractionStatus == "done")
+        vm.reviewNow()   // AI already landed -> must not downgrade
+        #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.draft?.merchant == "Cafe")
+    }
+
+    @Test("autosaveOnExitIfScanning() persists a PENDING receipt flagged autoSaved")
+    func autosaveOnExitPersistsPending() async throws {
+        let (vm, _, sync, ctx) = try fixture { _, _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return self.okResponse()
+        }
+        let scan = Task { await vm.onScanned(image: self.image(), lines: self.zeroLines("WOOLWORTHS\nTOTAL 22.00")) }
+        while vm.stage != .scanning { await Task.yield() }
+        vm.autosaveOnExitIfScanning()
+        let txns = try ctx.fetch(FetchDescriptor<Transaction>())
+        #expect(txns.count == 1)
+        #expect(txns[0].extractionStatus == "pending")
+        #expect(txns[0].source == "scan")
+        let pending = try ctx.fetch(FetchDescriptor<PendingReceipt>())
+        #expect(pending.count == 1)
+        #expect(pending[0].autoSaved == true)
+        #expect(sync.calls.contains { $0.entityType == .transaction })
+        await scan.value
+    }
+
+    @Test("autosaveOnExitIfScanning() is a no-op outside .scanning")
+    func autosaveOnExitNoOpOutsideScanning() async throws {
+        let (vm, _, _, ctx) = try fixture { _, _, _ in self.okResponse() }
+        // Still at .camera (nothing scanned yet) — must not persist anything.
+        vm.autosaveOnExitIfScanning()
+        #expect(try ctx.fetch(FetchDescriptor<Transaction>()).isEmpty)
+    }
+
+    @Test("autosaveOnExitIfScanning() with NO resolvable profile surfaces an error and persists nothing")
+    func autosaveOnExitNoProfile() async throws {
+        UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        // No profiles inserted -> activeProfile == nil and profiles.isEmpty.
+        let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u1")
+        let api = MockAPIClient()
+        api.extractHandler = { _, _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return self.okResponse()
+        }
+        let vm = CaptureViewModel(api: api, reducer: PassReducer(), sync: SpySync(),
+                                  profiles: store, context: ctx, userId: "u1")
+        let scan = Task { await vm.onScanned(image: self.image(), lines: self.zeroLines("X\nTOTAL 1.00")) }
+        while vm.stage != .scanning { await Task.yield() }
+        vm.autosaveOnExitIfScanning()
+        // No profile to file under: must NOT silently persist a half-saved txn, and must
+        // surface a signal rather than dropping the scan into the void.
+        #expect(try ctx.fetch(FetchDescriptor<Transaction>()).isEmpty)
+        #expect(try ctx.fetch(FetchDescriptor<PendingReceipt>()).isEmpty)
+        #expect(vm.errorMessage != nil)
+        await scan.value
+    }
+
+    @Test("ScanDiagnostics.summary renders the on-device queued (finishing with AI) line")
+    func diagnosticsSummaryOnDeviceQueued() {
+        let d = ScanDiagnostics(engine: .onDeviceQueued, model: nil,
+                                clientMs: 9, serverMs: nil, attempts: nil,
+                                stub: nil, capped: nil, confidence: 0.40)
+        #expect(d.summary == "on-device · finishing with AI… · 9ms · conf 0.40")
+    }
+
     @Test("save(toProfileId:) files the txn under the SELECTED profile, not the active one")
     func saveUnderSelectedProfile() async throws {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")

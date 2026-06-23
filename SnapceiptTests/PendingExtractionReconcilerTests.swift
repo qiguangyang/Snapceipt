@@ -53,6 +53,52 @@ struct PendingExtractionReconcilerTests {
         #expect(sync.enqueuedTxnIds == [txn.id])
     }
 
+    @Test("a REVIEWED pending scan (autoSaved=false) keeps merchant/total — only enriches classification")
+    func reviewedKeepsUserValues() async throws {
+        let (ctx, api, sync) = try fixture()
+        // Reviewed placeholder: the user saw "Corner Cafe" / $1.23 on Review before saving.
+        let txn = Transaction(userId: "u1", profileId: "p1", merchant: "Corner Cafe", catKey: "office",
+                              amountCents: -123, txnDate: "2026-05-28",
+                              source: "scan", extractionStatus: "pending")
+        let pr = PendingReceipt(transactionId: txn.id, ocrText: "Corner Cafe\nTOTAL 1.23",
+                                imageLocalPath: "/tmp/x.jpg", width: 1, height: 1, autoSaved: false)
+        ctx.insert(txn); ctx.insert(pr); try ctx.save()
+        api.extractHandler = { _, _, _ in self.okResponse(category: "meals", gst: "0.11", deductible: 50) }
+        await PendingExtractionReconciler(api: api, context: ctx, sync: sync).reconcile()
+        let updated = try ctx.fetch(FetchDescriptor<Transaction>()).first { $0.id == txn.id }!
+        #expect(updated.extractionStatus == "done")
+        #expect(updated.catKey == "meals")          // enriched
+        #expect(updated.gstCents == 11)             // enriched
+        #expect(updated.deductiblePct == 50)        // enriched
+        #expect(updated.isAi == true)
+        // Preserved — the user reviewed these, so the AI result must NOT stomp them.
+        #expect(updated.merchant == "Corner Cafe")
+        #expect(updated.amountCents == -123)
+    }
+
+    @Test("an AUTO-SAVED pending scan (never reviewed) is FULLY replaced by the AI result")
+    func autoSavedFullyReplaced() async throws {
+        let (ctx, api, sync) = try fixture()
+        // Auto-saved on exit: on-device placeholder the user never saw. merchant/total are
+        // the heuristic's guess and SHOULD be overwritten by the AI result.
+        let txn = Transaction(userId: "u1", profileId: "p1", merchant: "??", catKey: "office",
+                              amountCents: -999, txnDate: "2020-01-01",
+                              source: "scan", extractionStatus: "pending")
+        let pr = PendingReceipt(transactionId: txn.id, ocrText: "M\nTOTAL 20.00",
+                                imageLocalPath: "/tmp/x.jpg", width: 1, height: 1, autoSaved: true)
+        ctx.insert(txn); ctx.insert(pr); try ctx.save()
+        api.extractHandler = { _, _, _ in self.okResponse(category: "meals", gst: "1.82", deductible: 50) }
+        await PendingExtractionReconciler(api: api, context: ctx, sync: sync).reconcile()
+        let updated = try ctx.fetch(FetchDescriptor<Transaction>()).first { $0.id == txn.id }!
+        #expect(updated.extractionStatus == "done")
+        #expect(updated.merchant == "M")            // okResponse merchant
+        #expect(updated.amountCents == -2000)       // total 20.00, meals = expense (negative)
+        #expect(updated.txnDate == "2026-05-28")    // okResponse date
+        #expect(updated.catKey == "meals")
+        #expect(updated.gstCents == 182)
+        #expect(updated.isAi == true)
+    }
+
     @Test("after maxExtractionAttempts the scan is marked failed and not re-enqueued")
     func boundedToFailed() async throws {
         struct Boom: Error {}

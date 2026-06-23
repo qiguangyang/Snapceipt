@@ -77,6 +77,12 @@ final class CaptureViewModel {
     @ObservationIgnored private let profiles: ProfilesStore
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private let userId: String
+    /// The in-flight `/extract` call, OWNED by the view-model (not the SwiftUI view that
+    /// kicked off the scan). This decouples the AI wait from view lifecycle: dismissing
+    /// the sheet or a view re-render no longer cancels the call (which the old inline
+    /// `await` turned into a spurious "offline" result). Cancelled deliberately by
+    /// `reviewNow()` / `autosaveOnExitIfScanning()` / `reset()`.
+    @ObservationIgnored private var extractTask: Task<Void, Never>?
 
     init(api: APIClient, reducer: ImageReducing, sync: any SyncEnqueuing,
          profiles: ProfilesStore, context: ModelContext, userId: String) {
@@ -103,7 +109,13 @@ final class CaptureViewModel {
         self.rawText = lines.map(\.text).joined(separator: "\n")
         self.layoutText = ReceiptRows.rows(from: lines).joined(separator: "\n")
         self.stage = .scanning
-        await extract()
+        // Run extraction as an OWNED unstructured task so a torn-down view can't cancel it
+        // (the old inline `await extract()` inherited the view's Task and turned dismissal
+        // into a fake "offline" result). We still await the task's value so `onScanned`'s
+        // completion contract — and the ScanStep→ReviewStep auto-advance — are unchanged.
+        let task = Task { await self.extract() }
+        extractTask = task
+        await task.value
     }
 
     /// ON (Smart Scan): calls `/extract` (DeepSeek); on failure falls back to the
@@ -134,6 +146,10 @@ final class CaptureViewModel {
 
         do {
             let resp = try await api.extract(ocrText: rawText, layoutText: layoutText, source: "scan", capturedAt: capturedAt)
+            // If the user hit "Review now" (or we auto-saved on exit) while this call was
+            // landing, honor that choice — don't overwrite their on-device draft with the
+            // late AI result. Keeps "Review now" deterministic.
+            if Task.isCancelled { return }
             draft = ExtractedReceipt(response: resp)
             smartScanCapped = resp.meta.capped
             smartScanCap = resp.meta.smartScan?.cap
@@ -144,6 +160,11 @@ final class CaptureViewModel {
                 attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
                 confidence: draft?.confidence ?? 0)
         } catch {
+            // A deliberate cancellation (reviewNow / autosaveOnExitIfScanning / reset)
+            // already set the UI state it wants — do NOT overwrite it with an "offline"
+            // draft. Only a GENUINE transport/decode failure falls back below. This is the
+            // fix for the spurious "offline" that the old catch-all produced on teardown.
+            if error is CancellationError || Task.isCancelled { return }
             // Use the stored recognizedLines (with real bounding boxes) so the
             // offline parser benefits from OCR geometry when available.
             let parsed = HeuristicParser.parse(recognizedLines)
@@ -166,12 +187,58 @@ final class CaptureViewModel {
         max(0, Int((Date().timeIntervalSince(start) * 1000).rounded()))
     }
 
+    /// "Review now" (quit waiting): stop waiting for the AI and drop to Review with the
+    /// on-device heuristic, kept `pending` so the reconciler still upgrades it when the AI
+    /// lands. No-op once the AI has already resolved (stage left `.scanning`) — that guard
+    /// makes the button race-safe against an extraction that finishes at the same instant.
+    /// Cancels the in-flight call so it doesn't keep running (or burn a smart-scan slot).
+    func reviewNow() {
+        guard stage == .scanning else { return }
+        let started = Date()
+        let capturedAt = ExtractedReceipt.ymd(from: Date())
+        draft = ExtractedReceipt(parsed: HeuristicParser.parse(recognizedLines),
+                                 capturedAt: capturedAt ?? "")   // defaults to "pending"
+        smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
+        diagnostics = ScanDiagnostics(
+            engine: .onDeviceQueued, model: nil,
+            clientMs: Self.elapsedMs(since: started), serverMs: nil,
+            attempts: nil, stub: nil, capped: nil,
+            confidence: draft?.confidence ?? 0)
+        stage = .review
+        extractTask?.cancel()
+    }
+
+    /// Leaving (close or app background) DURING scanning: persist what we have as a PENDING
+    /// receipt so the scan isn't lost and the reconciler upgrades it to the full AI result
+    /// on its next pass (survives force-kill — it's on disk, flagged `autoSaved` so the
+    /// reconciler does a full replace rather than enrich). No-op outside `.scanning`.
+    func autosaveOnExitIfScanning() {
+        guard stage == .scanning else { return }
+        extractTask?.cancel()
+        // save() needs a profile to file under; if none resolves it returns early WITHOUT
+        // persisting (and there's no UI to surface its errorMessage mid-scan), which would
+        // silently drop the scan — the exact data loss this feature exists to prevent. Guard
+        // here and only proceed when a profile is resolvable. (Rare: profile deleted/rescoped
+        // mid-scan; the app otherwise requires a profile via onboarding.)
+        guard profiles.activeProfile != nil
+            || profiles.profiles.contains(where: { $0.id == profiles.activeProfileId }) else {
+            errorMessage = "No active profile — scan not saved."
+            return
+        }
+        if draft == nil {
+            let capturedAt = ExtractedReceipt.ymd(from: Date())
+            draft = ExtractedReceipt(parsed: HeuristicParser.parse(recognizedLines),
+                                     capturedAt: capturedAt ?? "")   // "pending"
+        }
+        save(autoSaved: true)
+    }
+
     // MARK: Save
 
     /// Persist the (possibly edited) draft: insert the txn + line items, enqueue each
     /// for sync, and create a local-only `PendingReceipt` (writing the reduced JPEG to
     /// Application Support). Guards on an active profile.
-    func save(toProfileId profileId: String? = nil) {
+    func save(toProfileId profileId: String? = nil, autoSaved: Bool = false) {
         guard let draft else { return }
         // File under the chosen profile (Review "Assign to profile"); fall back to the
         // active profile when no explicit target is given (callers/tests that omit it).
@@ -195,7 +262,8 @@ final class CaptureViewModel {
         let (path, width, height) = persistReducedImage(for: txn.id)
         let pending = PendingReceipt(
             transactionId: txn.id, ocrText: rawText,
-            imageLocalPath: path, width: width, height: height)
+            imageLocalPath: path, width: width, height: height,
+            autoSaved: autoSaved)
         context.insert(pending)
         try? context.save()
 
@@ -252,6 +320,7 @@ final class CaptureViewModel {
 
     /// Reset to the camera for "Snap another".
     func reset() {
+        extractTask?.cancel()
         draft = nil; capturedImage = nil; rawText = ""; layoutText = ""; recognizedLines = []; errorMessage = nil
         diagnostics = nil
         stage = .camera
@@ -276,7 +345,7 @@ enum AppSettings {
 /// on the Review screen so DeepSeek (Smart Scan ON) and the on-device heuristic
 /// (Smart Scan OFF / offline fallback) can be compared back-to-back.
 struct ScanDiagnostics: Equatable {
-    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic }
+    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic, onDeviceQueued }
     var engine: Engine
     var model: String?      // meta.model (ON path only)
     var clientMs: Int       // client-measured wall time (all paths)
@@ -293,6 +362,7 @@ struct ScanDiagnostics: Equatable {
         case .deepseek:          parts.append("Snapceipt AI")
         case .onDeviceHeuristic: parts.append("on-device heuristic")
         case .offlineHeuristic:  parts.append("on-device (offline)")
+        case .onDeviceQueued:    parts.append("on-device · finishing with AI…")
         }
         if let attempts { parts.append("\(attempts) try") }
         if let serverMs { parts.append("\(serverMs)ms srv") }

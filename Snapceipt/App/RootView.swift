@@ -469,6 +469,7 @@ struct ShellView: View {
             // it on every launch/activation is safe.
             backfillGstDefaultsForActive()
             await sync.sync()
+            await reconcilePendingExtractions()
         }
         // Re-run the (idempotent) backfill when the active profile changes, so switching to a
         // not-yet-backfilled profile fixes its groceries GST default too.
@@ -478,7 +479,7 @@ struct ShellView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await sync.sync() }
+                Task { await sync.sync(); await reconcilePendingExtractions() }
             }
         }
         // When the network path returns (offline → online), re-sync immediately rather than
@@ -488,6 +489,15 @@ struct ShellView: View {
                 Task { await sync.sync() }
             }
         }
+    }
+
+    /// Re-extract any receipts left "pending" — offline fallback, "Review now", or auto-saved
+    /// on exit during scanning — upgrading them to the AI result. Runs on launch + foreground
+    /// so a pending receipt lands its AI result even if the user never reopens the Snap tab
+    /// (CaptureHost also drains on appear/reconnect). Bounded per pass; lists/detail refresh
+    /// reactively via @Query when the reconciler saves.
+    private func reconcilePendingExtractions() async {
+        await PendingExtractionReconciler(api: captureAPI, context: profiles.context, sync: sync).reconcile()
     }
 
     /// One-time GST-default backfill for the ACTIVE profile (spec §1/§4.2). Idempotent and

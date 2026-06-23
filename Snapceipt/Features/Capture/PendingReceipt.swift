@@ -19,6 +19,12 @@ final class PendingReceipt {
     var uploadState: String
     var uploadAttempts: Int
     var extractionAttempts: Int
+    /// True when the parent txn was auto-saved on exit DURING scanning (the user never
+    /// reviewed it). The reconciler does a FULL field replace from the AI result for these
+    /// placeholders; for normal (reviewed) pending txns it only enriches classification so
+    /// it never stomps a total/merchant the user saw. Property default → safe SwiftData
+    /// migration (see [[swiftdata-migration-gotcha]]).
+    var autoSaved: Bool = false
     var createdAt: Int
 
     init(id: String = Snapceipt.ID.uuidv7(),
@@ -30,6 +36,7 @@ final class PendingReceipt {
          uploadState: String = "pending",
          uploadAttempts: Int = 0,
          extractionAttempts: Int = 0,
+         autoSaved: Bool = false,
          createdAt: Int = Epoch.nowMs()) {
         self.id = id
         self.transactionId = transactionId
@@ -40,6 +47,7 @@ final class PendingReceipt {
         self.uploadState = uploadState
         self.uploadAttempts = uploadAttempts
         self.extractionAttempts = extractionAttempts
+        self.autoSaved = autoSaved
         self.createdAt = createdAt
     }
 }
