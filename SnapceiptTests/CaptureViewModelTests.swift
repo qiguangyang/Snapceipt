@@ -397,6 +397,14 @@ struct CaptureViewModelTests {
         #expect(d.summary == "on-device · finishing with AI… · 9ms · conf 0.40")
     }
 
+    @Test("ScanDiagnostics.summary renders the on-device AI (Foundation Models) line")
+    func diagnosticsSummaryFoundationModel() {
+        let d = ScanDiagnostics(engine: .foundationModel, model: "apple-on-device",
+                                clientMs: 1200, serverMs: nil, attempts: nil,
+                                stub: nil, capped: nil, confidence: 0.88)
+        #expect(d.summary == "On-device AI · 1200ms · conf 0.88")
+    }
+
     @Test("save(toProfileId:) files the txn under the SELECTED profile, not the active one")
     func saveUnderSelectedProfile() async throws {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")

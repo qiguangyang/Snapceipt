@@ -459,7 +459,7 @@ struct ScanDiagnostics: Equatable {
         case .onDeviceHeuristic: parts.append("on-device heuristic")
         case .offlineHeuristic:  parts.append("on-device (offline)")
         case .onDeviceQueued:    parts.append("on-device · finishing with AI…")
-        case .foundationModel:   parts.append("on-device AI")
+        case .foundationModel:   parts.append("On-device AI")
         }
         if let attempts { parts.append("\(attempts) try") }
         if let serverMs { parts.append("\(serverMs)ms srv") }
