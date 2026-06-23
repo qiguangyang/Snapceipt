@@ -198,7 +198,7 @@ describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)",
       .run();
 
     // Stub fetch to always return unparseable content so runDeepseekExtraction
-    // exhausts all 3 attempts and falls back to heuristic (usedLlm: false).
+    // exhausts all attempts and falls back to heuristic (usedLlm: false).
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(

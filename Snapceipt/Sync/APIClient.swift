@@ -204,10 +204,12 @@ final class LiveAPIClient: APIClient {
         let body = ExtractBody(ocrText: ocrText, layoutText: layoutText, source: source,
                                defaultCurrency: "AUD", locale: "en-AU",
                                capturedAt: capturedAt, requestId: ID.uuidv7())
-        // 20s cap (vs URLSession's 60s default): a slow/stuck DeepSeek call falls back to
-        // the on-device heuristic for an instant, editable result — and the receipt is
-        // queued for a background server re-extract, so the AI result still lands later.
-        return try await send("POST", "/extract", body: body, authenticated: true, timeout: 20)
+        // 35s cap: long enough to WAIT for the AI inline (the server is bounded to ~30s —
+        // 2 attempts × 15s — see deepseek.ts), so the normal scan lands the AI result on
+        // Review instead of falling back. The "Review now" button (ScanStep) is the escape
+        // hatch for impatience; a genuine transport failure still falls back to the
+        // on-device heuristic + a pending receipt the reconciler re-extracts later.
+        return try await send("POST", "/extract", body: body, authenticated: true, timeout: 35)
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {

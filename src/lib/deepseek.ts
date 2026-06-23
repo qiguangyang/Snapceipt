@@ -7,8 +7,12 @@ import {
 import { heuristicExtract } from "./extractionHeuristic";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const TIMEOUT_MS = 20_000;
-const MAX_ATTEMPTS = 3;
+// 15s per attempt: a stalled first attempt fails fast while a healthy ~11s call still
+// fits. With MAX_ATTEMPTS=2 the worst case (~30s) stays within the client's 35s /extract
+// budget, so the server never keeps working after the client has already given up and
+// fallen back to the on-device heuristic. See APIClient.extract (timeout: 35).
+const TIMEOUT_MS = 15_000;
+const MAX_ATTEMPTS = 2;
 
 /** Per-category deductible defaults (spec §9), used to backfill when the model omits one. */
 const DEDUCTIBLE_DEFAULTS: Record<string, number | null> = {
@@ -110,7 +114,7 @@ function tryParseReceipt(content: string): DeepseekReceipt | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** One DeepSeek call with a 20s abort budget. Returns the message content, or null on any failure. */
+/** One DeepSeek call with a 15s abort budget. Returns the message content, or null on any failure. */
 async function callDeepseek(
   env: Env,
   model: string,
@@ -380,11 +384,12 @@ export function fallback(input: ExtractionInput): ExtractedReceipt {
 }
 
 /**
- * Run the real DeepSeek extraction with the <=3-attempt validate/retry ladder.
+ * Run the real DeepSeek extraction with the <=2-attempt validate/retry ladder.
  * Attempt 1: base prompt. Attempt 2: corrective re-prompt with the prior raw
- * output ("return valid json"). Attempt 3: same corrective prompt — tryParseReceipt
- * already strips fences / extracts the first {...} on every attempt. On exhaustion,
- * the deterministic heuristic fallback (needsReview:true).
+ * output ("return valid json") — tryParseReceipt already strips fences / extracts
+ * the first {...} on every attempt. On exhaustion, the deterministic heuristic
+ * fallback (needsReview:true). Bounded so the worst case (2×15s) stays within the
+ * client's 35s /extract budget — see APIClient.extract.
  */
 export async function runDeepseekExtraction(env: Env, input: ExtractionInput): Promise<DeepseekResult> {
   // deepseek-chat deprecates 2026-07-24; default is now deepseek-v4-flash.

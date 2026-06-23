@@ -9,6 +9,9 @@ struct ScanStep: View {
     let draft: ExtractedReceipt?
     /// Dismisses the whole capture overlay (cancel affordance during scanning).
     let onClose: () -> Void
+    /// "Review now" — quit waiting for the AI and go straight to Review with the on-device
+    /// result (kept pending so the AI still upgrades it when it lands).
+    let onUseOnDevice: () -> Void
 
     @State private var scanY: CGFloat = 0
     @State private var revealed = 0
@@ -62,9 +65,26 @@ struct ScanStep: View {
             .animation(.easeInOut(duration: 0.25), value: slowHint)
 
             chipRows
+
+            reviewNowButton
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+    }
+
+    /// "Review now" — quit waiting for the AI. Always available during scanning so the user
+    /// is never stuck behind a slow extraction; the receipt stays pending and upgrades to
+    /// the AI result when it lands.
+    private var reviewNowButton: some View {
+        Button(action: onUseOnDevice) {
+            Text("Review now")
+                .font(.ui(14, .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.horizontal, 22)
+                .frame(minHeight: 44)
+                .background(Capsule().stroke(.white.opacity(0.35), lineWidth: 1))
+        }
+        .accessibilityIdentifier(AccessibilityID.captureReviewNow)
     }
 
     private var receiptPreview: some View {

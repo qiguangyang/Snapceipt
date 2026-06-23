@@ -260,29 +260,30 @@ describe("runDeepseekExtraction()", () => {
     expect(out.receipt.category).toBe("meals");
   });
 
-  it("strips ``` fences and extracts the first {…} on attempt 3 before falling back", async () => {
+  it("strips ``` fences and extracts the first {…} on the retry (attempt 2) before falling back", async () => {
     const fenced = "```json\n" + VALID_CONTENT + "\n```";
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(chatResponse("garbage"))
-      .mockResolvedValueOnce(chatResponse("still garbage"))
       .mockResolvedValueOnce(chatResponse(fenced));
     vi.stubGlobal("fetch", fetchMock);
 
     const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // MAX_ATTEMPTS=2: one retry. Attempt 1 invalid, attempt 2 valid (fenced) → success.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(out.receipt.merchant).toBe("The Grounds");
     expect(out.receipt.needsReview).toBe(false);
   });
 
-  it("falls back to the heuristic with needsReview when always invalid (<=3 attempts)", async () => {
+  it("falls back to the heuristic with needsReview when always invalid (<=2 attempts)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(chatResponse("never valid json"));
     vi.stubGlobal("fetch", fetchMock);
 
     const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // MAX_ATTEMPTS=2: both attempts invalid → heuristic fallback.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(out.receipt.needsReview).toBe(true);
     expect(out.receipt.category).toBe("office"); // heuristic fallback default
     expect(out.receipt.deductible).toBe(100);

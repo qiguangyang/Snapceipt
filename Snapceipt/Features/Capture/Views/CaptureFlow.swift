@@ -6,6 +6,7 @@ import SwiftUI
 struct CaptureFlow: View {
     @Bindable var vm: CaptureViewModel
     @Environment(\.accent) private var accent
+    @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
 
     @State private var selectedProfileId: String = ""
@@ -36,7 +37,12 @@ struct CaptureFlow: View {
                         onClose: onClose)
                 }
             case .scanning:
-                ScanStep(image: vm.capturedImage, draft: vm.draft, onClose: onClose)
+                // Closing DURING scanning auto-saves the scan as a pending receipt (it
+                // upgrades to the AI result later), so leaving never loses the scan. The
+                // "Review now" button drops to Review immediately with the on-device result.
+                ScanStep(image: vm.capturedImage, draft: vm.draft,
+                         onClose: { vm.autosaveOnExitIfScanning(); onClose() },
+                         onUseOnDevice: { vm.reviewNow() })
             case .review:
                 if let binding = draftBinding {
                     ReviewStep(draft: binding, selectedProfileId: $selectedProfileId, vm: vm,
@@ -58,6 +64,13 @@ struct CaptureFlow: View {
         // pick any profile by name and the receipt is saved under that choice
         // (`vm.save(toProfileId:)`).
         .onAppear { selectedProfileId = vm.activeProfileId }
+        // "Exit the app won't pause the processing": if the user backgrounds the app while a
+        // scan is still extracting, persist it as a pending receipt (no-op outside .scanning)
+        // so a force-kill never loses it — the reconciler upgrades it to the AI result on
+        // return.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { vm.autosaveOnExitIfScanning() }
+        }
     }
 
     /// Non-nil binding to the draft once it exists.
