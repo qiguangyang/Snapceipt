@@ -182,7 +182,15 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
       // Charge a slot only when DeepSeek actually ran (parity with /extract): a heuristic
       // fallback during an outage is free.
       chargeSlot = out.usedLlm;
-    } catch {
+    } catch (err) {
+      // Surface the failure (it was silently swallowed): which step + the error. OCR threw
+      // if ocrText is still null; otherwise extraction did.
+      console.error(
+        "[email-in] extraction failed",
+        ocrText === null ? "at OCR" : `after OCR (ocrLen=${ocrText.length})`,
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+        err instanceof Error ? (err.stack ?? "") : "",
+      );
       extraction = "failed";
       receipt = failedReceipt(defaultDate);
     }
