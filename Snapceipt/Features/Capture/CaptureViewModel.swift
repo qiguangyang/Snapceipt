@@ -16,8 +16,10 @@ struct ProfileOption: Identifiable, Equatable {
 }
 
 /// Drives snap → OCR → extract → review → save. `@MainActor`; all deps injected as
-/// protocols so it is unit-testable with mocks. Never dead-ends offline: a failed
-/// `/extract` falls back to the on-device `HeuristicParser`.
+/// protocols so it is unit-testable with mocks. Extraction is ROUTED by device capability
+/// (on-device Foundation Models) + Smart Scan + network: see `extract()`. Never dead-ends
+/// offline — when no AI result is available it queues an empty "pending" draft for the
+/// reconciler instead.
 @Observable
 @MainActor
 final class CaptureViewModel {
@@ -50,9 +52,9 @@ final class CaptureViewModel {
     var confidence: Double { draft?.confidence ?? 0 }
     var needsReview: Bool { draft?.needsReview ?? true }
 
-    /// True when the saved receipt came from the offline HeuristicParser fallback
-    /// (`/extract` was unreachable) and is therefore queued in the outbox awaiting a
-    /// reconnect drain + server re-extract. Drives the Saved-step "Queued" badge (J18b).
+    /// True when the saved receipt is queued ("pending") for a later AI pass — an empty
+    /// offline draft (no AI reachable) or a low-confidence on-device result left for the
+    /// reconciler's reconnect drain + re-extract. Drives the Saved-step "Queued" badge (J18b).
     var isQueued: Bool { draft?.extractionStatus == "pending" }
 
     /// True when the last `/extract` call was served from the heuristic fallback
@@ -92,15 +94,24 @@ final class CaptureViewModel {
     /// `await` turned into a spurious "offline" result). Cancelled deliberately by
     /// `reviewNow()` / `autosaveOnExitIfScanning()` / `reset()`.
     @ObservationIgnored private var extractTask: Task<Void, Never>?
+    /// On-device extraction engine (Foundation Models). Nil on non-FM devices, in which
+    /// case the router falls back to the cloud `/extract` (online) or an empty queued draft.
+    @ObservationIgnored private let onDeviceExtractor: OnDeviceExtracting?
+    /// Network reachability probe. Injected so the router is testable without a real
+    /// `Reachability`; defaults to "always online" so existing call sites are unaffected.
+    @ObservationIgnored private let isOnline: () -> Bool
 
     init(api: APIClient, reducer: ImageReducing, sync: any SyncEnqueuing,
-         profiles: ProfilesStore, context: ModelContext, userId: String) {
+         profiles: ProfilesStore, context: ModelContext, userId: String,
+         onDeviceExtractor: OnDeviceExtracting? = nil, isOnline: @escaping () -> Bool = { true }) {
         self.api = api
         self.reducer = reducer
         self.sync = sync
         self.profiles = profiles
         self.context = context
         self.userId = userId
+        self.onDeviceExtractor = onDeviceExtractor
+        self.isOnline = isOnline
     }
 
     // MARK: Capture
@@ -128,76 +139,116 @@ final class CaptureViewModel {
         await task.value
     }
 
-    /// ON (Smart Scan): calls `/extract` (DeepSeek); on failure falls back to the
-    /// on-device heuristic (status "pending", queued for re-extract). OFF: runs the
-    /// on-device heuristic directly with status "done" (never re-extracted) and makes
-    /// no network call. Every branch records `diagnostics` and ends at `.review`.
+    /// Routes extraction by device capability (on-device Foundation Models) + Smart Scan +
+    /// network, per the behavior matrix:
+    /// - Smart Scan OFF: on-device AI if available (no cloud upgrade), else a manual empty
+    ///   draft ("done"). Never calls the cloud.
+    /// - Smart Scan ON + FM-capable: run FM; a low-confidence result upgrades via the cloud
+    ///   (online) or is left "pending" for the reconciler (offline).
+    /// - Smart Scan ON + non-FM + online: cloud `/extract`.
+    /// - Smart Scan ON + non-FM + offline: an empty "pending" draft queued for the reconciler.
+    /// Every branch sets `draft`/`diagnostics`, advances `.scanning → .review` (the in-place
+    /// refresh guard), and bumps `draftRevision` so an open Review screen re-seeds.
     func extract() async {
-        let capturedAt = ExtractedReceipt.ymd(from: Date())
+        let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
         let started = Date()
+        let smartScan = AppSettings.smartScanEnabled
 
-        guard AppSettings.smartScanEnabled else {
-            // Deliberate OFF: on-device heuristic, FINAL ("done") so the reconciler
-            // never re-runs DeepSeek over it. No network, no smart-scan slot.
-            let parsed = HeuristicParser.parse(recognizedLines)
-            draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "",
-                                     extractionStatus: "done")
-            smartScanCapped = false
-            smartScanCap = nil
-            smartScanUsed = nil
-            diagnostics = ScanDiagnostics(
-                engine: .onDeviceHeuristic, model: nil,
-                clientMs: Self.elapsedMs(since: started), serverMs: nil,
-                attempts: nil, stub: nil, capped: nil,
-                confidence: draft?.confidence ?? 0)
-            stage = .review
+        // Smart Scan OFF: on-device AI if available, else manual entry. Never cloud.
+        if !smartScan {
+            if let fm = onDeviceExtractor {
+                await runFoundationModel(fm, capturedAt: capturedAt, started: started, allowCloudUpgrade: false)
+            } else {
+                applyManualDraft(capturedAt: capturedAt, started: started)
+            }
             return
         }
 
+        // Smart Scan ON.
+        if let fm = onDeviceExtractor {
+            await runFoundationModel(fm, capturedAt: capturedAt, started: started, allowCloudUpgrade: true)
+        } else if isOnline() {
+            await runCloud(capturedAt: capturedAt, started: started)   // existing cloud path
+        } else {
+            // non-FM offline: queue an empty pending draft for the reconciler.
+            applyPendingDraft(capturedAt: capturedAt, started: started)
+        }
+    }
+
+    /// Run the on-device Foundation Models extractor. On success applies the FM draft; a
+    /// low-confidence result (< 0.8) either upgrades via the cloud in place (online +
+    /// `allowCloudUpgrade`) or is left "pending" for the reconciler. A mid-run FM failure
+    /// (context overflow / availability flip) falls back like a non-FM device.
+    private func runFoundationModel(_ fm: OnDeviceExtracting, capturedAt: String, started: Date, allowCloudUpgrade: Bool) async {
+        do {
+            let r = try await fm.extract(ocrText: rawText, layoutText: layoutText, capturedAt: capturedAt)
+            if Task.isCancelled || draftUserEdited { return }
+            draft = r
+            smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
+            diagnostics = ScanDiagnostics(engine: .foundationModel, model: "apple-on-device",
+                clientMs: Self.elapsedMs(since: started), serverMs: nil, attempts: nil,
+                stub: nil, capped: nil, confidence: r.confidence)
+            if stage == .scanning { stage = .review }
+            draftRevision += 1
+            // Low-confidence: upgrade via cloud (online) or queue pending (offline).
+            if r.confidence < 0.8 {
+                if allowCloudUpgrade && isOnline() {
+                    await runCloud(capturedAt: capturedAt, started: started)   // in-place upgrade
+                } else {
+                    draft?.extractionStatus = "pending"
+                }
+            }
+        } catch {
+            if error is CancellationError || Task.isCancelled || draftUserEdited { return }
+            // FM failed (overflow / unavailable mid-run): fall back like a non-FM device.
+            if AppSettings.smartScanEnabled && isOnline() { await runCloud(capturedAt: capturedAt, started: started) }
+            else { applyPendingDraft(capturedAt: capturedAt, started: started) }
+        }
+    }
+
+    /// The cloud `/extract` path (success sets the AI draft + `.deepseek` diagnostics; a
+    /// genuine error → an empty pending draft). Used both as the primary non-FM path and as
+    /// the FM low-confidence upgrade. Preserves the cancel/edit guards so a torn-down view or
+    /// a user edit never gets clobbered by a late result.
+    private func runCloud(capturedAt: String, started: Date) async {
         do {
             let resp = try await api.extract(ocrText: rawText, layoutText: layoutText, source: "scan", capturedAt: capturedAt)
-            // Cancelled (saved on exit / dismissed) → drop the result. Edited → the user has
-            // taken over the draft on Review, so don't clobber it. Otherwise the AI result is
-            // applied in place — including when the user tapped "Review now" and is still on
-            // Review, so the screen refreshes from the on-device draft to the AI result.
             if Task.isCancelled || draftUserEdited { return }
             draft = ExtractedReceipt(response: resp)
-            smartScanCapped = resp.meta.capped
-            smartScanCap = resp.meta.smartScan?.cap
-            smartScanUsed = resp.meta.smartScan?.used
-            diagnostics = ScanDiagnostics(
-                engine: .deepseek, model: resp.meta.model,
+            smartScanCapped = resp.meta.capped; smartScanCap = resp.meta.smartScan?.cap; smartScanUsed = resp.meta.smartScan?.used
+            diagnostics = ScanDiagnostics(engine: .deepseek, model: resp.meta.model,
                 clientMs: Self.elapsedMs(since: started), serverMs: resp.meta.latencyMs,
                 attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
                 confidence: draft?.confidence ?? 0)
+            if stage == .scanning { stage = .review }
+            draftRevision += 1
         } catch {
-            // A deliberate cancellation (autosaveOnExitIfScanning / dismiss / reset) already
-            // set the UI state it wants, and an edited draft is the user's — do NOT overwrite
-            // either with an "offline" draft. Only a GENUINE transport/decode failure on an
-            // untouched draft falls back below. (Also fixes the spurious "offline" the old
-            // catch-all produced on teardown.)
             if error is CancellationError || Task.isCancelled || draftUserEdited { return }
-            // Use the stored recognizedLines (with real bounding boxes) so the
-            // offline parser benefits from OCR geometry when available.
-            let parsed = HeuristicParser.parse(recognizedLines)
-            draft = ExtractedReceipt(parsed: parsed, capturedAt: capturedAt ?? "")
-            // Offline/transport failure — not a cap situation; reset all signals.
-            smartScanCapped = false
-            smartScanCap = nil
-            smartScanUsed = nil
-            diagnostics = ScanDiagnostics(
-                engine: .offlineHeuristic, model: nil,
-                clientMs: Self.elapsedMs(since: started), serverMs: nil,
-                attempts: nil, stub: nil, capped: nil,
-                confidence: draft?.confidence ?? 0)
+            applyPendingDraft(capturedAt: capturedAt, started: started)
         }
-        // First resolution advances Scan → Review. If the user already tapped "Review now"
-        // (stage == .review) we stay put and only the draft refreshed above; if they've moved
-        // on to .saved, never yank them back.
+    }
+
+    /// Seed an empty "pending" draft (queued for the reconciler) when no AI result is
+    /// available — non-FM offline, or a cloud/FM failure on an untouched draft.
+    private func applyPendingDraft(capturedAt: String, started: Date) {
+        draft = .empty(capturedAt: capturedAt, extractionStatus: "pending")
+        smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
+        diagnostics = ScanDiagnostics(engine: .onDeviceQueued, model: nil,
+            clientMs: Self.elapsedMs(since: started), serverMs: nil, attempts: nil,
+            stub: nil, capped: nil, confidence: 0)
         if stage == .scanning { stage = .review }
-        // Signal that the draft was replaced (success or offline fallback) so a Review screen
-        // already open via "Review now" re-seeds its editable rows + total from the new draft.
-        // (Cancelled / user-edited paths return early above and never reach here.)
+        draftRevision += 1
+    }
+
+    /// Seed an empty "done" draft for manual entry (Smart Scan OFF, no on-device AI) so the
+    /// reconciler never re-extracts it.
+    private func applyManualDraft(capturedAt: String, started: Date) {
+        draft = .empty(capturedAt: capturedAt, extractionStatus: "done")
+        smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
+        diagnostics = ScanDiagnostics(engine: .onDeviceQueued, model: nil,
+            clientMs: Self.elapsedMs(since: started), serverMs: nil, attempts: nil,
+            stub: nil, capped: nil, confidence: 0)
+        if stage == .scanning { stage = .review }
         draftRevision += 1
     }
 
@@ -214,9 +265,8 @@ final class CaptureViewModel {
     func reviewNow() {
         guard stage == .scanning else { return }
         let started = Date()
-        let capturedAt = ExtractedReceipt.ymd(from: Date())
-        draft = ExtractedReceipt(parsed: HeuristicParser.parse(recognizedLines),
-                                 capturedAt: capturedAt ?? "")   // defaults to "pending"
+        let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
+        draft = .empty(capturedAt: capturedAt, extractionStatus: "pending")   // AI refreshes in place
         draftUserEdited = false   // this is the on-device draft, not a user edit
         smartScanCapped = false; smartScanCap = nil; smartScanUsed = nil
         diagnostics = ScanDiagnostics(
@@ -262,9 +312,8 @@ final class CaptureViewModel {
             return
         }
         if draft == nil {
-            let capturedAt = ExtractedReceipt.ymd(from: Date())
-            draft = ExtractedReceipt(parsed: HeuristicParser.parse(recognizedLines),
-                                     capturedAt: capturedAt ?? "")   // "pending"
+            let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
+            draft = .empty(capturedAt: capturedAt, extractionStatus: "pending")
         }
         save(autoSaved: true)
     }
@@ -385,7 +434,7 @@ enum AppSettings {
 /// on the Review screen so DeepSeek (Smart Scan ON) and the on-device heuristic
 /// (Smart Scan OFF / offline fallback) can be compared back-to-back.
 struct ScanDiagnostics: Equatable {
-    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic, onDeviceQueued }
+    enum Engine: String, Equatable { case deepseek, onDeviceHeuristic, offlineHeuristic, onDeviceQueued, foundationModel }
     var engine: Engine
     var model: String?      // meta.model (ON path only)
     var clientMs: Int       // client-measured wall time (all paths)
@@ -403,6 +452,7 @@ struct ScanDiagnostics: Equatable {
         case .onDeviceHeuristic: parts.append("on-device heuristic")
         case .offlineHeuristic:  parts.append("on-device (offline)")
         case .onDeviceQueued:    parts.append("on-device · finishing with AI…")
+        case .foundationModel:   parts.append("on-device AI")
         }
         if let attempts { parts.append("\(attempts) try") }
         if let serverMs { parts.append("\(serverMs)ms srv") }

@@ -114,7 +114,7 @@ struct CaptureViewModelTests {
         #expect(vm.draft?.needsReview == false)
     }
 
-    @Test("extract failure -> heuristic fallback draft, pending + needsReview, still reaches review")
+    @Test("extract failure (non-FM, online) -> empty pending draft, needsReview, still reaches review")
     func failurePathFallsBack() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
@@ -122,7 +122,9 @@ struct CaptureViewModelTests {
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.draft?.needsReview == true)
-        #expect(vm.draft?.total == Decimal(string: "22.00"))
+        // New contract: no on-device heuristic — a cloud failure queues an EMPTY pending draft.
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.draft?.total == 0)
     }
 
     @Test("save inserts the txn + line items, enqueues each, creates a PendingReceipt, -> saved")
@@ -214,7 +216,7 @@ struct CaptureViewModelTests {
         #expect(d.summary == "on-device heuristic · 12ms · conf 0.55")
     }
 
-    @Test("Smart Scan OFF -> on-device heuristic, status done, no /extract call, diagnostics onDeviceHeuristic")
+    @Test("Smart Scan OFF, non-FM -> manual empty draft, status done, no /extract call, diagnostics onDeviceQueued")
     func smartScanOffUsesHeuristic() async throws {
         defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }
         // The handler must NOT be invoked when Smart Scan is OFF.
@@ -227,9 +229,12 @@ struct CaptureViewModelTests {
         await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
         #expect(vm.stage == .review)
         #expect(api.extractCalls.isEmpty)
+        // New contract: no on-device heuristic — Smart Scan OFF (non-FM) seeds an EMPTY
+        // "done" draft for manual entry (the reconciler never re-extracts it).
         #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.draft?.merchant == "")
         #expect(vm.draft?.needsReview == true)
-        #expect(vm.diagnostics?.engine == .onDeviceHeuristic)
+        #expect(vm.diagnostics?.engine == .onDeviceQueued)
     }
 
     @Test("Smart Scan ON success -> diagnostics deepseek with model/attempts from meta, status done")
@@ -243,16 +248,18 @@ struct CaptureViewModelTests {
         #expect(vm.diagnostics?.attempts == 1)
     }
 
-    @Test("Smart Scan ON failure -> offline heuristic, status pending, diagnostics offlineHeuristic")
+    @Test("Smart Scan ON failure (non-FM) -> empty pending draft, diagnostics onDeviceQueued")
     func smartScanOnFailureDiagnostics() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
         await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        // New contract: a cloud failure (no on-device heuristic) queues an EMPTY pending draft.
         #expect(vm.draft?.extractionStatus == "pending")
-        #expect(vm.diagnostics?.engine == .offlineHeuristic)
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.diagnostics?.engine == .onDeviceQueued)
     }
 
-    @Test("reviewNow() quits waiting -> review with a PENDING on-device draft + onDeviceQueued diagnostics")
+    @Test("reviewNow() quits waiting -> review with an EMPTY PENDING draft + onDeviceQueued diagnostics")
     func reviewNowQuitsWaiting() async throws {
         // Handler stays in-flight (cancellable sleep) so we can act mid-scanning.
         let (vm, _, _, _) = try fixture { _, _, _ in
@@ -264,7 +271,10 @@ struct CaptureViewModelTests {
         vm.reviewNow()
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
-        #expect(vm.draft?.total == Decimal(string: "22.00"))
+        // New contract: no on-device heuristic — "Review now" drops to an EMPTY pending draft;
+        // the AI refreshes it in place when it lands.
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.draft?.total == 0)
         #expect(vm.diagnostics?.engine == .onDeviceQueued)
         vm.cancelExtraction()   // reviewNow no longer cancels; stop the in-flight call for the test
         await scan.value
