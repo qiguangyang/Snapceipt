@@ -99,6 +99,25 @@ struct PendingExtractionReconcilerTests {
         #expect(updated.isAi == true)
     }
 
+    @Test("a queued pending receipt (autoSaved) is fully replaced by the cloud result")
+    func queuedFullyReplaced() async throws {
+        let (ctx, api, sync) = try fixture()
+        // Sentinel txnDate ("1970-01-01") proves the post-replace date was overwritten.
+        let txn = Transaction(userId: "u1", profileId: "p1", merchant: "", catKey: "office",
+                              amountCents: 0, txnDate: "1970-01-01", source: "scan", extractionStatus: "pending")
+        let pr = PendingReceipt(transactionId: txn.id, ocrText: "M\nTOTAL 20.00",
+                                imageLocalPath: "/tmp/x.jpg", width: 1, height: 1, autoSaved: true)
+        ctx.insert(txn); ctx.insert(pr); try ctx.save()
+        api.extractHandler = { _,_,_ in self.okResponse(category: "meals", gst: "1.82", deductible: 50) }
+        await PendingExtractionReconciler(api: api, context: ctx, sync: sync).reconcile()
+        let u = try ctx.fetch(FetchDescriptor<Transaction>()).first { $0.id == txn.id }!
+        #expect(u.extractionStatus == "done")   // reconciler ran to completion
+        #expect(u.merchant == "M")              // full replace
+        #expect(u.amountCents == -2000)
+        #expect(u.txnDate == "2026-05-28")      // okResponse date overwrote the sentinel
+        #expect(u.catKey == "meals")            // okResponse category
+    }
+
     @Test("after maxExtractionAttempts the scan is marked failed and not re-enqueued")
     func boundedToFailed() async throws {
         struct Boom: Error {}

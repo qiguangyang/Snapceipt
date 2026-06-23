@@ -22,8 +22,10 @@ struct AppLaunch {
     let pro: Bool
     let cannedNeedsReview: Bool
     /// Test seam (`-uiTestOffline`): the API client throws a transport error on
-    /// `extract`/`uploadImage`, forcing the capture flow's `HeuristicParser` fallback +
-    /// outbox queue exactly as a real offline capture would. Drives J18b/J18c.
+    /// `extract`/`uploadImage`, forcing the capture flow's queued-for-the-cloud
+    /// fallback (empty draft + outbox queue) exactly as a real offline capture
+    /// would — on-device AI if available, else queued for the cloud reconciler.
+    /// Drives J18b/J18c.
     let offline: Bool
     /// Test seam (`-uiTestPushReject`): the stub `syncPush` throws a 422 contract
     /// rejection so `SyncEngine` marks the batch failed and surfaces `.error`.

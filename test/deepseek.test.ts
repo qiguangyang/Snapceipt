@@ -155,6 +155,60 @@ describe("parseStructuredLineItems", () => {
   });
 });
 
+/** Coles Local layout: per-unit ("2 @ $2.75 EACH") and per-kg ("1.261 kg NET @ $4.50/kg")
+ * sub-lines have NO trailing line-total (their amount is a unit price); a bare "EFT $34.87"
+ * payment line. All three must be skipped, leaving the 6 real items that sum to 34.87. */
+const COLES_LOCAL = [
+  "Coles Supermarkets Australia Pty Ltd",
+  "Tax Invoice ABN: 45 004 189 708",
+  "coles local",
+  "Store: 852 - CS CHATSWOOD",
+  "Store Manager: Jay",
+  "Phone: 02 8216 4000",
+  "Served By: Assisted Checkout",
+  "Register: 111 Receipt: 9098",
+  "Date: 20/06/2026 Time: 19:04",
+  "Description $",
+  "* RAW C PURE NATURAL C 1LITRE 5.50",
+  "2 @ $2.75 EACH",
+  "% ORAL B DENTAL FLOSS 50METRE 4.00",
+  "BLUEBERRIES 125GRAM 5.50",
+  "BLACKBERRIES 125GRAM 5.00",
+  "KRAFT BLUEY CHEESE S 200GRAM 9.20",
+  "BANANAS PERKG 5.67",
+  "1.261 kg NET @ $4.50/kg",
+  "Total for 7 items: $34.87",
+  "EFT $34.87",
+  "GST INCLUDED IN TOTAL $0.36",
+].join("\n");
+
+describe("parseStructuredLineItems — Coles Local (skips unit/per-kg sub-lines + EFT)", () => {
+  const items = parseStructuredLineItems(COLES_LOCAL);
+
+  it("returns EXACTLY the 6 real items with their prices, summing to 34.87", () => {
+    expect(items).toEqual([
+      { name: "RAW C PURE NATURAL C 1LITRE", price: 5.5 },
+      { name: "% ORAL B DENTAL FLOSS 50METRE", price: 4.0 },
+      { name: "BLUEBERRIES 125GRAM", price: 5.5 },
+      { name: "BLACKBERRIES 125GRAM", price: 5.0 },
+      { name: "KRAFT BLUEY CHEESE S 200GRAM", price: 9.2 },
+      { name: "BANANAS PERKG", price: 5.67 },
+    ]);
+    const sum = items.reduce((a, i) => a + i.price, 0);
+    expect(Math.abs(sum - 34.87)).toBeLessThan(0.005);
+  });
+
+  it("drops the per-unit sub-line, the per-kg sub-line, and the EFT payment line", () => {
+    const names = items.map((i) => i.name);
+    expect(names.some((n) => /2 @ \$2\.75 EACH/i.test(n))).toBe(false);
+    expect(names.some((n) => /\/kg/i.test(n))).toBe(false);
+    expect(names.some((n) => /\beft\b/i.test(n))).toBe(false);
+    // the 2.75 unit price and the 4.50 per-kg price never become item prices
+    expect(items.some((i) => i.price === 2.75)).toBe(false);
+    expect(items.some((i) => i.price === 4.5)).toBe(false);
+  });
+});
+
 const ENV = {
   DEEPSEEK_API_KEY: "sk-test",
   DEEPSEEK_MODEL: "deepseek-chat",

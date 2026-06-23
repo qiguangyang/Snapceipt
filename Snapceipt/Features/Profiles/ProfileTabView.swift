@@ -22,9 +22,9 @@ struct ProfileTabView: View {
     @Environment(\.accent) private var accent
     @Environment(\.openURL) private var openURL
 
-    /// Persisted Smart Scan AI toggle (default ON). Controls whether a scan calls
-    /// DeepSeek (`/extract`) or uses the on-device heuristic — see CaptureViewModel.extract().
-    @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = true
+    /// Persisted Cloud AI toggle (default OFF = on-device). ON = cloud DeepSeek (`/extract`);
+    /// OFF = on-device Foundation Models (or manual on older devices) — see CaptureViewModel.extract().
+    @AppStorage(AppSettings.smartScanEnabledKey) private var smartScanEnabled = false
 
     // Per-row icon tints (from the Claude design): purple categories, green tax.
     // App-group rows use the neutral ink/paper treatment.
@@ -245,8 +245,8 @@ struct ProfileTabView: View {
         HStack(spacing: 12) {
             IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Smart Scan AI").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                Text("Use AI to read receipts").font(.ui(12)).foregroundStyle(Palette.ink3)
+                Text("Cloud AI").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                Text("On: most accurate, uses the internet (offline uses on-device AI). Off: on-device only — private and works offline.").font(.ui(12)).foregroundStyle(Palette.ink3)
             }
             Spacer()
             Toggle("", isOn: $smartScanEnabled).labelsHidden().tint(Palette.income)

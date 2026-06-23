@@ -265,7 +265,7 @@ function isNoiseItem(name: string): boolean {
   if (n.length < 2) return true;
   if (/^\d[\d ]{7,}$/.test(n)) return true; // barcode / id digits
   if (/^[a-z]?-?\d{3,}\b/i.test(n)) return true; // terminal/card refs like "X-2834"
-  return /\b(sub ?total|total|eftpos|balance|change|approved|redemption|merch|term id|card|tendered|rounding|you saved|present your|coupon|t&cs?)\b/i.test(
+  return /\b(sub ?total|total|eft(?:pos)?|balance|change|approved|redemption|merch|term id|card|tendered|rounding|you saved|present your|coupon|t&cs?)\b/i.test(
     n,
   );
 }
@@ -279,10 +279,16 @@ export function parseStructuredLineItems(text: string): { name: string; price: n
   const amountRe = /(-?\d{1,3}(?:[, ]\d{3})*\.\d{2})/g;
   const detailRe = /\bkg\b.*@|@\s*\$?\d|\bqty\s+\d|\beach\b|\/kg/i;
   const noiseRe =
-    /\b(sub ?total|total|gst|abn|tax invoice|eftpos|balance|change|approved|redemption|merch|term id|card|you saved|promotional|count of items|rounding|description)\b/i;
+    /\b(sub ?total|total|gst|abn|tax invoice|eft(?:pos)?|balance|change|approved|redemption|merch|term id|card|you saved|promotional|count of items|rounding|description)\b/i;
   const lastAmount = (s: string): number | null => {
     const m = [...s.matchAll(amountRe)];
     return m.length ? parseFloat(m[m.length - 1][1].replace(/[, ]/g, "")) : null;
+  };
+  // A genuine line-total sits at the very END of the line (e.g. "... @ $10.90/kg 10.65" -> 10.65).
+  // A detail/sub-line whose only amount is a UNIT price ends in "EACH"/"/kg" and has none.
+  const trailingAmount = (s: string): number | null => {
+    const m = s.match(/(-?\d{1,3}(?:[, ]\d{3})*\.\d{2})\s*$/);
+    return m ? parseFloat(m[1].replace(/[, ]/g, "")) : null;
   };
   const strip = (s: string): string =>
     s
@@ -298,13 +304,24 @@ export function parseStructuredLineItems(text: string): { name: string; price: n
       pendingName = null;
       continue;
     }
+    if (detailRe.test(line)) {
+      // Per-unit/per-kg/qty detail line. Only a TRAILING line-total makes it an item; a
+      // sub-line whose only amount is a unit price ("2 @ $2.75 EACH", "1.261 kg NET @ $4.50/kg")
+      // has none — skip it (don't push, don't consume the pendingName).
+      const total = trailingAmount(line);
+      if (total == null) continue;
+      const name = pendingName ?? strip(line);
+      if (name.length >= 2) items.push({ name, price: total });
+      pendingName = null;
+      continue;
+    }
     const amt = lastAmount(line);
     if (amt == null) {
       const n = strip(line);
       pendingName = n.length >= 2 ? n : null;
       continue;
     }
-    const name = detailRe.test(line) ? pendingName ?? strip(line) : strip(line);
+    const name = strip(line);
     if (name.length >= 2) items.push({ name, price: amt });
     pendingName = null;
   }

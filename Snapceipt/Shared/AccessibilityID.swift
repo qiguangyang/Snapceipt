@@ -39,6 +39,9 @@ enum AccessibilityID {
     static let captureReviewCategory = "capture.review.category"
     static let captureReviewBadge = "capture.review.badge"
     static let captureReviewBanner = "capture.review.banner"
+    /// The "we'll finish this automatically when you're back online" note shown on the
+    /// empty offline queued ("pending") placeholder draft.
+    static let captureReviewQueuedNote = "capture.review.queuedNote"
     /// The smart-scan-cap upgrade nudge banner (shown only for free users when capped).
     static let captureReviewUpgradeNudge = "capture.review.upgradeNudge"
     /// The "Upgrade" button inside the smart-scan-cap nudge banner.
@@ -55,7 +58,7 @@ enum AccessibilityID {
     static let captureSaveError = "capture.save.error"   // surfaced save failure (e.g. no profile)
     static let captureSavedTitle = "capture.saved.title"
     /// Shown on the Saved confirmation only when the receipt was captured offline
-    /// (HeuristicParser fallback → outbox queue, extractionStatus=="pending"). Drives J18b/J18c.
+    /// (queued for the cloud reconciler → outbox queue, extractionStatus=="pending"). Drives J18b/J18c.
     static let captureQueuedBadge = "capture.queued.badge"
     static let captureSnapAnother = "capture.snapAnother"
     static let captureDone = "capture.done"

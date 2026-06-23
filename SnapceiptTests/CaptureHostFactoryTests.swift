@@ -18,7 +18,8 @@ struct CaptureHostFactoryTests {
         }
         let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u7")
         let vm = CaptureFactory.makeViewModel(
-            api: MockAPIClient(), sync: SpySync(), profiles: store, context: ctx, userId: "u7")
+            api: MockAPIClient(), sync: SpySync(), profiles: store, context: ctx, userId: "u7",
+            reachability: Reachability())
         #expect(vm.stage == .camera)
     }
 }

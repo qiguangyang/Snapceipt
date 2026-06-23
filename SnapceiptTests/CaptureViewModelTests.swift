@@ -42,7 +42,10 @@ struct CaptureViewModelTests {
                          extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
-        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        // Default these tests to Cloud (ON) — the cloud path (MockAPIClient) is their extraction
+        // vehicle. The product default is now OFF (on-device), so set it explicitly here.
+        // OFF / on-device tests set it false after fixture().
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         let profile = Profile(userId: "u1", name: "Me", type: activeType,
@@ -114,7 +117,7 @@ struct CaptureViewModelTests {
         #expect(vm.draft?.needsReview == false)
     }
 
-    @Test("extract failure -> heuristic fallback draft, pending + needsReview, still reaches review")
+    @Test("extract failure (non-FM, online) -> empty pending draft, needsReview, still reaches review")
     func failurePathFallsBack() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
@@ -122,7 +125,9 @@ struct CaptureViewModelTests {
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.draft?.needsReview == true)
-        #expect(vm.draft?.total == Decimal(string: "22.00"))
+        // New contract: no on-device heuristic — a cloud failure queues an EMPTY pending draft.
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.draft?.total == 0)
     }
 
     @Test("save inserts the txn + line items, enqueues each, creates a PendingReceipt, -> saved")
@@ -192,10 +197,10 @@ struct CaptureViewModelTests {
         #expect(vm.savedMode == "business")
     }
 
-    @Test("AppSettings.smartScanEnabled defaults to true when the key is unset")
-    func smartScanDefaultsOn() {
+    @Test("AppSettings.smartScanEnabled defaults to false (on-device) when the key is unset")
+    func smartScanDefaultsOff() {
         UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
-        #expect(AppSettings.smartScanEnabled == true)
+        #expect(AppSettings.smartScanEnabled == false)
     }
 
     @Test("ScanDiagnostics.summary renders the DeepSeek engine line")
@@ -206,15 +211,7 @@ struct CaptureViewModelTests {
         #expect(d.summary == "Snapceipt AI · 1 try · 700ms srv · 850ms · conf 0.91")
     }
 
-    @Test("ScanDiagnostics.summary renders the on-device heuristic line")
-    func diagnosticsSummaryHeuristic() {
-        let d = ScanDiagnostics(engine: .onDeviceHeuristic, model: nil,
-                                clientMs: 12, serverMs: nil, attempts: nil,
-                                stub: nil, capped: nil, confidence: 0.55)
-        #expect(d.summary == "on-device heuristic · 12ms · conf 0.55")
-    }
-
-    @Test("Smart Scan OFF -> on-device heuristic, status done, no /extract call, diagnostics onDeviceHeuristic")
+    @Test("Smart Scan OFF, non-FM -> manual empty draft, status done, no /extract call, diagnostics onDeviceQueued")
     func smartScanOffUsesHeuristic() async throws {
         defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }
         // The handler must NOT be invoked when Smart Scan is OFF.
@@ -227,9 +224,12 @@ struct CaptureViewModelTests {
         await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
         #expect(vm.stage == .review)
         #expect(api.extractCalls.isEmpty)
+        // New contract: no on-device heuristic — Smart Scan OFF (non-FM) seeds an EMPTY
+        // "done" draft for manual entry (the reconciler never re-extracts it).
         #expect(vm.draft?.extractionStatus == "done")
+        #expect(vm.draft?.merchant == "")
         #expect(vm.draft?.needsReview == true)
-        #expect(vm.diagnostics?.engine == .onDeviceHeuristic)
+        #expect(vm.diagnostics?.engine == .onDeviceQueued)
     }
 
     @Test("Smart Scan ON success -> diagnostics deepseek with model/attempts from meta, status done")
@@ -243,16 +243,18 @@ struct CaptureViewModelTests {
         #expect(vm.diagnostics?.attempts == 1)
     }
 
-    @Test("Smart Scan ON failure -> offline heuristic, status pending, diagnostics offlineHeuristic")
+    @Test("Smart Scan ON failure (non-FM) -> empty pending draft, diagnostics onDeviceQueued")
     func smartScanOnFailureDiagnostics() async throws {
         struct Boom: Error {}
         let (vm, _, _, _) = try fixture { _, _, _ in throw Boom() }
         await vm.onScanned(image: image(), lines: zeroLines("WOOLWORTHS\nTOTAL 22.00"))
+        // New contract: a cloud failure (no on-device heuristic) queues an EMPTY pending draft.
         #expect(vm.draft?.extractionStatus == "pending")
-        #expect(vm.diagnostics?.engine == .offlineHeuristic)
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.diagnostics?.engine == .onDeviceQueued)
     }
 
-    @Test("reviewNow() quits waiting -> review with a PENDING on-device draft + onDeviceQueued diagnostics")
+    @Test("reviewNow() quits waiting -> review with an EMPTY PENDING draft + onDeviceQueued diagnostics")
     func reviewNowQuitsWaiting() async throws {
         // Handler stays in-flight (cancellable sleep) so we can act mid-scanning.
         let (vm, _, _, _) = try fixture { _, _, _ in
@@ -264,7 +266,10 @@ struct CaptureViewModelTests {
         vm.reviewNow()
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
-        #expect(vm.draft?.total == Decimal(string: "22.00"))
+        // New contract: no on-device heuristic — "Review now" drops to an EMPTY pending draft;
+        // the AI refreshes it in place when it lands.
+        #expect(vm.draft?.merchant == "")
+        #expect(vm.draft?.total == 0)
         #expect(vm.diagnostics?.engine == .onDeviceQueued)
         vm.cancelExtraction()   // reviewNow no longer cancels; stop the in-flight call for the test
         await scan.value
@@ -356,7 +361,8 @@ struct CaptureViewModelTests {
     @Test("autosaveOnExitIfScanning() with NO resolvable profile surfaces an error and persists nothing")
     func autosaveOnExitNoProfile() async throws {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
-        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        // Cloud (ON) so the slow extractHandler keeps the scan in .scanning for the autosave.
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         // No profiles inserted -> activeProfile == nil and profiles.isEmpty.
@@ -385,6 +391,14 @@ struct CaptureViewModelTests {
                                 clientMs: 9, serverMs: nil, attempts: nil,
                                 stub: nil, capped: nil, confidence: 0.40)
         #expect(d.summary == "on-device · finishing with AI… · 9ms · conf 0.40")
+    }
+
+    @Test("ScanDiagnostics.summary renders the on-device AI (Foundation Models) line")
+    func diagnosticsSummaryFoundationModel() {
+        let d = ScanDiagnostics(engine: .foundationModel, model: "apple-on-device",
+                                clientMs: 1200, serverMs: nil, attempts: nil,
+                                stub: nil, capped: nil, confidence: 0.88)
+        #expect(d.summary == "On-device AI · 1200ms · conf 0.88")
     }
 
     @Test("save(toProfileId:) files the txn under the SELECTED profile, not the active one")

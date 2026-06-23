@@ -10,8 +10,8 @@ struct SavedStep: View {
     let mode: String
     /// Tax-deductible %, when present (drives the "tagged N% deductible" clause).
     let deductible: Int?
-    /// True when the receipt was captured offline (HeuristicParser fallback) and is
-    /// queued in the outbox awaiting a reconnect drain — surfaces the "Queued" badge.
+    /// True when the receipt was captured offline (queued for the cloud reconciler)
+    /// and is awaiting a reconnect drain — surfaces the "Queued" badge.
     var queued: Bool = false
     let onSnapAnother: () -> Void
     let onDone: () -> Void

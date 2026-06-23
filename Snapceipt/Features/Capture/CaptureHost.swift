@@ -7,9 +7,11 @@ enum CaptureFactory {
     @MainActor
     static func makeViewModel(api: APIClient, sync: any SyncEnqueuing,
                               profiles: ProfilesStore, context: ModelContext,
-                              userId: String) -> CaptureViewModel {
+                              userId: String, reachability: Reachability) -> CaptureViewModel {
         CaptureViewModel(api: api, reducer: ImageReducer(), sync: sync,
-                         profiles: profiles, context: context, userId: userId)
+                         profiles: profiles, context: context, userId: userId,
+                         onDeviceExtractor: OnDeviceAI.makeExtractor(),
+                         isOnline: { [weak reachability] in reachability?.isOnline ?? true })
     }
 }
 
@@ -41,7 +43,8 @@ struct CaptureHost: View {
         }
         .task {
             let model = vm ?? CaptureFactory.makeViewModel(
-                api: api, sync: sync, profiles: profiles, context: context, userId: userId)
+                api: api, sync: sync, profiles: profiles, context: context, userId: userId,
+                reachability: reachability)
             vm = model
             await drainQueues()
             if let stub {
