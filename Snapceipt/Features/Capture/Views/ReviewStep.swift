@@ -401,6 +401,20 @@ struct ReviewStep: View {
             guard didSeed, !itemDrafts.isEmpty else { return }
             totalText = Self.priceText(Decimal(ManualItemsMapper.totalCents(itemDrafts)) / 100)
         }
+        // The draft was replaced in place — e.g. the AI result landed after the user tapped
+        // "Review now". Re-seed the editable rows + total from the new draft (the once-only
+        // onAppear seed would otherwise leave them frozen at the on-device values). The
+        // didSeed dance suppresses the item→total recompute so the AI's total isn't clobbered.
+        // `extract()` only bumps draftRevision when the user hasn't edited, so this can't stomp
+        // user edits.
+        .onChange(of: vm.draftRevision) { _, _ in
+            didSeed = false
+            itemDrafts = draft.lineItems.map {
+                ItemDraft(name: $0.name, priceText: Self.priceText($0.price))
+            }
+            totalText = Self.priceText(draft.total)
+            DispatchQueue.main.async { didSeed = true }
+        }
     }
 
     private func itemRow(_ item: Binding<ItemDraft>) -> some View {

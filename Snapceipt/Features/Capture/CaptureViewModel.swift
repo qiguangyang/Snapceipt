@@ -27,6 +27,11 @@ final class CaptureViewModel {
     /// "Review now" the AI keeps running and updates the draft in place — but only while this
     /// is false, so a late AI result never clobbers edits the user already made.
     private(set) var draftUserEdited = false
+    /// Bumped each time `extract()` REPLACES the draft programmatically (the AI result or the
+    /// offline fallback landing). ReviewStep watches this to re-seed its local editable rows +
+    /// total buffer — those are seeded once on appear and would otherwise stay frozen at the
+    /// "Review now" on-device values when the AI refreshes the draft in place.
+    private(set) var draftRevision = 0
     /// Which engine produced the current draft (Smart Scan ON = DeepSeek, OFF =
     /// on-device heuristic, ON-but-offline = offline heuristic). Read by ReviewStep.
     var diagnostics: ScanDiagnostics?
@@ -190,6 +195,10 @@ final class CaptureViewModel {
         // (stage == .review) we stay put and only the draft refreshed above; if they've moved
         // on to .saved, never yank them back.
         if stage == .scanning { stage = .review }
+        // Signal that the draft was replaced (success or offline fallback) so a Review screen
+        // already open via "Review now" re-seeds its editable rows + total from the new draft.
+        // (Cancelled / user-edited paths return early above and never reach here.)
+        draftRevision += 1
     }
 
     /// Client-measured wall time in ms (never negative).

@@ -283,12 +283,14 @@ struct CaptureViewModelTests {
         #expect(vm.stage == .review)
         #expect(vm.draft?.extractionStatus == "pending")
         #expect(vm.draft?.merchant != "AICafe")          // on-device shown first
+        let revBefore = vm.draftRevision
         gate.open()                                       // AI result lands
         await scan.value
         #expect(vm.stage == .review)                      // stayed on Review (not yanked)
         #expect(vm.draft?.merchant == "AICafe")           // refreshed in place
         #expect(vm.draft?.extractionStatus == "done")
         #expect(vm.diagnostics?.engine == .deepseek)
+        #expect(vm.draftRevision > revBefore)             // signalled ReviewStep to re-seed rows/total
     }
 
     @Test("Review now: a user edit before the AI lands is NOT clobbered by the AI result")
@@ -309,6 +311,7 @@ struct CaptureViewModelTests {
         await scan.value
         #expect(vm.draft?.merchant == "My Edit")          // user's edit preserved
         #expect(vm.diagnostics?.engine == .onDeviceQueued) // AI result discarded
+        #expect(vm.draftRevision == 0)                    // no re-seed signal (edit guard held)
     }
 
     @Test("reviewNow() is a no-op once the AI has already resolved (stage left .scanning)")
