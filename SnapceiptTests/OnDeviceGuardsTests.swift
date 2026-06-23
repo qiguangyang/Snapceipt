@@ -49,6 +49,15 @@ struct OnDeviceGuardsTests {
         #expect(out.gst == Decimal(string: "4.42"))
     }
 
+    @Test("prefers the printed grand total over FM's (FM added GST to the GST-inclusive total)")
+    func prefersPrintedTotal() {
+        let out = OnDeviceGuards.reconcile(
+            receipt(total: 35.23, gst: 0.36),   // FM: 34.87 + 0.36 GST = wrong
+            ocrText: "Bananas 5.67\nTotal for 7 items: $34.87\nEFT $34.87\nGST INCLUDED IN TOTAL $0.36")
+        #expect(out.total == Decimal(string: "34.87"))   // printed grand total wins
+        #expect(out.gst == Decimal(string: "0.36"))      // printed GST still honored
+    }
+
     @Test("FMReceipt maps to ExtractedReceipt (Double->Decimal exact, nil date backfills to capturedAt) under guards")
     func fmMapping() {
         let mapped = FoundationModelMapping.toReceipt(
