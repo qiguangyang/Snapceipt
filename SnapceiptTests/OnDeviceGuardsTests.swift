@@ -65,4 +65,20 @@ struct OnDeviceGuardsTests {
         #expect(mapped.confidence == 0.85)
         #expect(mapped.needsReview == false)          // confidence 0.85 >= 0.8
     }
+
+    @Test("GST is recovered from row-paired text, NOT from column-scrambled raw OCR")
+    func gstNeedsPairedText() {
+        // Raw OCR order puts the GST label and its amount on SEPARATE lines — unrecoverable.
+        let scrambled = FoundationModelMapping.toReceipt(
+            merchant: "M", date: "2026-06-20", total: 48.70, gst: nil,
+            category: "meals", deductible: 50, items: [], confidence: 1.0,
+            capturedAt: "2026-06-24", ocrText: "GST\n* GST Free Item\n$4.\n42")
+        #expect(scrambled.gst == nil)
+        // Row-paired layout text (what extract() must pass) — recovered.
+        let paired = FoundationModelMapping.toReceipt(
+            merchant: "M", date: "2026-06-20", total: 48.70, gst: nil,
+            category: "meals", deductible: 50, items: [], confidence: 1.0,
+            capturedAt: "2026-06-24", ocrText: "GST $4. 42\nTotal 48.68")
+        #expect(paired.gst == Decimal(string: "4.42"))
+    }
 }

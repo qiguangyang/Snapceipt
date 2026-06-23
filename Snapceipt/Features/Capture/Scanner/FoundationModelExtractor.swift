@@ -72,7 +72,10 @@ struct FoundationModelExtractor: OnDeviceExtracting {
             category: r.category, deductible: r.deductible,
             items: r.lineItems.map { ($0.name, $0.price) },
             confidence: r.confidence, capturedAt: capturedAt,
-            ocrText: ocrText.isEmpty ? layoutText : ocrText)
+            // Guard's printedGst needs the GST label paired with its amount on ONE line.
+            // Prefer the row-paired layoutText — raw OCR order scrambles the GST label and
+            // its amount onto SEPARATE lines, so printedGst can't recover it from raw text.
+            ocrText: layoutText.isEmpty ? ocrText : layoutText)
     }
 }
 #endif
