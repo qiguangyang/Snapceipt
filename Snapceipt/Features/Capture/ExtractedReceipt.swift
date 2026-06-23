@@ -161,6 +161,15 @@ extension ExtractedReceipt {
         )
     }
 
+    /// A blank draft for the manual / queued-offline path (no on-device AI available).
+    /// `date` defaults to the capture date; everything else empty; needsReview = true.
+    static func empty(capturedAt: String, extractionStatus: String = "done") -> ExtractedReceipt {
+        ExtractedReceipt(
+            merchant: "", date: capturedAt, total: 0, gst: nil,
+            categoryKey: CategoryKey.office.rawValue, deductible: 100, lineItems: [],
+            confidence: 0, needsReview: true, extractionStatus: extractionStatus)
+    }
+
     /// "YYYY-MM-DD" in UTC for a `Date`.
     static func ymd(from date: Date) -> String? {
         let f = DateFormatter()
