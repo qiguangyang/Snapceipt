@@ -42,12 +42,21 @@ const SYSTEM_PROMPT = [
 
 export interface ExtractionInput {
   ocrText: string;
-  // Layout-reconstructed text (visual rows). Used ONLY by the deterministic line-item parser
-  // — rows pair name↔price for structured receipts. The model still reads ocrText (raw order),
-  // because a bad merge on a curved photo (split decimals, merged header lines) confuses it.
+  // Layout-reconstructed text (visual rows). PREFERRED input for the model + GST/heuristic
+  // guards via extractionText(): the rows pair name↔price and label↔amount. Raw OCR order on
+  // a two-column receipt separates descriptions from amounts (all names, then all prices),
+  // which made the model emit header lines as items and miss the total/GST entirely. Falls
+  // back to ocrText when no usable layout was supplied (e.g. email_in plain text).
   layoutText?: string;
   source: "scan" | "email_in";
   defaultDate: string; // capturedAt or today, used for the date fallback
+}
+
+/** The text the model + deterministic guards read: prefer the row-paired layoutText, fall
+ * back to raw ocrText when no usable layout was supplied. See ExtractionInput.layoutText. */
+function extractionText(input: ExtractionInput): string {
+  const layout = input.layoutText?.trim();
+  return layout && layout.length > 0 ? input.layoutText! : input.ocrText;
 }
 
 /** The §9 receipt half (server-finalized). */
@@ -169,8 +178,14 @@ function printedGst(ocrText: string): number | null {
 export function reconcileGst(gst: number | null, total: number, ocrText: string): number | null {
   if (total <= 0) return null;
   const cap = roundCents(total / 11);
+  // A printed "GST $X" line is authoritative. Allow it slightly above the 1/11 baseline — a
+  // card surcharge or rounding can push the real GST a little higher (e.g. GST 11.55 on a
+  // 115.50 subtotal with a 1.73 surcharge → total 117.23, 11.55 > total/11 = 10.66) — while
+  // still rejecting a gross mis-read (an ABN/payment figure) above ~12% of total.
+  const printedCap = total * 0.12;
   const printed = printedGst(ocrText);
-  if (printed != null && printed >= 0 && printed <= cap + 0.005) return roundCents(printed);
+  if (printed != null && printed >= 0 && printed <= printedCap) return roundCents(printed);
+  // No trusted printed line: clamp an impossible MODEL-derived value down to the 1/11 cap.
   if (gst != null && gst > cap + 0.005) return cap;
   return gst;
 }
@@ -324,9 +339,9 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
   if (total === 0) gst = null;
   else if (gst === null || gst === undefined) gst = roundCents(total / 11);
   else gst = roundCents(gst);
-  // Deterministic guard: trust a printed "GST $X" line over the model, and never let GST
-  // exceed total/11 (catches the model grabbing an ABN/payment figure, e.g. "$88").
-  gst = reconcileGst(gst, total, input.ocrText);
+  // Deterministic guard: trust a printed "GST $X" line over the model. Read from the layout
+  // text so the GST amount is paired with its label ("GST 11.55"); raw order splits them.
+  gst = reconcileGst(gst, total, extractionText(input));
 
   // Deductible backfill from the per-category default when the model omitted it,
   // then coerce to an INTEGER literal so the wire never emits a float like 50.0
@@ -354,7 +369,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
       r.lineItems
         .filter((li) => !isNoiseItem(li.name))
         .map((li) => ({ name: li.name, price: roundCents(li.price) })),
-      trimReceiptTail(input.layoutText ?? input.ocrText),
+      trimReceiptTail(extractionText(input)),
       total,
     ),
     confidence,
@@ -364,18 +379,20 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
 
 /** The deterministic fallback at the end of the ladder: heuristic + needsReview + graded confidence. */
 export function fallback(input: ExtractionInput): ExtractedReceipt {
-  const h = heuristicExtract(trimReceiptTail(input.ocrText), input.defaultDate);
+  // Row-paired layout text here too — the heuristic mis-reads scrambled raw order the same way.
+  const text = extractionText(input);
+  const h = heuristicExtract(trimReceiptTail(text), input.defaultDate);
   return {
     merchant: detectMerchant(input.ocrText) ?? h.merchant,
     date: detectDate(input.ocrText) ?? h.date,
     currencyCode: "AUD",
     total: h.total,
-    gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, input.ocrText),
+    gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, text),
     category: h.category,
     deductible: h.deductible,
     lineItems: reconcileLineItems(
       h.lineItems.filter((li) => !isNoiseItem(li.name)),
-      trimReceiptTail(input.layoutText ?? input.ocrText),
+      trimReceiptTail(text),
       h.total,
     ),
     confidence: h.confidence,
@@ -395,10 +412,10 @@ export async function runDeepseekExtraction(env: Env, input: ExtractionInput): P
   // deepseek-chat deprecates 2026-07-24; default is now deepseek-v4-flash.
   // deepseek-v4-flash pricing: $0.14/M in (cache miss), $0.0028/M in (cache hit), $0.28/M out.
   const model = env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
-  // Trim the rewards/marketing/coupon tail so the model isn't tempted to extract promo
-  // products (e.g. the BWS wine/beer block) as line items. GST is reconciled from the FULL
-  // text in finalize(), so a trimmed GST line is fine.
-  const userPrompt = `Extract the receipt as json. OCR text:\n${trimReceiptTail(input.ocrText)}`;
+  // Feed the model the row-paired layout text (extractionText) — raw OCR order scrambles
+  // two-column receipts. Trim the rewards/marketing/coupon tail so the model isn't tempted to
+  // extract promo products as line items. GST is reconciled from the layout text in finalize().
+  const userPrompt = `Extract the receipt as json. OCR text:\n${trimReceiptTail(extractionText(input))}`;
 
   let attempts = 0;
   let lastRaw = "";
