@@ -15,6 +15,7 @@ struct EmailInView: View {
     let onRefresh: () async -> Void
     @Environment(\.accent) private var accent
     @Environment(EntitlementStore.self) private var entitlement
+    @Environment(ToastCenter.self) private var toasts
 
     init(context: ModelContext, sync: any SyncEnqueuing, api: any APIClient,
          userId: String, profileId: String,
@@ -90,7 +91,10 @@ struct EmailInView: View {
                 HStack(spacing: 10) {
                     actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
                         guard entitlement.isPro else { showPaywall = true; return }
-                        if let a = vm.address?.address { UIPasteboard.general.string = a }
+                        if let a = vm.address?.address {
+                            UIPasteboard.general.string = a
+                            toasts.show("Address copied", kind: .success)
+                        }
                     }
                     actionChip("Share", "square.and.arrow.up", id: nil) {
                         guard entitlement.isPro else { showPaywall = true; return }
