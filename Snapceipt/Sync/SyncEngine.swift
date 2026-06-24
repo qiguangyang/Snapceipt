@@ -212,6 +212,9 @@ final class SyncEngine {
             if !resp.hasMore { break }
         }
         status = .idle
+        // Signal screens whose lists are manual fetches (not @Query) to re-read after a pull,
+        // so a just-synced email-in receipt appears without relying on a push arriving.
+        NotificationCenter.default.post(name: .emailInReceiptArrived, object: nil)
     }
 
     private func applyPulled(_ env: PullChange) {

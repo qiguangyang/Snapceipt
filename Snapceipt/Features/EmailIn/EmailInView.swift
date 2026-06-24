@@ -10,16 +10,21 @@ struct EmailInView: View {
     @State private var showPaywall = false
     let onClose: () -> Void
     let onReview: (String) -> Void
+    /// Pulls the latest data from the server (a full SyncEngine.sync()). Used by pull-to-refresh
+    /// and on appear so a server-created email-in receipt shows without waiting for a push.
+    let onRefresh: () async -> Void
     @Environment(\.accent) private var accent
     @Environment(EntitlementStore.self) private var entitlement
 
     init(context: ModelContext, sync: any SyncEnqueuing, api: any APIClient,
          userId: String, profileId: String,
-         onClose: @escaping () -> Void, onReview: @escaping (String) -> Void) {
+         onClose: @escaping () -> Void, onReview: @escaping (String) -> Void,
+         onRefresh: @escaping () async -> Void = {}) {
         _vm = State(initialValue: EmailInViewModel(context: context, sync: sync, api: api,
                                                    userId: userId, profileId: profileId))
         self.onClose = onClose
         self.onReview = onReview
+        self.onRefresh = onRefresh
     }
 
     var body: some View {
@@ -42,13 +47,15 @@ struct EmailInView: View {
                 }
                 .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 40)
             }
+            .refreshable { await onRefresh() }   // pull-to-refresh → full sync → list reloads
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.cream)
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
         .task {
             await vm.loadAddressIfPro(isPro: entitlement.isPro)
-            if !entitlement.isPro { showPaywall = true }
+            // Pull fresh data on open so a server-created receipt appears without a push.
+            if entitlement.isPro { await onRefresh() } else { showPaywall = true }
         }
         // A push-triggered sync just pulled a new email-in receipt — re-fetch the inbox so it
         // appears while the screen is open (the list is a manual fetch, not a @Query).

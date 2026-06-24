@@ -180,9 +180,18 @@ deviceRoutes.post("/simulate-inbound", async (c) => {
   if (!(await isProUser(c.env.DB, userId))) {
     throw new ApiError("FORBIDDEN", "Snapceipt Pro is required for this feature");
   }
-  const prof = await c.env.DB.prepare(
-    "SELECT id, type FROM profiles WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
-  ).bind(userId).first<{ id: string; type: string }>();
+  // Prefer the profile that has an email-in alias — that's where REAL email-in receipts land
+  // and what the iOS Email-in screen shows (it mints the alias for the active profile). Fall
+  // back to the oldest profile if no alias has been minted yet.
+  const prof = (await c.env.DB.prepare(
+    `SELECT p.id, p.type FROM profiles p
+       JOIN profile_inbox_tokens t ON t.profile_id = p.id
+      WHERE p.user_id = ? AND p.deleted_at IS NULL
+      ORDER BY t.created_at DESC LIMIT 1`,
+  ).bind(userId).first<{ id: string; type: string }>())
+    ?? (await c.env.DB.prepare(
+      "SELECT id, type FROM profiles WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+    ).bind(userId).first<{ id: string; type: string }>());
   if (!prof) throw new ApiError("NOT_FOUND", "No profile to attach the receipt to");
 
   const buf = await c.req.arrayBuffer();
