@@ -174,11 +174,11 @@ describe("inboundEmailLogic", () => {
   it("skips AI extraction when the user is over the monthly smart-scan cap (no spend, image kept)", async () => {
     const { userId, address } = await seedProfileWithInbox();
     const t = nowMs();
-    // Owner is Pro (email-in is Pro-only) so the cap is the PRO cap (500). Seed usage AT it
+    // Owner is Pro (email-in is Pro-only) so the cap is the PRO cap (1000). Seed usage AT it
     // so the next email-in is over cap.
     await env.DB.prepare(
       "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, ?, ?, ?)",
-    ).bind(userId, currentPeriod(t), 500, t).run();
+    ).bind(userId, currentPeriod(t), 1000, t).run();
 
     const res = await inboundEmailLogic(emailEnv(), {
       to: address, from: "x@e.com", messageId: "<cap1>", raw: mimeWithImage("cap1"),
@@ -193,7 +193,7 @@ describe("inboundEmailLogic", () => {
     // Usage was NOT incremented past the cap.
     const usage = await env.DB.prepare("SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = ?")
       .bind(userId, currentPeriod(t)).first<{ count: number }>();
-    expect(usage!.count).toBe(500);
+    expect(usage!.count).toBe(1000);
     const log = await env.DB.prepare("SELECT reason FROM inbound_email_log WHERE message_id = ?")
       .bind("<cap1>").first<{ reason: string | null }>();
     expect(log!.reason).toBe("over_cap");
