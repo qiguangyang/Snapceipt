@@ -89,6 +89,28 @@ describe("PUT /devices/me", () => {
     expect(await readEnv()).toBe("development");
   });
 
+  it("a token re-upload that omits pushEnabled preserves the user's push toggle (off stays off)", async () => {
+    const { accessToken, deviceId } = await seedAuthedDevice();
+    const put = (body: object) => SELF.fetch("https://x/devices/me", {
+      method: "PUT",
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", "x-device-id": deviceId },
+      body: JSON.stringify(body),
+    });
+    const readPush = async () =>
+      (await env.DB.prepare(`SELECT push_enabled FROM devices WHERE id = ?`)
+        .bind(deviceId).first<{ push_enabled: number }>())?.push_enabled;
+
+    // User turns push OFF.
+    expect((await put({ pushEnabled: false })).status).toBe(200);
+    expect(await readPush()).toBe(0);
+    // A later registration re-uploads the (rotated) token WITHOUT pushEnabled — must NOT re-enable.
+    expect((await put({ apnsToken: "rotated-token" })).status).toBe(200);
+    expect(await readPush()).toBe(0);
+    // Explicit re-enable still works.
+    expect((await put({ pushEnabled: true })).status).toBe(200);
+    expect(await readPush()).toBe(1);
+  });
+
   it("POST /devices/test-push reports the authed user's eligible device count", async () => {
     const { accessToken, deviceId } = await seedAuthedDevice();
     await env.DB.prepare(`UPDATE devices SET apns_token = 'toktest', push_enabled = 1 WHERE id = ?`)

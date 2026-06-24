@@ -73,6 +73,10 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     quietHoursStartMin, quietHoursEndMin, timezone, apnsEnvironment,
   } = c.req.valid("json");
   const now = nowMs();
+  // push_enabled: 1/0 when the client sends it, null when omitted — so the INSERT defaults a NEW
+  // device to 1 (COALESCE(?, 1)) while the UPDATE preserves the existing value (COALESCE(?, …)).
+  // A token re-upload that omits pushEnabled must NOT clobber the user's Notifications toggle.
+  const pushEnabledVal = pushEnabled !== undefined ? (pushEnabled ? 1 : 0) : null;
 
   await c.env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, model, os_version, apns_token, push_enabled,
@@ -83,7 +87,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
        model                 = COALESCE(excluded.model, devices.model),
        os_version            = COALESCE(excluded.os_version, devices.os_version),
        apns_token            = COALESCE(excluded.apns_token, devices.apns_token),
-       push_enabled          = COALESCE(excluded.push_enabled, devices.push_enabled),
+       push_enabled          = COALESCE(?, devices.push_enabled),
        quiet_hours_start_min = COALESCE(excluded.quiet_hours_start_min, devices.quiet_hours_start_min),
        quiet_hours_end_min   = COALESCE(excluded.quiet_hours_end_min, devices.quiet_hours_end_min),
        timezone              = COALESCE(excluded.timezone, devices.timezone),
@@ -99,7 +103,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       model ?? null,
       osVersion ?? null,
       apnsToken ?? null,
-      pushEnabled !== undefined ? (pushEnabled ? 1 : 0) : null,
+      pushEnabledVal,                       // INSERT: COALESCE(?, 1) → new devices default ON
       quietHoursStartMin ?? null,
       quietHoursEndMin ?? null,
       timezone ?? null,
@@ -107,6 +111,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       now,
       now,
       now,
+      pushEnabledVal,                       // UPDATE: COALESCE(?, devices.push_enabled) → preserve toggle
     )
     .run();
 
