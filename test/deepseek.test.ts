@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   runDeepseekExtraction,
+  runGeminiVisionExtraction,
   reconcileGst,
   trimReceiptTail,
   detectMerchant,
@@ -477,5 +478,56 @@ describe("runDeepseekExtraction()", () => {
     const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
     expect(out.receipt.needsReview).toBe(true);
     expect(out.receipt.category).toBe("office");
+  });
+});
+
+describe("runGeminiVisionExtraction", () => {
+  const img = new TextEncoder().encode("fake-image-bytes").buffer as ArrayBuffer;
+  const geminiBody = (obj: unknown) => ({
+    ok: true, status: 200,
+    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }),
+  });
+
+  it("sends an inline_data image part and parses the response", async () => {
+    const calls: any[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init: any) => {
+      calls.push({ url, init });
+      return geminiBody({ merchant: "Woolworths", date: "2026-05-30", currencyCode: "AUD",
+        total: 176.98, gst: 1.64, category: "groceries", deductible: 0,
+        lineItems: [{ name: "Banana", price: 9.28 }], confidence: 0.95 });
+    }) as any;
+    try {
+      const env = { GEMINI_API_KEY: "k", DEEPSEEK_API_KEY: "" } as any;
+      const out = await runGeminiVisionExtraction(env, img, "image/png", "2026-06-24");
+      expect(out.receipt.merchant).toBe("Woolworths");
+      expect(out.receipt.total).toBe(176.98);
+      expect(out.meta.usedLlm).toBe(true);
+      const body = JSON.parse(calls[0].init.body);
+      const parts = body.contents[0].parts;
+      expect(parts.some((p: any) => p.inline_data?.mime_type === "image/png" && p.inline_data?.data)).toBe(true);
+      expect(String(calls[0].url)).toContain("gemini-3.1-flash-lite:generateContent");
+      expect(calls[0].init.headers["x-goog-api-key"]).toBe("k");
+    } finally { globalThis.fetch = orig; }
+  });
+
+  it("throws on a non-OK response", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: false, status: 400, text: async () => "bad" })) as any;
+    try {
+      const env = { GEMINI_API_KEY: "k" } as any;
+      await expect(runGeminiVisionExtraction(env, img, "image/png", "2026-06-24")).rejects.toThrow();
+    } finally { globalThis.fetch = orig; }
+  });
+
+  it("backfills a missing date to defaultDate", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => geminiBody({ merchant: "X", date: null, currencyCode: "AUD",
+      total: 10, gst: null, category: "office", deductible: 100, lineItems: [], confidence: 0.5 })) as any;
+    try {
+      const env = { GEMINI_API_KEY: "k" } as any;
+      const out = await runGeminiVisionExtraction(env, img, "image/jpeg", "2026-06-24");
+      expect(out.receipt.date).toBe("2026-06-24");
+    } finally { globalThis.fetch = orig; }
   });
 });

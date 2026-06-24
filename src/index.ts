@@ -64,7 +64,9 @@ const email = async (
           ? "No receipt image attached"
           : result.reason === "rate_limited"
             ? "Too many messages to this address; please try again later"
-            : "Unknown inbox address";
+            : result.reason === "pro_only"
+              ? "Email-in is a Snapceipt Pro feature — upgrade in the app to use it."
+              : "Unknown inbox address";
       message.setReject(reason);
     }
   } catch (err) {

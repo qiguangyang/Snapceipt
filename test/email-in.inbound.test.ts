@@ -22,8 +22,12 @@ describe("email-in inbound seam (E2E_EMAIL_MODE)", () => {
   beforeAll(async () => {
     const now = nowMs();
     userId = uuidv7(); profileId = uuidv7();
-    await env.DB.prepare(`INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)`)
-      .bind(userId, "inbound@example.com", now, now).run();
+    // Email-in is now Pro-only, so the alias owner must be Pro (active subscription, no expiry)
+    // for inboundEmailLogic to proceed past the gate to the create path.
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, plan, subscription_status, subscription_expires_at, created_at, updated_at)
+       VALUES (?, ?, 'pro', 'active', NULL, ?, ?)`,
+    ).bind(userId, "inbound@example.com", now, now).run();
     await env.DB.prepare(`INSERT INTO profiles (id, user_id, name, type, accent_1, accent_2, accent_3, created_at, updated_at)
       VALUES (?, ?, 'Biz', 'business', '#000', '#111', '#222', ?, ?)`).bind(profileId, userId, now, now).run();
     const token = await mintInboxToken(env.DB, userId, profileId, now);

@@ -123,11 +123,13 @@ function tryParseReceipt(content: string): DeepseekReceipt | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** One DeepSeek call with a 15s abort budget. Returns the message content, or null on any failure. */
+/** One DeepSeek call with a 15s abort budget. Returns the message content, or null on any failure.
+ * `content` is typed `unknown` so a message can carry either a plain string (text extraction) or
+ * the OpenAI-compatible multimodal array (vision extraction: [{type:"text"...},{type:"image_url"...}]). */
 async function callDeepseek(
   env: Env,
   model: string,
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: unknown }[],
 ): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -471,4 +473,53 @@ export async function runDeepseekExtraction(env: Env, input: ExtractionInput): P
   // All attempts exhausted — fell back to heuristic. usedLlm:false so the caller
   // does NOT burn a smart-scan slot (DeepSeek outage should not penalise the user).
   return { receipt: fallback(input), meta: { model, attempts, stub: false, usedLlm: false } };
+}
+
+/** Base64-encode an ArrayBuffer in 0x8000-byte chunks. Spreading a whole large Uint8Array into
+ * String.fromCharCode(...) overflows the call stack on real receipt images, so build the binary
+ * string by concatenating subarray chunks, then btoa() it. */
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+/** Gemini vision extraction: image → gemini-3.1-flash-lite → structured receipt in one call.
+ * Same 15s abort budget as the DeepSeek caller. No OCR text → finalize()'s text guards no-op;
+ * finalize still clamps total/gst and backfills the date. Throws on fetch/timeout/non-OK/unparseable
+ * so the caller marks the txn failed (never a silent zeros receipt). */
+export async function runGeminiVisionExtraction(
+  env: Env, imageBytes: ArrayBuffer, contentType: string, defaultDate: string,
+): Promise<DeepseekResult> {
+  const model = env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
+  const b64 = arrayBufferToBase64(imageBytes);
+  const input: ExtractionInput = { ocrText: "", source: "email_in", defaultDate };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": env.GEMINI_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { text: `${SYSTEM_PROMPT}\nExtract the receipt in this image as that json object.` },
+          { inline_data: { mime_type: contentType, data: b64 } },
+        ] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: 1500 },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+    const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const content = json.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    const parsed = content ? tryParseReceipt(content) : null;
+    if (!parsed) throw new Error("Gemini returned no parseable JSON");
+    return { receipt: finalize(input, parsed), meta: { model, attempts: 1, stub: false, usedLlm: true } };
+  } finally { clearTimeout(timer); }
 }

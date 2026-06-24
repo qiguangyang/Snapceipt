@@ -96,4 +96,32 @@ struct EmailInViewModelTests {
         #expect(vm.errorMessage != nil)
         #expect(api.rotateProfileInboxCalls == ["p1"])
     }
+
+    @Test("loadAddressIfPro no-ops for a free user (no network, no error)")
+    func freeUserSkipsAddressLoad() async throws {
+        let (ctx, sync, api) = try fixture()
+        // No profileInboxHandler set: if loadAddressIfPro hit the API it would throw
+        // MockAPIClientError.unscripted (now a 403 server-side) and set errorMessage.
+        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
+
+        await vm.loadAddressIfPro(isPro: false)
+
+        #expect(vm.address == nil)
+        #expect(vm.errorMessage == nil)        // no doomed 403 surfaced
+        #expect(api.profileInboxCalls.isEmpty) // API never touched
+    }
+
+    @Test("loadAddressIfPro loads through the API for a Pro user")
+    func proUserLoadsAddress() async throws {
+        let (ctx, sync, api) = try fixture()
+        api.profileInboxHandler = { pid in
+            InboxAddressResponse(profileId: pid, token: "t1", address: "r.t1@in.snapceipt.cc")
+        }
+        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
+
+        await vm.loadAddressIfPro(isPro: true)
+
+        #expect(vm.address?.address == "r.t1@in.snapceipt.cc")
+        #expect(api.profileInboxCalls == ["p1"])
+    }
 }

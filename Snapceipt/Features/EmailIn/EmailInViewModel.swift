@@ -52,6 +52,14 @@ final class EmailInViewModel {
         }
     }
 
+    /// Email-in is Pro-only; the alias endpoint now 403s for free users. Skip the
+    /// doomed call for non-entitled users (otherwise `loadAddress` would surface an
+    /// `errorMessage`). The view shows a Pro upgrade card instead.
+    func loadAddressIfPro(isPro: Bool) async {
+        guard isPro else { return }
+        await loadAddress()
+    }
+
     func rotate() async {
         errorMessage = nil
         do {
