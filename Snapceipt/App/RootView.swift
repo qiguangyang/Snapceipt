@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 #if DEBUG
 import UIKit   // beginBackgroundTask for the -bgDelay simulate mode (DEBUG-only dev tooling)
+import Combine // .onReceive(publisher) for the Darwin-notification simulate trigger
 #endif
 
 /// Top-level auth + first-run gate, then the authed app shell.
@@ -466,6 +467,7 @@ struct ShellView: View {
             await reconcilePendingExtractions()
             #if DEBUG
             await runSimulateEmailInIfFlagged()
+            registerSimDarwinObserver()
             #endif
         }
         // Re-run the (idempotent) backfill when the active profile changes, so switching to a
@@ -486,6 +488,14 @@ struct ShellView: View {
                 Task { await sync.sync() }
             }
         }
+        #if DEBUG
+        // Headless, no-relaunch simulate trigger: `xcrun devicectl device notification post
+        // --name com.snapceipt.app.simulateEmailIn` posts a Darwin notification the running app
+        // observes (registerSimDarwinObserver) and re-broadcasts as this NSNotification.
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("simulateEmailInRequested"))) { _ in
+            Task { await fireSimulateEmailIn() }
+        }
+        #endif
     }
 
     /// Re-extract any receipts left "pending" — offline fallback, "Review now", or auto-saved
@@ -523,6 +533,23 @@ struct ShellView: View {
         _ = try? await captureAPI.simulateEmailIn(jpeg: data)
         await sync.sync()
     }
+
+    /// Observe a Darwin notification so the simulation can be fired on the RUNNING app — no cold
+    /// relaunch — via `devicectl device notification post --name com.snapceipt.app.simulateEmailIn`.
+    /// The C observer can't capture self, so it re-broadcasts as an NSNotification the body's
+    /// .onReceive handles. Idempotent (registers once per process). Only fires while the app is
+    /// running (foreground / not-yet-suspended).
+    private func registerSimDarwinObserver() {
+        guard !Self.simDarwinRegistered else { return }
+        Self.simDarwinRegistered = true
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(), nil,
+            { _, _, _, _, _ in
+                NotificationCenter.default.post(name: Notification.Name("simulateEmailInRequested"), object: nil)
+            },
+            "com.snapceipt.app.simulateEmailIn" as CFString, nil, .deliverImmediately)
+    }
+    private static var simDarwinRegistered = false
     #endif
 
     /// One-time GST-default backfill for the ACTIVE profile (spec §1/§4.2). Idempotent and
