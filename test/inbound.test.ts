@@ -443,27 +443,27 @@ describe("inboundEmailLogic", () => {
     expect(res.count).toBe(2);
   });
 
-  it("skips inline/embedded images and non-image/non-pdf attachments", async () => {
+  it("skips non-receipt-type attachments but keeps every image/PDF (incl. inline-disposition)", async () => {
     const { address } = await seedProfileWithInbox("business", "pro");
-    // inline logo + a real attached receipt + a CSV → only the receipt counts.
+    // A CSV (skipped) + an inline-disposition photo (KEPT — clients mislabel real receipts) + a jpg.
     const res = await inboundEmailLogic(emailEnv(), {
       to: address, from: "x@e.com", messageId: "<filter1>",
       raw: mimeWithParts("filter1", [
-        { mime: "image/png", b64: IMG_B64, filename: "logo.png", disposition: "inline" },
         { mime: "text/csv", b64: IMG_B64, filename: "data.csv" },
-        { mime: "image/jpeg", b64: IMG_B64, filename: "receipt.jpg" },
+        { mime: "image/png", b64: IMG_B64, filename: "a.png", disposition: "inline" },
+        { mime: "image/jpeg", b64: IMG_B64, filename: "b.jpg" },
       ]),
     }, nowMs());
     expect(res.status).toBe("created");
     if (res.status !== "created") return;
-    expect(res.count).toBe(1); // only the attached receipt
+    expect(res.count).toBe(2); // CSV skipped; both images kept
   });
 
-  it("rejects an email whose only images are inline (no real receipt)", async () => {
+  it("rejects an email with no receipt-type attachment (CSV only)", async () => {
     const { address } = await seedProfileWithInbox("business", "pro");
     const res = await inboundEmailLogic(emailEnv(), {
-      to: address, from: "x@e.com", messageId: "<inlineonly>",
-      raw: mimeWithParts("inlineonly", [{ mime: "image/png", b64: IMG_B64, disposition: "inline" }]),
+      to: address, from: "x@e.com", messageId: "<csvonly>",
+      raw: mimeWithParts("csvonly", [{ mime: "text/csv", b64: IMG_B64, filename: "data.csv" }]),
     }, nowMs());
     expect(res).toEqual({ status: "rejected", reason: "no_image" });
   });
