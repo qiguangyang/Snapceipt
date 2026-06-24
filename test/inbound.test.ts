@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { uuidv7 } from "../src/lib/ids";
 import { nowMs } from "../src/lib/time";
 import { mintInboxToken, addressForToken } from "../src/lib/inboxToken";
@@ -48,13 +48,26 @@ function mimeTextOnly(messageId: string): ArrayBuffer {
   return new TextEncoder().encode(raw).buffer as ArrayBuffer;
 }
 
-async function seedProfileWithInbox(type = "business"): Promise<{ userId: string; profileId: string; address: string }> {
+async function seedProfileWithInbox(
+  type = "business",
+  plan: "free" | "pro" = "pro",
+): Promise<{ userId: string; profileId: string; address: string }> {
   const userId = uuidv7();
   const profileId = uuidv7();
   const t = nowMs();
-  await env.DB.prepare(
-    `INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)`,
-  ).bind(userId, `${userId}@e.com`, t, t).run();
+  // plan defaults to "pro" because email-in is now Pro-only: most inbound tests want the
+  // gate OPEN so they can exercise the dedup/image/extraction path. A live subscription
+  // (active, no expiry) so isProUser() returns true. Free callers pass plan:"free".
+  if (plan === "pro") {
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, email_verified, plan, subscription_status, subscription_expires_at, created_at, updated_at)
+       VALUES (?, ?, 1, 'pro', 'active', NULL, ?, ?)`,
+    ).bind(userId, `${userId}@e.com`, t, t).run();
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)`,
+    ).bind(userId, `${userId}@e.com`, t, t).run();
+  }
   await env.DB.prepare(
     `INSERT INTO profiles (id, user_id, name, type, accent_1, accent_2, accent_3, created_at, updated_at)
      VALUES (?, ?, 'Biz', ?, '#0', '#1', '#2', ?, ?)`,
@@ -63,10 +76,24 @@ async function seedProfileWithInbox(type = "business"): Promise<{ userId: string
   return { userId, profileId, address: addressForToken(token) };
 }
 
+/** A Gemini-shaped fetch response carrying `obj` as the JSON receipt in the first candidate part. */
+function mockGemini(obj: unknown) {
+  return vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }),
+  })) as unknown as typeof fetch;
+}
+
 // Hermetic env: stub OCR + stub extraction.
 function emailEnv(over: Record<string, unknown> = {}) {
   return { ...env, E2E_EMAIL_MODE: "1", E2E_EXTRACT_MODE: "1", ...over } as typeof env;
 }
+
+const ORIGINAL_FETCH = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = ORIGINAL_FETCH; // the Gemini test swaps fetch — always restore it.
+});
 
 beforeEach(async () => {
   await env.DB.exec("DELETE FROM line_items");
@@ -136,10 +163,11 @@ describe("inboundEmailLogic", () => {
   it("skips AI extraction when the user is over the monthly smart-scan cap (no spend, image kept)", async () => {
     const { userId, address } = await seedProfileWithInbox();
     const t = nowMs();
-    // Seed usage AT the free cap (10) so the next email-in is over cap.
+    // Owner is Pro (email-in is Pro-only) so the cap is the PRO cap (500). Seed usage AT it
+    // so the next email-in is over cap.
     await env.DB.prepare(
       "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, ?, ?, ?)",
-    ).bind(userId, currentPeriod(t), 10, t).run();
+    ).bind(userId, currentPeriod(t), 500, t).run();
 
     const res = await inboundEmailLogic(emailEnv(), {
       to: address, from: "x@e.com", messageId: "<cap1>", raw: mimeWithImage("cap1"),
@@ -154,7 +182,7 @@ describe("inboundEmailLogic", () => {
     // Usage was NOT incremented past the cap.
     const usage = await env.DB.prepare("SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = ?")
       .bind(userId, currentPeriod(t)).first<{ count: number }>();
-    expect(usage!.count).toBe(10);
+    expect(usage!.count).toBe(500);
     const log = await env.DB.prepare("SELECT reason FROM inbound_email_log WHERE message_id = ?")
       .bind("<cap1>").first<{ reason: string | null }>();
     expect(log!.reason).toBe("over_cap");
@@ -179,11 +207,11 @@ describe("inboundEmailLogic", () => {
 
   it("creates a failed transaction (image preserved) when vision extraction throws", async () => {
     const { address } = await seedProfileWithInbox();
-    const spy = vi.spyOn(deepseek, "runDeepseekVisionExtraction").mockRejectedValue(new Error("boom"));
+    const spy = vi.spyOn(deepseek, "runGeminiVisionExtraction").mockRejectedValue(new Error("boom"));
     try {
-      // DEEPSEEK_API_KEY present + E2E_EXTRACT_MODE unset => real vision path => the spy throws.
+      // GEMINI_API_KEY present + E2E_EXTRACT_MODE unset => real vision path => the spy throws.
       const res = await inboundEmailLogic(
-        emailEnv({ E2E_EXTRACT_MODE: undefined, DEEPSEEK_API_KEY: "real-key" }),
+        emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
         { to: address, from: "x@e.com", messageId: "<m4>", raw: mimeWithImage("m4") },
         nowMs(),
       );
@@ -204,16 +232,16 @@ describe("inboundEmailLogic", () => {
     const { address } = await seedProfileWithInbox();
     // A successful (usedLlm:true) vision extraction with no total and no items must NOT persist
     // a zeros receipt — the sanity gate flips it to failed (image kept for review).
-    const spy = vi.spyOn(deepseek, "runDeepseekVisionExtraction").mockResolvedValue({
+    const spy = vi.spyOn(deepseek, "runGeminiVisionExtraction").mockResolvedValue({
       receipt: {
         merchant: "", date: "2026-06-24", currencyCode: "AUD", total: 0, gst: null,
         category: "office", deductible: null, lineItems: [], confidence: 0.3, needsReview: true,
       },
-      meta: { model: "deepseek-v4-flash", attempts: 1, stub: false, usedLlm: true },
+      meta: { model: "gemini-3.1-flash-lite", attempts: 1, stub: false, usedLlm: true },
     });
     try {
       const res = await inboundEmailLogic(
-        emailEnv({ E2E_EXTRACT_MODE: undefined, DEEPSEEK_API_KEY: "real-key" }),
+        emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
         { to: address, from: "x@e.com", messageId: "<m5>", raw: mimeWithImage("m5") },
         nowMs(),
       );
@@ -227,5 +255,46 @@ describe("inboundEmailLogic", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("bounces a free user's inbound email (pro_only) with no side effects", async () => {
+    // FREE owner + a real GEMINI_API_KEY (so the real path WOULD run if not gated).
+    const { address } = await seedProfileWithInbox("business", "free");
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const res = await inboundEmailLogic(
+      emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
+      { to: address, from: "x@e.com", messageId: "<pro1>", raw: mimeWithImage("pro1") },
+      nowMs(),
+    );
+    expect(res).toEqual({ status: "rejected", reason: "pro_only" });
+    // Zero side effects: no transaction, no stored image, no inbound_email_log row, no Gemini call.
+    const txn = await env.DB.prepare("SELECT COUNT(*) c FROM transactions").first<{ c: number }>();
+    expect(txn!.c).toBe(0);
+    const img = await env.DB.prepare("SELECT COUNT(*) c FROM receipt_images").first<{ c: number }>();
+    expect(img!.c).toBe(0);
+    const log = await env.DB.prepare("SELECT COUNT(*) c FROM inbound_email_log").first<{ c: number }>();
+    expect(log!.c).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("extracts a pro user's inbound email via Gemini (mocked)", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    globalThis.fetch = mockGemini({
+      merchant: "Coles", date: "2026-06-20", currencyCode: "AUD", total: 34.87, gst: 0.36,
+      category: "groceries", deductible: 0, lineItems: [{ name: "Milk", price: 3.5 }], confidence: 0.9,
+    });
+    const res = await inboundEmailLogic(
+      emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
+      { to: address, from: "x@e.com", messageId: "<pro2>", raw: mimeWithImage("pro2") },
+      nowMs(),
+    );
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.extraction).toBe("done");
+    const txn = await env.DB.prepare("SELECT merchant, amount_cents FROM transactions WHERE id = ?")
+      .bind(res.transactionId).first<{ merchant: string; amount_cents: number }>();
+    expect(txn!.merchant).toBe("Coles");
+    expect(txn!.amount_cents).toBe(-3487); // 34.87, groceries (expense) -> signed negative
   });
 });

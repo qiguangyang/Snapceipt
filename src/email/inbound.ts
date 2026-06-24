@@ -5,7 +5,8 @@ import { uuidv7 } from "../lib/ids";
 import { resolveInboxToken, tokenFromRecipient, type InboxOwner } from "../lib/inboxToken";
 import { STUB_OCR_TEXT } from "../lib/ocr";
 import { heuristicExtract } from "../lib/extractionHeuristic";
-import { runDeepseekVisionExtraction, type ExtractedReceipt } from "../lib/deepseek";
+import { runGeminiVisionExtraction, type ExtractedReceipt } from "../lib/deepseek";
+import { isProUser } from "../lib/plan";
 import { writeReceiptRows } from "../lib/receiptRows";
 import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smartScan";
 
@@ -15,7 +16,7 @@ const INBOUND_RATE_LIMIT = 20;
 const INBOUND_WINDOW_MS = 60 * 60 * 1000;
 
 /** Fixed-window KV counter per inbox token. Returns true when the alias is over its
- *  hourly limit (so the email() wrapper can bounce it) — bounds Workers-AI/DeepSeek
+ *  hourly limit (so the email() wrapper can bounce it) — bounds Gemini extraction
  *  spend from a flood against a single (possibly leaked) alias. */
 async function overInboundRateLimit(kv: KVNamespace, token: string, now: number): Promise<boolean> {
   const bucket = Math.floor(now / INBOUND_WINDOW_MS);
@@ -35,7 +36,7 @@ export interface InboundMessage {
 }
 
 export type InboundResult =
-  | { status: "rejected"; reason: "unknown_inbox" | "no_image" | "rate_limited" }
+  | { status: "rejected"; reason: "unknown_inbox" | "no_image" | "rate_limited" | "pro_only" }
   | { status: "duplicate" }
   | { status: "created"; transactionId: string; extraction: "done" | "failed" };
 
@@ -60,8 +61,8 @@ function failedReceipt(date: string): ExtractedReceipt {
 }
 
 /** Extraction with the same stub gate as POST /extract. The image goes DIRECTLY to the
- *  multimodal DeepSeek model in one call (no Workers-AI OCR step). `usedLlm` mirrors the
- *  /extract contract: true only when DeepSeek produced a parseable answer, so the caller
+ *  multimodal Gemini model in one call (no Workers-AI OCR step). `usedLlm` mirrors the
+ *  /extract contract: true only when Gemini produced a parseable answer, so the caller
  *  charges a smart-scan slot only then.
  *
  *  Stub gate (E2E_EXTRACT_MODE or no key): returns the SAME deterministic heuristic stub as
@@ -72,7 +73,7 @@ async function runExtraction(
   contentType: string,
   defaultDate: string,
 ): Promise<{ receipt: ExtractedReceipt; model: string; usedLlm: boolean }> {
-  const stubGate = env.E2E_EXTRACT_MODE === "1" || !env.DEEPSEEK_API_KEY;
+  const stubGate = env.E2E_EXTRACT_MODE === "1" || !env.GEMINI_API_KEY;
   if (stubGate) {
     const h = heuristicExtract(STUB_OCR_TEXT, defaultDate);
     return {
@@ -81,11 +82,11 @@ async function runExtraction(
         gst: h.total === 0 ? null : h.gst, category: h.category, deductible: h.deductible,
         lineItems: h.lineItems, confidence: 0.9, needsReview: false,
       },
-      model: env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
+      model: env.GEMINI_MODEL ?? "gemini-3.1-flash-lite",
       usedLlm: false,
     };
   }
-  const result = await runDeepseekVisionExtraction(env, imageBytes, contentType, defaultDate);
+  const result = await runGeminiVisionExtraction(env, imageBytes, contentType, defaultDate);
   return { receipt: result.receipt, model: result.meta.model, usedLlm: result.meta.usedLlm };
 }
 
@@ -109,8 +110,8 @@ async function logInbound(
 
 /**
  * Pure inbound core (the email() handler is not invocable in vitest-pool-workers).
- * Resolve alias -> dedup -> parse -> store image -> vision extract (gated, image
- * direct to DeepSeek) -> write rows. Extraction failure still creates a 'failed'
+ * Resolve alias -> Pro gate -> dedup -> parse -> store image -> vision extract (gated, image
+ * direct to Gemini) -> write rows. Extraction failure still creates a 'failed'
  * transaction so the receipt is never lost. The inbound_email_log row is written only
  * on a terminal outcome, so a mid-flight crash safely reprocesses on redelivery.
  */
@@ -121,13 +122,21 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const owner = await resolveInboxToken(env.DB, token);
   if (!owner) return { status: "rejected", reason: "unknown_inbox" };
 
+  // 1b. Pro gate: email-in is a Pro-only feature. Bounce a free owner BEFORE any
+  // dedup/image/R2/AI work so a free user's mail has ZERO side effects (no stored image,
+  // no inbound_email_log row, no extraction spend). Server-side enforcement so a modified
+  // client can't bypass payment. The email() wrapper turns this into a sender bounce.
+  if (!(await isProUser(env.DB, owner.userId))) {
+    return { status: "rejected", reason: "pro_only" };
+  }
+
   // 2. Dedup on Message-ID (synthesize one when absent so the row is still logged).
   const messageId = msg.messageId && msg.messageId.length > 0 ? msg.messageId : `no-id:${uuidv7()}`;
   const dup = await env.DB.prepare("SELECT 1 FROM inbound_email_log WHERE message_id = ?").bind(messageId).first();
   if (dup) return { status: "duplicate" };
 
   // 2b. Coarse per-alias rate limit (after dedup so redeliveries don't count). Bounds
-  // Workers-AI/DeepSeek spend from a flood against a (possibly leaked) alias; the email()
+  // Gemini spend from a flood against a (possibly leaked) alias; the email()
   // wrapper bounces the over-limit message.
   if (await overInboundRateLimit(env.KV, token, now)) {
     await logInbound(env.DB, messageId, owner, null, "rejected", "rate_limited", now);
@@ -159,7 +168,7 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const defaultDate = todayIso(now);
 
   // 6. Cap gate: email-in extractions count against the SAME monthly smart-scan budget
-  // as POST /extract, checked BEFORE the expensive Workers-AI OCR + DeepSeek calls. Over
+  // as POST /extract, checked BEFORE the expensive Gemini vision call. Over
   // cap → store the image + a needs-review transaction (never lose the receipt) with no AI
   // spend, so a free user can't mail their alias for unlimited extractions.
   const period = currentPeriod(now);
