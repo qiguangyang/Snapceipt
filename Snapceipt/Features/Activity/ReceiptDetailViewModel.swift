@@ -66,15 +66,20 @@ final class ReceiptDetailViewModel {
         guard let api else { return }
         isLoadingImage = true
         defer { isLoadingImage = false }
-        guard let data = try? await api.fetchReceiptImage(transactionId: transactionId),
-              let img = UIImage(data: data) else { return }
+        guard let data = try? await api.fetchReceiptImage(transactionId: transactionId) else { return }
+        // Images decode directly; PDF receipts (email-in) aren't decodable as a UIImage, so render
+        // their first page via PDFKit. Without this the detail page showed no receipt for PDFs.
+        let directImage = UIImage(data: data)
+        guard let img = directImage ?? PDFImageRenderer.firstPage(data) else { return }
         image = img
-        if let url = Self.localImageURL(for: transactionId) {
+        // Cache a DECODABLE JPEG so the offline read (UIImage(contentsOfFile:)) works for PDFs too:
+        // reuse the original bytes for images, the rendered first page for PDFs.
+        let cacheBytes = directImage != nil ? data : img.jpegData(compressionQuality: 0.9)
+        if let bytes = cacheBytes, let url = Self.localImageURL(for: transactionId) {
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            // Match the capture-time protection class (NSFileProtectionComplete) for the
-            // re-cached receipt JPEG.
-            try? data.write(to: url, options: [.atomic, .completeFileProtection])
+            // Match the capture-time protection class (NSFileProtectionComplete) for the re-cached file.
+            try? bytes.write(to: url, options: [.atomic, .completeFileProtection])
         }
     }
 }
