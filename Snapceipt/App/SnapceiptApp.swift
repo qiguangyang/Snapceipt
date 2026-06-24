@@ -133,6 +133,9 @@ struct SnapceiptApp: App {
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
         NotificationDelegate.router = router
         NotificationDelegate.api = api
+        // Email-in push refresh seam: a tapped/foreground email-in push triggers a sync
+        // so the open list refreshes and the tapped receipt is present to review.
+        NotificationDelegate.refreshOnPush = { await sync.sync() }
     }
 
     var body: some Scene {

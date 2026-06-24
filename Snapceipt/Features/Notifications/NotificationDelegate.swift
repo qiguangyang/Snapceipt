@@ -12,6 +12,33 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     static var api: APIClient?
     static var timezoneProvider: () -> String = { QuietHours.deviceTimezone() }
 
+    /// Set by SnapceiptApp: refresh app data when an email-in push arrives (SyncEngine.sync()).
+    /// A closure seam so the delegate can trigger a sync without holding the whole SyncEngine.
+    static var refreshOnPush: (@Sendable () async -> Void)?
+
+    /// Central push routing (testable). email_in → refresh then open the receipt review
+    /// editor (fallback to the email-in list when no transactionId); otherwise the existing
+    /// budget deep-link / budgetId routing is preserved unchanged.
+    @MainActor
+    static func route(userInfo: [AnyHashable: Any],
+                      router: Router?,
+                      refresh: (@Sendable () async -> Void)?) async {
+        if userInfo["type"] as? String == "email_in" {
+            await refresh?()
+            if let txn = userInfo["transactionId"] as? String, !txn.isEmpty {
+                router?.openEmailInReceipt(txn)
+            } else {
+                router?.present(.emailIn)
+            }
+            return
+        }
+        if let deep = userInfo["deepLink"] as? String, let url = URL(string: deep) {
+            router?.handleBudgetDeepLink(url)
+        } else if let id = userInfo["budgetId"] as? String {
+            router?.openBudget(id)
+        }
+    }
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
@@ -53,23 +80,21 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         print("APNs registration failed: \(error.localizedDescription)")
     }
 
-    // Tap on a delivered notification -> deep-link to the budget.
+    // Tap on a delivered notification -> route (email-in review editor / budget deep-link).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
-        let info = response.notification.request.content.userInfo
-        await MainActor.run {
-            if let deep = info["deepLink"] as? String, let url = URL(string: deep) {
-                Self.router?.handleBudgetDeepLink(url)
-            } else if let id = info["budgetId"] as? String {
-                Self.router?.openBudget(id)
-            }
-        }
+        await Self.route(userInfo: response.notification.request.content.userInfo,
+                         router: Self.router, refresh: Self.refreshOnPush)
     }
 
-    // Foreground delivery -> show a banner.
+    // Foreground delivery -> show a banner. An email-in push also triggers a sync so the
+    // open list refreshes behind the banner; other pushes are unchanged.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        if notification.request.content.userInfo["type"] as? String == "email_in" {
+            await Self.refreshOnPush?()
+        }
+        return [.banner, .sound]
     }
 
     /// Request authorization and, if granted, register for remote notifications. Safe to
