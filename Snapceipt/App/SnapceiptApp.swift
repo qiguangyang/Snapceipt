@@ -49,6 +49,17 @@ struct SnapceiptApp: App {
     @UIApplicationDelegateAdaptor(NotificationDelegate.self) private var notificationDelegate
 
     init() {
+#if DEBUG
+        // UI-test hermeticity: clear cross-run-persisted Cloud AI (Smart Scan) state so each
+        // -uiTestStub launch seeds a deterministic default. The simulator reports FM AVAILABLE
+        // (forced off under stub in OnDeviceAI.makeExtractor), so a prior run could have persisted
+        // Smart Scan OFF (on-device) AND set the one-time non-FM→cloud migration flag — leaving
+        // capture on the empty manual path instead of the deterministic cloud stub.
+        if AppLaunch.current.useStub {
+            UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+            UserDefaults.standard.removeObject(forKey: "sc.smartScan.nonFMCloudMigration.v1")
+        }
+#endif
         // Seed the Cloud AI default by device capability (FM available → on-device, else cloud)
         // before any view reads the @AppStorage toggle. No-op once set; never overrides a choice.
         AppSettings.seedSmartScanDefaultIfUnset()

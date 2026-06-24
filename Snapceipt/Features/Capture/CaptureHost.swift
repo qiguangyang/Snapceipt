@@ -11,7 +11,13 @@ enum CaptureFactory {
         CaptureViewModel(api: api, reducer: ImageReducer(), sync: sync,
                          profiles: profiles, context: context, userId: userId,
                          onDeviceExtractor: OnDeviceAI.makeExtractor(),
-                         isOnline: { [weak reachability] in reachability?.isOnline ?? true })
+                         // Under `-uiTestStub`, capture auto-feeds the canned scan on launch — before
+                         // the simulator's (flaky) NWPathMonitor settles, so the real reachability can
+                         // read offline and wrongly route capture to the empty pending draft. The stub
+                         // design simulates offline via the API throwing `uiTestOffline` (reachability
+                         // stays true), so force online here; production uses real reachability.
+                         isOnline: { [weak reachability] in
+                             AppLaunch.current.useStub ? true : (reachability?.isOnline ?? true) })
     }
 }
 

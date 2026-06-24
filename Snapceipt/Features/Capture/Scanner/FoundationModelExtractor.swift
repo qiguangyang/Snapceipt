@@ -84,6 +84,12 @@ struct FoundationModelExtractor: OnDeviceExtracting {
 /// present AND the device/OS/Apple-Intelligence state allows it; otherwise nil (non-FM path).
 enum OnDeviceAI {
     static func makeExtractor() -> OnDeviceExtracting? {
+        // UI-test hermeticity: the iOS 26 simulator now reports Foundation Models AVAILABLE,
+        // which would flip Smart Scan to the on-device path — non-deterministic and slow/never-
+        // resolving under XCUITest, leaving capture stuck on "Reading…". Under `-uiTestStub` force
+        // the non-FM path so `isOnDeviceAIAvailable` is false (Smart Scan defaults to Cloud) and
+        // capture uses the deterministic StubAPIClient cloud extract (the canned receipt).
+        if AppLaunch.current.useStub { return nil }
         #if canImport(FoundationModels)
         if #available(iOS 26, *) {
             switch SystemLanguageModel.default.availability {
