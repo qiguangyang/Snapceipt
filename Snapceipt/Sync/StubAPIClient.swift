@@ -42,7 +42,7 @@ final class StubAPIClient: APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: 0)
     }
-    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+    func extract(jpeg: Data, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         // J18b offline seam: throw a transport error BEFORE the canned result so the
         // capture flow falls back to the queued-for-the-cloud path (empty draft) and
         // enqueues the receipt (outbox) — on-device AI if available, else cloud reconciler.

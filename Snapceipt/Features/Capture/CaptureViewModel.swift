@@ -199,17 +199,24 @@ final class CaptureViewModel {
         }
     }
 
-    /// The cloud `/extract` path (success sets the AI draft + `.deepseek` diagnostics; a
+    /// The cloud `/extract` path (success sets the AI draft + `.gemini` diagnostics; a
     /// genuine error → an empty pending draft). Used both as the primary non-FM path and as
     /// the FM low-confidence upgrade. Preserves the cancel/edit guards so a torn-down view or
     /// a user edit never gets clobbered by a late result.
     private func runCloud(capturedAt: String, started: Date) async {
+        // Cloud AI = Gemini vision: send the reduced receipt IMAGE to /extract (the SAME extractor
+        // as email-in). No image on hand → fall back to the pending/on-device path.
+        guard let image = capturedImage else {
+            applyPendingDraft(capturedAt: capturedAt, started: started)
+            return
+        }
+        let jpeg = reducer.reduce(image)
         do {
-            let resp = try await api.extract(ocrText: rawText, layoutText: layoutText, source: "scan", capturedAt: capturedAt)
+            let resp = try await api.extract(jpeg: jpeg, source: "scan", capturedAt: capturedAt)
             if Task.isCancelled || draftUserEdited { return }
             draft = ExtractedReceipt(response: resp)
             smartScanCapped = resp.meta.capped; smartScanCap = resp.meta.smartScan?.cap; smartScanUsed = resp.meta.smartScan?.used
-            diagnostics = ScanDiagnostics(engine: .deepseek, model: resp.meta.model,
+            diagnostics = ScanDiagnostics(engine: .gemini, model: resp.meta.model,
                 clientMs: Self.elapsedMs(since: started), serverMs: resp.meta.latencyMs,
                 attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
                 confidence: draft?.confidence ?? 0)
@@ -462,7 +469,7 @@ enum AppSettings {
 /// on the Review screen so the cloud reconciler (Smart Scan ON), on-device AI (Apple
 /// Foundation Models), and the queued-for-cloud path can be compared back-to-back.
 struct ScanDiagnostics: Equatable {
-    enum Engine: String, Equatable { case deepseek, onDeviceQueued, foundationModel }
+    enum Engine: String, Equatable { case gemini, onDeviceQueued, foundationModel }
     var engine: Engine
     var model: String?      // meta.model (ON path only)
     var clientMs: Int       // client-measured wall time (all paths)
@@ -476,7 +483,7 @@ struct ScanDiagnostics: Equatable {
     var summary: String {
         var parts: [String] = []
         switch engine {
-        case .deepseek:          parts.append("Snapceipt AI")
+        case .gemini:            parts.append("Snapceipt AI")
         case .onDeviceQueued:    parts.append("on-device · finishing with AI…")
         case .foundationModel:   parts.append("On-device AI")
         }

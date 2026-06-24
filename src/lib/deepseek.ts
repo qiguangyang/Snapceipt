@@ -4,15 +4,11 @@ import {
   deepseekReceiptSchema,
   type DeepseekReceipt,
 } from "../schemas/extract";
-import { heuristicExtract } from "./extractionHeuristic";
 
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-// 15s per attempt: a stalled first attempt fails fast while a healthy ~11s call still
-// fits. With MAX_ATTEMPTS=2 the worst case (~30s) stays within the client's 35s /extract
-// budget, so the server never keeps working after the client has already given up and
-// fallen back to the on-device heuristic. See APIClient.extract (timeout: 35).
+// 15s abort budget per Gemini call: a stalled call fails fast while a healthy ~11s call
+// still fits, so the server never keeps working after the client (35s /extract budget) has
+// already given up. See APIClient.extract (timeout: 35).
 const TIMEOUT_MS = 15_000;
-const MAX_ATTEMPTS = 2;
 
 /** Per-category deductible defaults (spec §9), used to backfill when the model omits one. */
 const DEDUCTIBLE_DEFAULTS: Record<string, number | null> = {
@@ -121,43 +117,6 @@ function tryParseReceipt(content: string): DeepseekReceipt | null {
   }
   const parsed = deepseekReceiptSchema.safeParse(obj);
   return parsed.success ? parsed.data : null;
-}
-
-/** One DeepSeek call with a 15s abort budget. Returns the message content, or null on any failure.
- * `content` is typed `unknown` so a message can carry either a plain string (text extraction) or
- * the OpenAI-compatible multimodal array (vision extraction: [{type:"text"...},{type:"image_url"...}]). */
-async function callDeepseek(
-  env: Env,
-  model: string,
-  messages: { role: string; content: unknown }[],
-): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(DEEPSEEK_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        response_format: { type: "json_object" },
-        temperature: 0,
-        max_tokens: 1500,
-        messages,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return json.choices?.[0]?.message?.content ?? null;
-  } catch {
-    // AbortError (timeout) / network error -> treat as a failed attempt.
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** Largest amount on a line that contains the word "GST" (e.g. "TOTAL includes GST $1.64"
@@ -396,83 +355,6 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
     confidence,
     needsReview: confidence < 0.8,
   };
-}
-
-/** The deterministic fallback at the end of the ladder: heuristic + needsReview + graded confidence. */
-export function fallback(input: ExtractionInput): ExtractedReceipt {
-  // Row-paired layout text here too — the heuristic mis-reads scrambled raw order the same way.
-  const text = extractionText(input);
-  const h = heuristicExtract(trimReceiptTail(text), input.defaultDate);
-  return {
-    merchant: detectMerchant(input.ocrText) ?? h.merchant,
-    date: detectDate(input.ocrText) ?? h.date,
-    currencyCode: "AUD",
-    total: h.total,
-    gst: reconcileGst(h.total === 0 ? null : h.gst, h.total, text),
-    category: h.category,
-    deductible: h.deductible,
-    lineItems: reconcileLineItems(
-      h.lineItems.filter((li) => !isNoiseItem(li.name)),
-      trimReceiptTail(text),
-      h.total,
-    ),
-    confidence: h.confidence,
-    needsReview: h.needsReview,
-  };
-}
-
-/**
- * Run the real DeepSeek extraction with the <=2-attempt validate/retry ladder.
- * Attempt 1: base prompt. Attempt 2: corrective re-prompt with the prior raw
- * output ("return valid json") — tryParseReceipt already strips fences / extracts
- * the first {...} on every attempt. On exhaustion, the deterministic heuristic
- * fallback (needsReview:true). Bounded so the worst case (2×15s) stays within the
- * client's 35s /extract budget — see APIClient.extract.
- */
-export async function runDeepseekExtraction(env: Env, input: ExtractionInput): Promise<DeepseekResult> {
-  // deepseek-chat deprecates 2026-07-24; default is now deepseek-v4-flash.
-  // deepseek-v4-flash pricing: $0.14/M in (cache miss), $0.0028/M in (cache hit), $0.28/M out.
-  const model = env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
-  // Feed the model the row-paired layout text (extractionText) — raw OCR order scrambles
-  // two-column receipts. Trim the rewards/marketing/coupon tail so the model isn't tempted to
-  // extract promo products as line items. GST is reconciled from the layout text in finalize().
-  const userPrompt = `Extract the receipt as json. OCR text:\n${trimReceiptTail(extractionText(input))}`;
-
-  let attempts = 0;
-  let lastRaw = "";
-
-  while (attempts < MAX_ATTEMPTS) {
-    attempts += 1;
-    const messages =
-      attempts === 1
-        ? [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userPrompt },
-          ]
-        : [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userPrompt },
-            { role: "assistant", content: lastRaw },
-            {
-              role: "user",
-              content:
-                "That was not valid against the schema. Return ONLY a valid json object matching the schema, no prose, no markdown fences.",
-            },
-          ];
-
-    const content = await callDeepseek(env, model, messages);
-    if (content !== null) {
-      lastRaw = content;
-      const parsed = tryParseReceipt(content);
-      if (parsed) {
-        return { receipt: finalize(input, parsed), meta: { model, attempts, stub: false, usedLlm: true } };
-      }
-    }
-  }
-
-  // All attempts exhausted — fell back to heuristic. usedLlm:false so the caller
-  // does NOT burn a smart-scan slot (DeepSeek outage should not penalise the user).
-  return { receipt: fallback(input), meta: { model, attempts, stub: false, usedLlm: false } };
 }
 
 /** Base64-encode an ArrayBuffer in 0x8000-byte chunks. Spreading a whole large Uint8Array into

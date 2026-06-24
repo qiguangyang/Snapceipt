@@ -170,7 +170,7 @@ final class PreviewAPIClient: APIClient {
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse {
         PullResponse(changes: [], nextCursor: nil, hasMore: false, serverTime: Epoch.nowMs())
     }
-    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+    func extract(jpeg: Data, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         let json = """
         {"requestId":"preview",
          "receipt":{"merchant":"Preview Cafe","date":"2026-05-28","currencyCode":"AUD",

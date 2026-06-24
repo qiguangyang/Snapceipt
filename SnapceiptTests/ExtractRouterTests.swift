@@ -26,7 +26,7 @@ struct ExtractRouterTests {
     /// Build a VM for the matrix. `cloudMode` maps to AppSettings.smartScanEnabled
     /// (ON = Cloud AI). Defaults to ON to match the persisted default.
     private func vm(extractor: OnDeviceExtracting?, online: Bool, cloudMode: Bool = true,
-                    extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
+                    extractHandler: ((Data, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, ModelContext) {
         UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
         UserDefaults.standard.set(cloudMode, forKey: AppSettings.smartScanEnabledKey)
@@ -46,7 +46,7 @@ struct ExtractRouterTests {
         return try! JSONDecoder().decode(ExtractionResponse.self, from: Data(j.utf8))
     }
 
-    // 1. ON + online -> cloud /extract (api called, engine .deepseek). FM (if any) untouched.
+    // 1. ON + online -> cloud /extract (api called, engine .gemini). FM (if any) untouched.
     @Test("ON + online -> cloud /extract")
     func onOnlineCloud() async throws {
         let (m, api, _) = try vm(extractor: StubExtractor(confidence: 0.95), online: true, cloudMode: true) { _,_,_ in self.ok("CLOUD") }
@@ -54,7 +54,7 @@ struct ExtractRouterTests {
         #expect(m.stage == .review)
         #expect(api.extractCalls.count == 1)            // cloud called
         #expect(m.draft?.merchant == "CLOUD")
-        #expect(m.diagnostics?.engine == .deepseek)
+        #expect(m.diagnostics?.engine == .gemini)
     }
 
     // 2. ON + offline + FM -> on-device FM (api NOT called, engine .foundationModel).
