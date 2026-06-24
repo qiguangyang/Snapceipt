@@ -6,6 +6,21 @@ import { revokeSessionFamily } from "../lib/sessions";
 import { nowMs } from "../lib/time";
 import { validate } from "./auth";
 import * as apns from "../lib/apns";
+import { isProUser } from "../lib/plan";
+import { uuidv7 } from "../lib/ids";
+import { type ExtractedReceipt } from "../lib/deepseek";
+import { writeReceiptRows } from "../lib/receiptRows";
+import { notifyEmailInReceipt } from "../email/notify";
+import { runExtraction } from "../email/inbound";
+
+/** Mirrors inbound.ts: a "needs review" receipt when extraction fails (image kept). */
+function simFailedReceipt(date: string): ExtractedReceipt {
+  return {
+    merchant: "", date, currencyCode: "AUD", total: 0, gst: null,
+    category: "office", deductible: null, lineItems: [], confidence: 0, needsReview: true,
+  };
+}
+const SIM_MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors inbound.ts
 
 /**
  * Device routes mounted under `/devices`. PROTECTED — the global auth middleware
@@ -150,6 +165,68 @@ deviceRoutes.post("/test-push", async (c) => {
     ? "No registered device — enable notifications in the app first."
     : sends.join("; ");
   return c.json({ deviceCount: results.length, detail });
+});
+
+/**
+ * POST /devices/simulate-inbound
+ * Dev/QA: run a real email-in ingestion for the authed (Pro) user from an uploaded image —
+ * store it to R2, extract via Gemini, write the transaction, then push the email-in
+ * notification — WITHOUT sending an actual email. Lets the WHOLE flow be exercised
+ * (receipt created → synced → push → tap-to-review → foreground refresh). Body = raw image
+ * bytes; content-type sets the mime. Returns the created txn id + extraction + push count.
+ */
+deviceRoutes.post("/simulate-inbound", async (c) => {
+  const userId = c.var.userId;
+  if (!(await isProUser(c.env.DB, userId))) {
+    throw new ApiError("FORBIDDEN", "Snapceipt Pro is required for this feature");
+  }
+  const prof = await c.env.DB.prepare(
+    "SELECT id, type FROM profiles WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
+  ).bind(userId).first<{ id: string; type: string }>();
+  if (!prof) throw new ApiError("NOT_FOUND", "No profile to attach the receipt to");
+
+  const buf = await c.req.arrayBuffer();
+  if (buf.byteLength === 0 || buf.byteLength > SIM_MAX_IMAGE_BYTES) {
+    throw new ApiError("VALIDATION_FAILED", "A receipt image (≤6 MiB) is required in the body");
+  }
+  const contentType = (c.req.header("content-type") ?? "image/jpeg").toLowerCase();
+  const ext = contentType.includes("png") ? "png" : "jpg";
+  const now = nowMs();
+  const defaultDate = new Date(now).toISOString().slice(0, 10);
+
+  // Store the image (so the review screen shows it), then extract via Gemini (gated).
+  const r2Key = `u/${userId}/${uuidv7()}.${ext}`;
+  await c.env.RECEIPTS.put(r2Key, buf, { httpMetadata: { contentType } });
+
+  let receipt: ExtractedReceipt;
+  let extraction: "done" | "failed" = "done";
+  let model: string | null = null;
+  try {
+    // Same stub-gated extractor as the real email path: Gemini in prod, deterministic stub
+    // when GEMINI_API_KEY is absent (hermetic tests).
+    const out = await runExtraction(c.env, buf, contentType, defaultDate);
+    receipt = out.receipt;
+    model = out.model;
+    if (out.usedLlm && receipt.total <= 0 && receipt.lineItems.length === 0) {
+      extraction = "failed";
+      receipt = simFailedReceipt(defaultDate);
+    }
+  } catch {
+    extraction = "failed";
+    receipt = simFailedReceipt(defaultDate);
+  }
+
+  const transactionId = await writeReceiptRows(c.env.DB, {
+    userId, profileId: prof.id, profileType: prof.type,
+    receipt, ocrText: null, r2Key, contentType, byteSize: buf.byteLength,
+    extractionStatus: extraction, extractionModel: model, nowMs: now,
+  });
+  await notifyEmailInReceipt(c.env, userId, transactionId, receipt.merchant, extraction, now);
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT 1 FROM devices WHERE user_id = ? AND deleted_at IS NULL AND push_enabled = 1 AND apns_token IS NOT NULL`,
+  ).bind(userId).all();
+  return c.json({ transactionId, extraction, merchant: receipt.merchant, deviceCount: results.length });
 });
 
 /**

@@ -46,6 +46,9 @@ protocol APIClient {
     /// POST /devices/test-push — dev/QA: send the email-in push to the authed user's own
     /// devices and report delivery diagnostics (device count + per-device APNs status).
     func testPush() async throws -> TestPushResponse
+    /// POST /devices/simulate-inbound — dev/QA: run the full email-in ingestion from an
+    /// uploaded image (store + extract + create txn + push) without sending a real email.
+    func simulateEmailIn(jpeg: Data) async throws -> SimulateInboundResponse
     /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), email the
     /// client the hosted HTML quote; returns the link + email status + minted number. (§4.5)
     func sendQuote(_ id: String) async throws -> SendQuoteResponse
@@ -270,6 +273,13 @@ final class LiveAPIClient: APIClient {
 
     func testPush() async throws -> TestPushResponse {
         try await send("POST", "/devices/test-push", body: NoBody(), authenticated: true)
+    }
+
+    func simulateEmailIn(jpeg: Data) async throws -> SimulateInboundResponse {
+        let data = try await performRawImage("/devices/simulate-inbound", query: [],
+                                             bytes: jpeg, contentType: "image/jpeg")
+        do { return try decoder.decode(SimulateInboundResponse.self, from: data) }
+        catch { throw APIError.decoding }
     }
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {

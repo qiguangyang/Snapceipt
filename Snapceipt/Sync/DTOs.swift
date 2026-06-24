@@ -223,6 +223,14 @@ struct TestPushResponse: Decodable {
     let detail: String
 }
 
+/// POST /devices/simulate-inbound response — the dev/QA email-in simulation result.
+struct SimulateInboundResponse: Decodable {
+    let transactionId: String
+    let extraction: String
+    let merchant: String
+    let deviceCount: Int
+}
+
 // MARK: - Quotes (spec §4.5)
 
 /// `POST /quotes/:id/send` → the hosted HTML quote link + email status + minted number.

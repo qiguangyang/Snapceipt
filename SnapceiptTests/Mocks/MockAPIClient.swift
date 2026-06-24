@@ -192,6 +192,9 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func testPush() async throws -> TestPushResponse {
         TestPushResponse(deviceCount: 0, detail: "mock")
     }
+    func simulateEmailIn(jpeg: Data) async throws -> SimulateInboundResponse {
+        SimulateInboundResponse(transactionId: "mock-txn", extraction: "done", merchant: "Mock", deviceCount: 0)
+    }
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         sendQuoteCalls.append(id)
