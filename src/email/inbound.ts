@@ -9,9 +9,11 @@ import { runGeminiVisionExtraction, type ExtractedReceipt } from "../lib/deepsee
 import { isProUser } from "../lib/plan";
 import { writeReceiptRows } from "../lib/receiptRows";
 import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smartScan";
-import { notifyEmailInReceipt } from "./notify";
+import { notifyEmailInBatch } from "./notify";
 
 const MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors images.ts
+/** Max receipt attachments processed from a single email (bounds Gemini spend / abuse). */
+const MAX_ATTACHMENTS = 8;
 /** Max inbound emails accepted per inbox alias per hour (coarse flood throttle). */
 const INBOUND_RATE_LIMIT = 20;
 const INBOUND_WINDOW_MS = 60 * 60 * 1000;
@@ -39,13 +41,23 @@ export interface InboundMessage {
 export type InboundResult =
   | { status: "rejected"; reason: "unknown_inbox" | "no_image" | "rate_limited" | "pro_only" }
   | { status: "duplicate" }
-  | { status: "created"; transactionId: string; extraction: "done" | "failed" };
+  // `transactionId`/`extraction` describe the FIRST receipt (back-compat); `count` +
+  // `transactionIds` cover the multi-attachment batch.
+  | { status: "created"; transactionId: string; extraction: "done" | "failed"; count: number; transactionIds: string[] };
 
 function todayIso(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 function isImage(mimeType: string | undefined | null): boolean {
   return typeof mimeType === "string" && mimeType.toLowerCase().startsWith("image/");
+}
+function isPdf(mimeType: string | undefined | null): boolean {
+  return typeof mimeType === "string" && mimeType.toLowerCase() === "application/pdf";
+}
+function extFor(contentType: string): string {
+  if (contentType.includes("pdf")) return "pdf";
+  if (contentType.includes("png")) return "png";
+  return "jpg";
 }
 function toArrayBuffer(content: ArrayBuffer | Uint8Array | string): ArrayBuffer {
   if (content instanceof ArrayBuffer) return content;
@@ -144,94 +156,110 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
     return { status: "rejected", reason: "rate_limited" };
   }
 
-  // 3. Parse MIME; pick the first image attachment under the size cap.
+  // 3. Parse MIME; collect every receipt-like attachment (images + PDFs), skipping embedded
+  //    signature logos / tracking pixels (`related`) and tiny files, capped per email.
   const parsed = await new PostalMime().parse(msg.raw);
-  const image = (parsed.attachments ?? []).find((att) => isImage(att.mimeType));
-  if (!image) {
+  const candidates: { buf: ArrayBuffer; contentType: string }[] = [];
+  for (const att of parsed.attachments ?? []) {
+    if (att.related || att.disposition === "inline") continue;     // embedded/inline logo/pixel — not a receipt
+    if (!isImage(att.mimeType) && !isPdf(att.mimeType)) continue;  // images + PDFs only
+    const ab = toArrayBuffer(att.content as ArrayBuffer | Uint8Array | string);
+    if (ab.byteLength === 0 || ab.byteLength > MAX_IMAGE_BYTES) continue;
+    candidates.push({ buf: ab, contentType: (att.mimeType ?? "image/jpeg").toLowerCase() });
+    if (candidates.length >= MAX_ATTACHMENTS) break;
+  }
+  if (candidates.length === 0) {
     await logInbound(env.DB, messageId, owner, null, "rejected", "no_image", now);
     return { status: "rejected", reason: "no_image" };
   }
-  const buf = toArrayBuffer(image.content as ArrayBuffer | Uint8Array | string);
-  if (buf.byteLength === 0 || buf.byteLength > MAX_IMAGE_BYTES) {
-    await logInbound(env.DB, messageId, owner, null, "rejected", "no_image", now);
-    return { status: "rejected", reason: "no_image" };
-  }
-  const contentType = (image.mimeType ?? "image/jpeg").toLowerCase();
-  const ext = contentType.includes("png") ? "png" : "jpg";
 
-  // 4. Store the image to R2 under the owner's prefix.
-  const r2Key = `u/${owner.userId}/${uuidv7()}.${ext}`;
-  await env.RECEIPTS.put(r2Key, buf, { httpMetadata: { contentType } });
-
-  // 5. Profile type drives txn.mode.
+  // 4. Profile type drives txn.mode; the monthly smart-scan cap is shared with POST /extract and
+  //    consumed per attachment (so a multi-attachment email can't exceed the budget).
   const prof = await env.DB.prepare("SELECT type FROM profiles WHERE id = ?").bind(owner.profileId).first<{ type: string }>();
   const profileType = prof?.type ?? "personal";
   const defaultDate = todayIso(now);
-
-  // 6. Cap gate: email-in extractions count against the SAME monthly smart-scan budget
-  // as POST /extract, checked BEFORE the expensive Gemini vision call. Over
-  // cap → store the image + a needs-review transaction (never lose the receipt) with no AI
-  // spend, so a free user can't mail their alias for unlimited extractions.
   const period = currentPeriod(now);
-  const planRow = await env.DB.prepare("SELECT plan FROM users WHERE id = ?")
-    .bind(owner.userId)
-    .first<{ plan: string }>();
+  const planRow = await env.DB.prepare("SELECT plan FROM users WHERE id = ?").bind(owner.userId).first<{ plan: string }>();
   const cap = capForPlan(planRow?.plan, env);
-  const overCap = (await getUsage(env.DB, owner.userId, period)) >= cap;
+  let usage = await getUsage(env.DB, owner.userId, period);
 
-  // No OCR step anymore: the image goes straight to the multimodal model. ocrText is null.
-  const ocrText: string | null = null;
-  let receipt: ExtractedReceipt;
-  let extraction: "done" | "failed" = "done";
-  let model: string | null = null;
-  let chargeSlot = false;
-  if (overCap) {
-    extraction = "failed";
-    receipt = failedReceipt(defaultDate);
-  } else {
-    // Vision extraction (gated). Any failure => failed transaction, image kept.
-    try {
-      const out = await runExtraction(env, buf, contentType, defaultDate);
-      receipt = out.receipt;
-      model = out.model;
-      // Charge a slot only when DeepSeek actually ran (parity with /extract).
-      chargeSlot = out.usedLlm;
-      // Sanity gate (real extractions only — the stub returns a populated receipt): an empty /
-      // implausible result (no total AND no line items) is honestly marked "failed" so the
-      // image is kept for review instead of persisting a misleading zeros receipt.
-      if (chargeSlot && receipt.total <= 0 && receipt.lineItems.length === 0) {
+  const ocrText: string | null = null; // no OCR step — images/PDFs go straight to the multimodal model
+  const transactionIds: string[] = [];
+  let firstExtraction: "done" | "failed" = "failed";
+  let anyCreated = false;
+  let anyOverCap = false;
+
+  // 5. Process each attachment independently — one receipt per attachment. A single failure
+  //    (extraction error / over cap) becomes a needs-review receipt without losing the others.
+  for (const { buf, contentType } of candidates) {
+    const r2Key = `u/${owner.userId}/${uuidv7()}.${extFor(contentType)}`;
+    await env.RECEIPTS.put(r2Key, buf, { httpMetadata: { contentType } });
+
+    let receipt: ExtractedReceipt;
+    let extraction: "done" | "failed" = "done";
+    let model: string | null = null;
+    let chargeSlot = false;
+    if (usage >= cap) {
+      // Over the monthly smart-scan cap: keep the file, no AI spend (needs-review receipt).
+      anyOverCap = true;
+      extraction = "failed";
+      receipt = failedReceipt(defaultDate);
+    } else {
+      // Vision extraction (gated; image OR PDF goes straight to Gemini). Any failure => failed
+      // transaction, file kept.
+      try {
+        const out = await runExtraction(env, buf, contentType, defaultDate);
+        receipt = out.receipt;
+        model = out.model;
+        chargeSlot = out.usedLlm; // charge a slot only when Gemini actually ran (parity with /extract)
+        // Sanity gate (real extractions only): an empty/implausible result (no total AND no items)
+        // is honestly marked "failed" so the file is kept for review.
+        if (chargeSlot && receipt.total <= 0 && receipt.lineItems.length === 0) {
+          extraction = "failed";
+          receipt = failedReceipt(defaultDate);
+        }
+      } catch (err) {
+        console.error(
+          "[email-in] vision extraction failed",
+          err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+          err instanceof Error ? (err.stack ?? "") : "",
+        );
         extraction = "failed";
         receipt = failedReceipt(defaultDate);
       }
-    } catch (err) {
-      // Surface the failure (it was silently swallowed): the error from the vision call.
-      console.error(
-        "[email-in] vision extraction failed",
-        err instanceof Error ? `${err.name}: ${err.message}` : String(err),
-        err instanceof Error ? (err.stack ?? "") : "",
-      );
-      extraction = "failed";
-      receipt = failedReceipt(defaultDate);
     }
-  }
-  // Increment usage OUTSIDE the extraction try so a transient counter-write failure can't
-  // discard an otherwise-good extraction. Best-effort: under-counting one slot is harmless.
-  if (chargeSlot) {
-    try { await incrementUsage(env.DB, owner.userId, period, now); } catch { /* best-effort */ }
+    // Increment usage OUTSIDE the try (a transient counter-write can't discard a good extraction)
+    // and bump the in-loop `usage` so later attachments respect the cap. Best-effort.
+    if (chargeSlot) {
+      usage++;
+      try { await incrementUsage(env.DB, owner.userId, period, now); } catch { /* best-effort */ }
+    }
+
+    const transactionId = await writeReceiptRows(env.DB, {
+      userId: owner.userId, profileId: owner.profileId, profileType,
+      receipt, ocrText, r2Key, contentType, byteSize: buf.byteLength,
+      extractionStatus: extraction, extractionModel: model, nowMs: now,
+    });
+    if (transactionIds.length === 0) firstExtraction = extraction;
+    if (extraction === "done") anyCreated = true;
+    transactionIds.push(transactionId);
   }
 
-  // 7. Write rows.
-  const transactionId = await writeReceiptRows(env.DB, {
-    userId: owner.userId, profileId: owner.profileId, profileType,
-    receipt, ocrText, r2Key, contentType, byteSize: buf.byteLength,
-    extractionStatus: extraction, extractionModel: model, nowMs: now,
-  });
-
+  // 6. ONE inbound_email_log row per email (message_id is the PK + dedup key): transaction_id =
+  //    the first receipt; reason records the cap outcome or the batch size.
   await logInbound(
-    env.DB, messageId, owner, transactionId,
-    extraction === "done" ? "created" : "failed",
-    overCap ? "over_cap" : null, now,
+    env.DB, messageId, owner, transactionIds[0]!,
+    anyCreated ? "created" : "failed",
+    anyOverCap ? "over_cap" : (transactionIds.length > 1 ? `receipts:${transactionIds.length}` : null),
+    now,
   );
-  await notifyEmailInReceipt(env, owner.userId, transactionId, receipt.merchant, extraction, now);
-  return { status: "created", transactionId, extraction };
+  // 7. ONE summary push per email (product decision); no transactionId → tap opens the list.
+  await notifyEmailInBatch(env, owner.userId, transactionIds.length, now);
+  return {
+    status: "created",
+    transactionId: transactionIds[0]!,
+    extraction: firstExtraction,
+    count: transactionIds.length,
+    transactionIds,
+  };
 }

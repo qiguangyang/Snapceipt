@@ -365,4 +365,135 @@ describe("inboundEmailLogic", () => {
       spy.mockRestore();
     }
   });
+
+  // ---- multi-attachment + PDF ----
+  const IMG_B64 = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBD";
+  const PDF_B64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c+PgplbmRvYmoK"; // "%PDF-1.4 ..."
+
+  /** multipart/mixed MIME carrying N attachments; each part may override disposition. */
+  function mimeWithParts(
+    messageId: string,
+    parts: { mime: string; b64: string; filename?: string; disposition?: string }[],
+  ): ArrayBuffer {
+    const lines = [
+      "From: supplier@example.com",
+      "To: receipts@example.com",
+      `Message-ID: <${messageId}>`,
+      "Subject: receipts",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="BOUND"',
+      "",
+      "--BOUND",
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      "Receipts attached.",
+    ];
+    parts.forEach((p, i) => {
+      const name = p.filename ?? `file${i}`;
+      lines.push(
+        "--BOUND",
+        `Content-Type: ${p.mime}; name="${name}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: ${p.disposition ?? "attachment"}; filename="${name}"`,
+        "",
+        p.b64,
+      );
+    });
+    lines.push("--BOUND--", "");
+    return new TextEncoder().encode(lines.join("\r\n")).buffer as ArrayBuffer;
+  }
+
+  it("creates one receipt per attachment for a multi-image email", async () => {
+    const { profileId, address } = await seedProfileWithInbox("business", "pro");
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<multi1>",
+      raw: mimeWithParts("multi1", [{ mime: "image/jpeg", b64: IMG_B64 }, { mime: "image/png", b64: IMG_B64 }]),
+    }, nowMs());
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.count).toBe(2);
+    expect(res.transactionIds).toHaveLength(2);
+    const n = await env.DB.prepare("SELECT COUNT(*) AS c FROM transactions WHERE profile_id = ? AND source = 'email_in'")
+      .bind(profileId).first<{ c: number }>();
+    expect(n!.c).toBe(2);
+  });
+
+  it("accepts a PDF attachment and stores it as application/pdf", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<pdf1>",
+      raw: mimeWithParts("pdf1", [{ mime: "application/pdf", b64: PDF_B64, filename: "invoice.pdf" }]),
+    }, nowMs());
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.count).toBe(1);
+    const ct = await env.DB.prepare("SELECT content_type FROM receipt_images WHERE transaction_id = ?")
+      .bind(res.transactionId).first<{ content_type: string }>();
+    expect(ct!.content_type).toBe("application/pdf");
+  });
+
+  it("processes a mixed image + PDF email (both become receipts)", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<mix1>",
+      raw: mimeWithParts("mix1", [{ mime: "image/jpeg", b64: IMG_B64 }, { mime: "application/pdf", b64: PDF_B64 }]),
+    }, nowMs());
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.count).toBe(2);
+  });
+
+  it("skips inline/embedded images and non-image/non-pdf attachments", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    // inline logo + a real attached receipt + a CSV → only the receipt counts.
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<filter1>",
+      raw: mimeWithParts("filter1", [
+        { mime: "image/png", b64: IMG_B64, filename: "logo.png", disposition: "inline" },
+        { mime: "text/csv", b64: IMG_B64, filename: "data.csv" },
+        { mime: "image/jpeg", b64: IMG_B64, filename: "receipt.jpg" },
+      ]),
+    }, nowMs());
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.count).toBe(1); // only the attached receipt
+  });
+
+  it("rejects an email whose only images are inline (no real receipt)", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<inlineonly>",
+      raw: mimeWithParts("inlineonly", [{ mime: "image/png", b64: IMG_B64, disposition: "inline" }]),
+    }, nowMs());
+    expect(res).toEqual({ status: "rejected", reason: "no_image" });
+  });
+
+  it("caps the number of attachments processed per email", async () => {
+    const { address } = await seedProfileWithInbox("business", "pro");
+    const parts = Array.from({ length: 11 }, () => ({ mime: "image/jpeg", b64: IMG_B64 }));
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<capmany>", raw: mimeWithParts("capmany", parts),
+    }, nowMs());
+    expect(res.status).toBe("created");
+    if (res.status !== "created") return;
+    expect(res.count).toBe(8); // MAX_ATTACHMENTS
+  });
+
+  it("sends ONE summary push for a multi-attachment email", async () => {
+    const { userId, address } = await seedProfileWithInbox("business", "pro");
+    await seedDevice(userId);
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
+    try {
+      await inboundEmailLogic(emailEnv(), {
+        to: address, from: "x@e.com", messageId: "<multipush>",
+        raw: mimeWithParts("multipush", [{ mime: "image/jpeg", b64: IMG_B64 }, { mime: "image/jpeg", b64: IMG_B64 }]),
+      }, nowMs());
+      expect(spy).toHaveBeenCalledTimes(1); // one push to the one device, not one-per-receipt
+      const p = spy.mock.calls[0]![2];
+      expect(p.aps.alert.body).toBe("2 receipts arrived — tap to review.");
+      expect(p.transactionId).toBeUndefined(); // summary → tap opens the list
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
