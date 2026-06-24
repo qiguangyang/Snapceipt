@@ -161,12 +161,22 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const parsed = await new PostalMime().parse(msg.raw);
   const candidates: { buf: ArrayBuffer; contentType: string }[] = [];
   for (const att of parsed.attachments ?? []) {
-    if (att.related || att.disposition === "inline") continue;     // embedded/inline logo/pixel — not a receipt
-    if (!isImage(att.mimeType) && !isPdf(att.mimeType)) continue;  // images + PDFs only
     const ab = toArrayBuffer(att.content as ArrayBuffer | Uint8Array | string);
-    if (ab.byteLength === 0 || ab.byteLength > MAX_IMAGE_BYTES) continue;
+    // Skip ONLY cid-embedded parts (signature logos / tracking pixels) and non-receipt types.
+    // Do NOT skip on disposition=inline — Outlook/Hotmail mark genuinely-attached receipts inline.
+    const skip =
+      att.related ? "embedded"
+      : (!isImage(att.mimeType) && !isPdf(att.mimeType)) ? "not-receipt-type"
+      : ab.byteLength === 0 ? "empty"
+      : ab.byteLength > MAX_IMAGE_BYTES ? "too-big"
+      : candidates.length >= MAX_ATTACHMENTS ? "over-cap"
+      : null;
+    console.log(
+      `[email-in:att] mime=${att.mimeType ?? "?"} disp=${att.disposition ?? "?"} ` +
+      `related=${att.related ?? false} bytes=${ab.byteLength} -> ${skip ?? "keep"}`,
+    );
+    if (skip) continue;
     candidates.push({ buf: ab, contentType: (att.mimeType ?? "image/jpeg").toLowerCase() });
-    if (candidates.length >= MAX_ATTACHMENTS) break;
   }
   if (candidates.length === 0) {
     await logInbound(env.DB, messageId, owner, null, "rejected", "no_image", now);
