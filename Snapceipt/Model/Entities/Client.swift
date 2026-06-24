@@ -12,6 +12,8 @@ final class Client: Syncable {
 
     var name: String
     var email: String?
+    /// Mobile phone (optional). Mirrors D1 `clients.mobile_phone`.
+    var mobilePhone: String?
     /// Freeform multiline address (optional). Mirrors D1 `clients.address`.
     var address: String?
 
@@ -29,6 +31,7 @@ final class Client: Syncable {
         profileId: String?,
         name: String,
         email: String? = nil,
+        mobilePhone: String? = nil,
         address: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
@@ -41,6 +44,7 @@ final class Client: Syncable {
         self.profileId = profileId
         self.name = name
         self.email = email
+        self.mobilePhone = mobilePhone
         self.address = address
         self.createdAt = createdAt
         self.updatedAt = updatedAt

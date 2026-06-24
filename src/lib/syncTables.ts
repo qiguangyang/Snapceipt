@@ -141,6 +141,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     columns: {
       name: "name",
       email: "email",
+      mobilePhone: "mobile_phone",
       address: "address",
     },
   },

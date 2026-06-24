@@ -18,6 +18,7 @@ struct ClientPickerSheet: View {
     @State private var showNew = false
     @State private var newName = ""
     @State private var newEmail = ""
+    @State private var newMobile = ""
     @State private var newAddress = ""
 
     var body: some View {
@@ -89,9 +90,11 @@ struct ClientPickerSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             field("Client name", text: $newName)
             field("Email (optional)", text: $newEmail)
+            field("Mobile phone (optional)", text: $newMobile)
             multilineField("Address (optional)", text: $newAddress)
             Button {
-                if let c = vm.create(name: newName, email: newEmail, address: newAddress) {
+                if let c = vm.create(name: newName, email: newEmail,
+                                     mobilePhone: newMobile, address: newAddress) {
                     onPick(c.name, c.email, c.address)
                 }
             } label: {
@@ -133,6 +136,9 @@ struct ClientPickerSheet: View {
                     Text(client.name).font(.ui(15, .bold)).foregroundStyle(Palette.ink)
                     if let email = client.email {
                         Text(email).font(.ui(12.5)).foregroundStyle(Palette.ink3)
+                    }
+                    if let mobile = client.mobilePhone, !mobile.isEmpty {
+                        Text(mobile).font(.ui(12.5)).foregroundStyle(Palette.ink3)
                     }
                     if let address = client.address, !address.isEmpty {
                         Text(address).font(.ui(12.5)).foregroundStyle(Palette.ink3).lineLimit(2)
