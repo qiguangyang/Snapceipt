@@ -111,9 +111,13 @@ struct AddManualView: View {
                         itemsCard
                     }
                     .padding(.horizontal, 18).padding(.top, 70)
-                    // Reserve room equal to the keyboard so the last item can scroll
-                    // clear of it (this screen is an overlay → no automatic avoidance).
-                    .padding(.bottom, 120 + (keyboardVisible ? keyboardHeight : 0))
+                    // Reserve room equal to the keyboard so the last item can scroll clear of it
+                    // (this screen is an overlay → no automatic avoidance). When a lower field is
+                    // focused but keyboardWillShow hasn't fired yet (auto-focus on "Add item" races
+                    // the notification on some devices/sims), reserve an estimated keyboard's worth
+                    // so the scroll-to-focused still has room to lift the field above the keyboard.
+                    .padding(.bottom, 120 + (keyboardVisible ? keyboardHeight
+                                             : (focusedField?.scrollId != nil ? 336 : 0)))
                 }
                 // We drive avoidance manually (below); stop SwiftUI from also insetting.
                 .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -146,9 +150,12 @@ struct AddManualView: View {
         }
     }
 
-    /// Scroll the focused lower field to sit comfortably above the keyboard.
+    /// Scroll the focused lower field to sit comfortably above the keyboard. Fires on focus
+    /// change too (not only once the keyboard is up): "Add item" auto-focuses the new row's name
+    /// field, and on some devices/simulators that focus change lands BEFORE keyboardWillShow, so
+    /// gating on `keyboardVisible` would skip the scroll and leave the field under the keyboard.
     private func scrollToFocusedItem(_ proxy: ScrollViewProxy) {
-        guard keyboardVisible, let target = focusedField?.scrollId else { return }
+        guard let target = focusedField?.scrollId else { return }
         // Let the bottom-padding/layout change settle before scrolling.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             withAnimation(.easeOut(duration: 0.25)) {
