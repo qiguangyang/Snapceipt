@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Notifications & alerts settings: APNs permission prime, Budget-alerts toggle ->
-/// devices.push_enabled, Quiet hours two time pickers -> minutes + tz -> PUT /devices/me,
-/// BAS-due reminder (local placeholder). Any change calls updateDevice. Uses the shared
+/// Notifications & alerts settings: a master "Push notifications" toggle ->
+/// devices.push_enabled (gates emailed-receipt + budget-alert pushes), Quiet hours two time
+/// pickers -> minutes + tz -> PUT /devices/me, BAS-due reminder (local placeholder). Any change
+/// calls updateDevice (via the VM). Uses the shared
 /// settings chrome: `SheetHeader`, uppercase group labels, grouped `Card`s,
 /// IconCircle-led rows with income-track toggles, and a paper-2 info note.
 struct NotificationsSettingsView: View {
@@ -23,12 +24,12 @@ struct NotificationsSettingsView: View {
                 if let vm {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
-                            groupLabel("Alerts")
+                            groupLabel("Notifications")
                             Card {
                                 VStack(spacing: 0) {
                                     toggleRow(icon: "bell",
-                                              title: "Budget alerts",
-                                              subtitle: "When a budget nears its cap",
+                                              title: "Push notifications",
+                                              subtitle: "Emailed receipts and budget alerts",
                                               isOn: Binding(
                                                 get: { vm.pushEnabled },
                                                 set: { on in vm.pushEnabled = on; Task { await vm.persist(); if on { await NotificationDelegate.requestAndRegister() } } }),
@@ -43,6 +44,7 @@ struct NotificationsSettingsView: View {
                                               id: AccessibilityID.notifBasToggle)
                                 }
                             }
+                            infoNote("Push notifications cover emailed-receipt alerts and budget alerts. Turning this off (or denying notifications in iOS Settings) stops all of them.")
 
                             groupLabel("Quiet hours")
                             quietHoursCard(vm)
