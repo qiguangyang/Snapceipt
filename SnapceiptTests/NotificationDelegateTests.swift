@@ -13,7 +13,7 @@ actor RefreshSpy { var count = 0; func mark() { count += 1 } }
             router: router, refresh: { await spy.mark() })
         let c = await spy.count
         #expect(c == 1)
-        #expect(router.overlay == .emailInReview(id: "txn123"))
+        #expect(router.overlay == .receiptDetail(id: "txn123"))
     }
 
     @Test func emailInPushNoTxnFallsBackToList() async {

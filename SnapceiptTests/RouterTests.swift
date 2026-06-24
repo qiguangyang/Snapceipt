@@ -3,10 +3,10 @@ import Testing
 @testable import Snapceipt
 
 @MainActor struct RouterTests {
-    @Test func receiptDeepLinkOpensReview() {
+    @Test func receiptDeepLinkOpensDetail() {
         let r = Router()
         #expect(r.handleReceiptDeepLink(URL(string: "snapceipt://receipt/txn123")!) == true)
-        #expect(r.overlay == .emailInReview(id: "txn123"))
+        #expect(r.overlay == .receiptDetail(id: "txn123"))
     }
     @Test func nonReceiptDeepLinkIgnored() {
         let r = Router()
@@ -16,6 +16,6 @@ import Testing
     @Test func openEmailInReceiptSetsOverlay() {
         let r = Router()
         r.openEmailInReceipt("abc")
-        #expect(r.overlay == .emailInReview(id: "abc"))
+        #expect(r.overlay == .receiptDetail(id: "abc"))
     }
 }

@@ -391,18 +391,8 @@ struct ShellView: View {
                 EmailInView(context: profiles.context, sync: sync, api: captureAPI,
                             userId: profiles.userId, profileId: profiles.activeProfileId,
                             onClose: { router.dismissOverlay() },
-                            onReview: { router.present(.emailInReview(id: $0)) },
+                            onReview: { router.present(.receiptDetail(id: $0)) },
                             onRefresh: { await sync.sync() })
-                    .environment(\.accent, accent).transition(.opacity)
-            }
-        }
-        .overlay {
-            if case let .emailInReview(id) = router.overlay {
-                EmailInReviewView(
-                    vm: EmailInViewModel(context: profiles.context, sync: sync, api: captureAPI,
-                                         userId: profiles.userId, profileId: profiles.activeProfileId),
-                    transactionId: id,
-                    onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }

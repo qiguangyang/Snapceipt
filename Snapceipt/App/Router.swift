@@ -139,8 +139,9 @@ enum Route: Equatable {
         return true
     }
 
-    /// Open the email-in review editor for transaction `id` (tapped push / receipt deep-link).
-    func openEmailInReceipt(_ id: String) { overlay = .emailInReview(id: id) }
+    /// Open the transaction detail for email-in receipt `id` (tapped push / receipt deep-link).
+    /// Reuses the rich ReceiptDetailView (amount header, details card, image, items, Edit/Delete).
+    func openEmailInReceipt(_ id: String) { overlay = .receiptDetail(id: id) }
 
     /// Parse `snapceipt://receipt/<id>` -> the transaction id, or nil for any other URL.
     static func parseReceiptDeepLink(_ url: URL) -> String? {
@@ -150,7 +151,7 @@ enum Route: Equatable {
         return id
     }
 
-    /// If `url` is a receipt deep-link, open its review editor and return true.
+    /// If `url` is a receipt deep-link, open its transaction detail and return true.
     @discardableResult
     func handleReceiptDeepLink(_ url: URL) -> Bool {
         guard let id = Router.parseReceiptDeepLink(url) else { return false }
