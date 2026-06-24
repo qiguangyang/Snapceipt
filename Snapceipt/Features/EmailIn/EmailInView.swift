@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 /// The Email-in surface: an inbox-address card (copy / share / rotate) above a
 /// failed-first list of email_in transactions. Tapping a row opens the review editor.
@@ -48,6 +49,11 @@ struct EmailInView: View {
         .task {
             await vm.loadAddressIfPro(isPro: entitlement.isPro)
             if !entitlement.isPro { showPaywall = true }
+        }
+        // A push-triggered sync just pulled a new email-in receipt — re-fetch the inbox so it
+        // appears while the screen is open (the list is a manual fetch, not a @Query).
+        .onReceive(NotificationCenter.default.publisher(for: .emailInReceiptArrived)) { _ in
+            vm.reload()
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: shareBinding) { item in EmailInActivityView(text: item.text) }

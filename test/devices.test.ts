@@ -66,6 +66,29 @@ describe("PUT /devices/me", () => {
     expect(row?.model).toBe("iPhone16,2");
   });
 
+  it("stores apnsEnvironment and preserves it on a partial (quiet-hours-only) update", async () => {
+    const { accessToken, deviceId } = await seedAuthedDevice();
+    const put = (body: object) => SELF.fetch("https://x/devices/me", {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        "x-device-id": deviceId,
+      },
+      body: JSON.stringify(body),
+    });
+    const readEnv = async () =>
+      (await env.DB.prepare(`SELECT apns_environment FROM devices WHERE id = ?`)
+        .bind(deviceId).first<{ apns_environment: string | null }>())?.apns_environment;
+
+    expect((await put({ apnsToken: "tokdev", apnsEnvironment: "development" })).status).toBe(200);
+    expect(await readEnv()).toBe("development");
+
+    // A later quiet-hours-only update omits apnsEnvironment — COALESCE must keep it.
+    expect((await put({ quietHoursStartMin: 60, quietHoursEndMin: 120 })).status).toBe(200);
+    expect(await readEnv()).toBe("development");
+  });
+
   it("creates the device row if X-Device-Id is new for this user", async () => {
     const { accessToken } = await seedAuthedDevice();
     const newDeviceId = uuidv7();

@@ -22,6 +22,9 @@ const putBody = z.object({
   quietHoursStartMin: z.number().int().min(0).max(1439).optional(),
   quietHoursEndMin: z.number().int().min(0).max(1439).optional(),
   timezone: z.string().min(1).optional(),
+  // The build's APNs environment, so the worker pushes to the matching host
+  // (development → sandbox, production → prod). Omitted by quiet-hours-only updates.
+  apnsEnvironment: z.enum(["development", "production"]).optional(),
 });
 
 /**
@@ -37,15 +40,17 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     throw new ApiError("VALIDATION_FAILED", "Missing X-Device-Id header");
   }
   const userId = c.var.userId;
-  const { apnsToken, osVersion, model, pushEnabled, quietHoursStartMin, quietHoursEndMin, timezone } =
-    c.req.valid("json");
+  const {
+    apnsToken, osVersion, model, pushEnabled,
+    quietHoursStartMin, quietHoursEndMin, timezone, apnsEnvironment,
+  } = c.req.valid("json");
   const now = nowMs();
 
   await c.env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, model, os_version, apns_token, push_enabled,
-                          quiet_hours_start_min, quiet_hours_end_min, timezone,
+                          quiet_hours_start_min, quiet_hours_end_min, timezone, apns_environment,
                           last_seen_at, created_at, updated_at)
-     VALUES (?, ?, 'ios', ?, ?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, 'ios', ?, ?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        model                 = COALESCE(excluded.model, devices.model),
        os_version            = COALESCE(excluded.os_version, devices.os_version),
@@ -54,6 +59,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
        quiet_hours_start_min = COALESCE(excluded.quiet_hours_start_min, devices.quiet_hours_start_min),
        quiet_hours_end_min   = COALESCE(excluded.quiet_hours_end_min, devices.quiet_hours_end_min),
        timezone              = COALESCE(excluded.timezone, devices.timezone),
+       apns_environment      = COALESCE(excluded.apns_environment, devices.apns_environment),
        last_seen_at          = excluded.last_seen_at,
        updated_at            = excluded.updated_at,
        deleted_at            = NULL
@@ -69,6 +75,7 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
       quietHoursStartMin ?? null,
       quietHoursEndMin ?? null,
       timezone ?? null,
+      apnsEnvironment ?? null,
       now,
       now,
       now,

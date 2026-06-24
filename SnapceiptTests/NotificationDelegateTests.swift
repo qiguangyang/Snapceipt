@@ -27,4 +27,22 @@ actor RefreshSpy { var count = 0; func mark() { count += 1 } }
         await NotificationDelegate.route(userInfo: ["budgetId": "b1"], router: router, refresh: nil)
         #expect(router.overlay == .budgetEditor(id: "b1"))
     }
+
+    @Test func apnsEnvironmentIsDevelopmentInDebugBuilds() {
+        // The test target compiles in Debug, mirroring the dev build's aps-environment=development.
+        #expect(NotificationDelegate.apnsEnvironment == "development")
+    }
+
+    @Test func updateDeviceBodyEncodesApnsEnvironmentOnlyWhenSet() throws {
+        let withEnv = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(UpdateDeviceBody(apnsToken: "t", apnsEnvironment: "development"))
+        ) as? [String: Any]
+        #expect(withEnv?["apnsEnvironment"] as? String == "development")
+
+        // A quiet-hours-only update omits the key, so the server COALESCE preserves the stored value.
+        let withoutEnv = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(UpdateDeviceBody(quietHoursStartMin: 60))
+        ) as? [String: Any]
+        #expect(withoutEnv?["apnsEnvironment"] == nil)
+    }
 }

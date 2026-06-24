@@ -63,4 +63,17 @@ describe("notifyEmailInReceipt", () => {
     await seedUserWithDevice("u_throw", "tok_throw");
     await expect(notifyEmailInReceipt(env, "u_throw", "txn7", "X", "done", T)).resolves.toBeUndefined();
   });
+
+  it("routes the push to the device's APNs environment (dev->development, null->production)", async () => {
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
+    await seedUserWithDevice("u_dev", "tok_dev");
+    await env.DB.prepare(`UPDATE devices SET apns_environment = 'development' WHERE user_id = 'u_dev'`).run();
+    await notifyEmailInReceipt(env, "u_dev", "txn8", "X", "done", T);
+    expect(spy.mock.calls[0][3]).toBe("development");
+
+    const spy2 = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
+    await seedUserWithDevice("u_prod", "tok_prod"); // apns_environment NULL -> production
+    await notifyEmailInReceipt(env, "u_prod", "txn9", "X", "done", T);
+    expect(spy2.mock.calls[0][3]).toBe("production");
+  });
 });

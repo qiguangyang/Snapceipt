@@ -48,3 +48,32 @@ describe("sendPush (stub seam)", () => {
     expect(res).toEqual({ stub: true });
   });
 });
+
+describe("sendPush (APNs host by environment)", () => {
+  const env = stubEnv({ APNS_KEY: TEST_P8, APNS_KEY_ID: "K", APNS_TEAM_ID: "T" });
+
+  it("POSTs to the production host by default and for 'production'", async () => {
+    const orig = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string) => { urls.push(String(url)); return { status: 200 } as Response; }) as typeof fetch;
+    try {
+      await sendPush(env, "tok", PAYLOAD);
+      await sendPush(env, "tok", PAYLOAD, "production");
+      expect(urls).toEqual([
+        "https://api.push.apple.com/3/device/tok",
+        "https://api.push.apple.com/3/device/tok",
+      ]);
+    } finally { globalThis.fetch = orig; }
+  });
+
+  it("POSTs to the sandbox host for 'development'", async () => {
+    const orig = globalThis.fetch;
+    let url = "";
+    globalThis.fetch = (async (u: string) => { url = String(u); return { status: 200 } as Response; }) as typeof fetch;
+    try {
+      const res = await sendPush(env, "tok", PAYLOAD, "development");
+      expect(url).toBe("https://api.sandbox.push.apple.com/3/device/tok");
+      expect(res).toEqual({ stub: false, status: 200 });
+    } finally { globalThis.fetch = orig; }
+  });
+});
