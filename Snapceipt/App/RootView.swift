@@ -471,6 +471,9 @@ struct ShellView: View {
             backfillGstDefaultsForActive()
             await sync.sync()
             await reconcilePendingExtractions()
+            #if DEBUG
+            await runSimulateEmailInIfFlagged()
+            #endif
         }
         // Re-run the (idempotent) backfill when the active profile changes, so switching to a
         // not-yet-backfilled profile fixes its groceries GST default too.
@@ -500,6 +503,20 @@ struct ShellView: View {
     private func reconcilePendingExtractions() async {
         await PendingExtractionReconciler(api: captureAPI, context: profiles.context, sync: sync).reconcile()
     }
+
+    #if DEBUG
+    /// Debug launch flag (`-simulateEmailIn`): runs the full email-in simulation on launch using
+    /// the on-device authenticated session, so it can be fired headlessly via
+    /// `xcrun devicectl device process launch … -simulateEmailIn` (no tap, no auth bypass).
+    private func runSimulateEmailInIfFlagged() async {
+        guard CommandLine.arguments.contains("-simulateEmailIn") else { return }
+        await NotificationDelegate.requestAndRegister()
+        guard let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
+              let data = try? Data(contentsOf: url) else { return }
+        _ = try? await captureAPI.simulateEmailIn(jpeg: data)
+        await sync.sync()
+    }
+    #endif
 
     /// One-time GST-default backfill for the ACTIVE profile (spec §1/§4.2). Idempotent and
     /// guarded by a per-profile UserDefaults flag inside `backfillGstDefaults`, so it is safe
