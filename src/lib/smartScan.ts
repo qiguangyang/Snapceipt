@@ -4,10 +4,10 @@
 // The cap counts those per user per calendar month (UTC) in smart_scan_usage.
 // Server-only; never synced to the client.
 
-/** Default free-tier monthly smart-scan cap. */
-export const DEFAULT_CAP_FREE = 10;
-/** Default Pro-tier monthly smart-scan cap. */
-export const DEFAULT_CAP_PRO = 500;
+/** Default free-tier monthly smart-scan (Cloud AI) cap. On-device FM is free + uncapped. */
+export const DEFAULT_CAP_FREE = 30;
+/** Default Pro-tier monthly smart-scan (Cloud AI) cap. */
+export const DEFAULT_CAP_PRO = 1000;
 
 /**
  * Return the UTC calendar month for `nowMs` as "YYYY-MM".

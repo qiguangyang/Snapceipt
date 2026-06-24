@@ -197,10 +197,24 @@ struct CaptureViewModelTests {
         #expect(vm.savedMode == "business")
     }
 
-    @Test("AppSettings.smartScanEnabled defaults to false (on-device) when the key is unset")
-    func smartScanDefaultsOff() {
+    @Test("AppSettings.smartScanEnabled defaults by device capability when the key is unset")
+    func smartScanDefaultsByCapability() {
         UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
-        #expect(AppSettings.smartScanEnabled == false)
+        // FM available → OFF (on-device, free); FM unavailable → ON (cloud is the only AI option).
+        #expect(AppSettings.smartScanEnabled == !AppSettings.isOnDeviceAIAvailable)
+    }
+
+    @Test("seedSmartScanDefaultIfUnset seeds the FM-aware default once, never overriding a choice")
+    func seedSmartScanDefault() {
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+        AppSettings.seedSmartScanDefaultIfUnset()
+        #expect(AppSettings.smartScanEnabled == !AppSettings.isOnDeviceAIAvailable)
+
+        // An explicit choice is preserved by a later seed call (no-op once set).
+        AppSettings.smartScanEnabled = AppSettings.isOnDeviceAIAvailable // flip away from the default
+        AppSettings.seedSmartScanDefaultIfUnset()
+        #expect(AppSettings.smartScanEnabled == AppSettings.isOnDeviceAIAvailable)
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
     }
 
     @Test("ScanDiagnostics.summary renders the DeepSeek engine line")

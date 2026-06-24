@@ -66,15 +66,15 @@ describe("POST /extract — stubGate path (no key)", () => {
 });
 
 describe("POST /extract — capped branch (free user at cap)", () => {
-  it("returns 200 with heuristic receipt + meta.capped=true when free cap (10) is exhausted", async () => {
+  it("returns 200 with heuristic receipt + meta.capped=true when free cap (30) is exhausted", async () => {
     const userId = "u-cap-test";
     const t = nowMs();
 
     // Seed user as free plan.
     await env.DB.prepare("INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)")
       .bind(userId, "cap@e.com", t, t).run();
-    // Seed usage at cap (10).
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 10, ?)")
+    // Seed usage at cap (30).
+    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 30, ?)")
       .bind(userId, t).run();
 
     const app = appWith({ DEEPSEEK_API_KEY: "sk-dummy", DB: env.DB }, userId);
@@ -98,14 +98,14 @@ describe("POST /extract — capped branch (free user at cap)", () => {
 
     // smartScan metadata.
     expect(body.meta.smartScan).toBeDefined();
-    expect(body.meta.smartScan.cap).toBe(10);
-    expect(body.meta.smartScan.used).toBe(10);
+    expect(body.meta.smartScan.cap).toBe(30);
+    expect(body.meta.smartScan.used).toBe(30);
     expect(body.meta.smartScan.plan).toBe("free");
 
     // Count must NOT have been incremented.
     const row = await env.DB.prepare("SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '2026-06'")
       .bind(userId).first<{ count: number }>();
-    expect(row!.count).toBe(10);
+    expect(row!.count).toBe(30);
   });
 
   it("uses env-override cap (SMART_SCAN_CAP_FREE=2) and caps at 2", async () => {
@@ -130,17 +130,17 @@ describe("POST /extract — capped branch (free user at cap)", () => {
 });
 
 describe("POST /extract — pro plan cap", () => {
-  it("cap for a pro user is 500", async () => {
+  it("cap for a pro user is 1000", async () => {
     const userId = "u-pro-test";
     const t = nowMs();
     await env.DB.prepare("INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'pro', ?, ?)")
       .bind(userId, "pro@e.com", t, t).run();
-    // Set usage just below the default free cap (10) but far below pro cap (500).
+    // Set usage just below the default free cap (30) but far below pro cap (1000).
     await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 5, ?)")
       .bind(userId, t).run();
 
-    // We verify the cap value is 500 by hitting the capped scenario with usage=500.
-    await env.DB.prepare("UPDATE smart_scan_usage SET count = 500 WHERE user_id = ? AND period = '2026-06'")
+    // We verify the cap value is 1000 by hitting the capped scenario with usage=1000.
+    await env.DB.prepare("UPDATE smart_scan_usage SET count = 1000 WHERE user_id = ? AND period = '2026-06'")
       .bind(userId).run();
 
     const app = appWith({ DEEPSEEK_API_KEY: "sk-dummy", DB: env.DB }, userId);
@@ -152,7 +152,7 @@ describe("POST /extract — pro plan cap", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.meta.capped).toBe(true);
-    expect(body.meta.smartScan.cap).toBe(500);
+    expect(body.meta.smartScan.cap).toBe(1000);
     expect(body.meta.smartScan.plan).toBe("pro");
   });
 });
@@ -162,8 +162,8 @@ describe("POST /extract — no user row (new/deleted user)", () => {
     // Don't seed any user row — simulates plan read returning null.
     const userId = "u-no-row";
     const t = nowMs();
-    // Seed usage at cap=10 so we get capped response (proves plan='free' was read).
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 10, ?)")
+    // Seed usage at cap=30 so we get capped response (proves plan='free' was read).
+    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 30, ?)")
       .bind(userId, t).run();
 
     const app = appWith({ DEEPSEEK_API_KEY: "sk-dummy", DB: env.DB }, userId);
@@ -175,7 +175,7 @@ describe("POST /extract — no user row (new/deleted user)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.meta.capped).toBe(true);
-    expect(body.meta.smartScan.cap).toBe(10);   // free cap
+    expect(body.meta.smartScan.cap).toBe(30);   // free cap
     expect(body.meta.smartScan.plan).toBe("free");
   });
 });

@@ -421,12 +421,26 @@ enum AppSettings {
     /// Persisted "Smart Scan AI" toggle key.
     static let smartScanEnabledKey = "sc.smartScan.enabled"
 
-    /// Cloud AI toggle: ON = cloud DeepSeek (`/extract`); OFF = on-device Foundation Models
-    /// (or manual on older devices). Default OFF (on-device): private, offline, and on tested
-    /// receipts more accurate than cloud. Missing key falls back to `false`.
+    /// Whether Apple's on-device Foundation Models are usable on this device (computed once).
+    /// On-device extraction is free + uncapped; Cloud AI is the metered alternative.
+    static let isOnDeviceAIAvailable: Bool = OnDeviceAI.makeExtractor() != nil
+
+    /// Cloud AI toggle: ON = cloud (`/extract`, metered); OFF = on-device Foundation Models
+    /// (free, uncapped) — or manual entry when on-device AI isn't available. The DEFAULT is by
+    /// device capability: OFF (on-device) when FM is available, ON (cloud) when it isn't — a
+    /// device without on-device AI gets Cloud by default rather than manual-only. An explicit
+    /// user choice is persisted and always wins.
     static var smartScanEnabled: Bool {
-        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? false }
+        get { UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool ?? !isOnDeviceAIAvailable }
         set { UserDefaults.standard.set(newValue, forKey: smartScanEnabledKey) }
+    }
+
+    /// Seed the Cloud AI default once (FM-aware) BEFORE any UI reads `@AppStorage`, so the toggle
+    /// and the extraction router agree on first launch. No-op once the user (or this seed) has set
+    /// it — never overrides an explicit choice. Call from app launch.
+    static func seedSmartScanDefaultIfUnset() {
+        guard UserDefaults.standard.object(forKey: smartScanEnabledKey) == nil else { return }
+        UserDefaults.standard.set(!isOnDeviceAIAvailable, forKey: smartScanEnabledKey)
     }
 }
 
