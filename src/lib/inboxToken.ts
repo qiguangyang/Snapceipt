@@ -10,11 +10,29 @@ export interface InboxOwner {
   profileId: string;
 }
 
-/** 16 random bytes -> 32 lowercase hex chars. Unguessable; collision-free in practice. */
+/** Lowercase RFC 4648 base32 alphabet (a-z, 2-7) — denser than hex and email-local-part safe
+ * (no 0/1/8/9, so no 0/o or 1/l ambiguity). */
+const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
+
+/** 8 random bytes (64 bits) -> 13 lowercase base32 chars. Short but unguessable for a Pro-gated +
+ * rate-limited email alias: a brute-force needs one SENT email per guess, and 2^64 is infeasible.
+ * Existing 32-hex aliases keep resolving (DB lookup, no format check) — only NEW tokens are short. */
 export function generateInboxToken(): string {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const b of bytes) {
+    value = (value << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32[(value << (5 - bits)) & 31]; // final 4 bits → 1 char (13 total)
+  return out;
 }
 
 /** Format the public alias for a token. The client treats the result as opaque. */

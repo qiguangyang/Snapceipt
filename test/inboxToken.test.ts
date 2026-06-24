@@ -32,10 +32,10 @@ beforeEach(async () => {
 });
 
 describe("inboxToken — pure helpers", () => {
-  it("generateInboxToken returns 32 lowercase hex chars and is unique", () => {
+  it("generateInboxToken returns 13 lowercase base32 chars (a-z2-7) and is unique", () => {
     const a = generateInboxToken();
     const b = generateInboxToken();
-    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).toMatch(/^[a-z2-7]{13}$/);
     expect(a).not.toBe(b);
   });
 
