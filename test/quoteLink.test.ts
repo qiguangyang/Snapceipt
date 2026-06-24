@@ -265,4 +265,91 @@ describe("GET /q/:token (public HTML quote)", () => {
     const res = await SELF.fetch(`${BASE}/q/${token}`);
     expect(res.status).toBe(404);
   });
+
+  it("renders the Accept button + accept script for a valid (non-accepted) token", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+    const html = await (await SELF.fetch(`${BASE}/q/${token}`)).text();
+    expect(html).toContain("Accept quote");
+    expect(html).toContain("Save as PDF");
+    expect(html).toContain(`/q/${token}/accept`);
+    expect(html).toContain("Powered by Snapceipt");
+  });
+
+  it("shows the Accepted banner (no Accept button) once the quote is accepted", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    await env.DB.prepare("UPDATE quotes SET status='accepted' WHERE id=?").bind(quoteId).run();
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+    const html = await (await SELF.fetch(`${BASE}/q/${token}`)).text();
+    expect(html).not.toContain(">Accept quote<");
+    expect(html).toContain("Accepted");
+    expect(html).toContain("Save as PDF"); // PDF button still present
+  });
+});
+
+describe("POST /q/:token/accept (public accept)", () => {
+  it("valid token → sets status=accepted, bumps rev, returns {ok, status}", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const revBefore = (await env.DB.prepare("SELECT rev FROM quotes WHERE id=?")
+      .bind(quoteId).first<{ rev: number }>())!.rev;
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+
+    const res = await SELF.fetch(`${BASE}/q/${token}/accept`, { method: "POST" }); // no auth (public)
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, status: "accepted" });
+
+    const row = await env.DB.prepare("SELECT status, rev FROM quotes WHERE id=?")
+      .bind(quoteId).first<{ status: string; rev: number }>();
+    expect(row?.status).toBe("accepted");
+    expect(row?.rev).toBe(revBefore + 1);
+  });
+
+  it("is IDEMPOTENT: a second accept stays ok and does NOT re-bump rev", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId);
+
+    await SELF.fetch(`${BASE}/q/${token}/accept`, { method: "POST" });
+    const revAfterFirst = (await env.DB.prepare("SELECT rev FROM quotes WHERE id=?")
+      .bind(quoteId).first<{ rev: number }>())!.rev;
+
+    const res2 = await SELF.fetch(`${BASE}/q/${token}/accept`, { method: "POST" });
+    expect(res2.status).toBe(200);
+    expect(await res2.json()).toEqual({ ok: true, status: "accepted" });
+
+    const row = await env.DB.prepare("SELECT status, rev FROM quotes WHERE id=?")
+      .bind(quoteId).first<{ status: string; rev: number }>();
+    expect(row?.status).toBe("accepted");
+    expect(row?.rev).toBe(revAfterFirst); // unchanged on the idempotent re-accept
+  });
+
+  it("403 for a forged token (no status change)", async () => {
+    const res = await SELF.fetch(`${BASE}/q/not.a.valid.token/accept`, { method: "POST" });
+    expect(res.status).toBe(403);
+  });
+
+  it("403 for an expired token", async () => {
+    const { userId } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, 0, -10); // expired
+    const res = await SELF.fetch(`${BASE}/q/${token}/accept`, { method: "POST" });
+    expect(res.status).toBe(403);
+    const row = await env.DB.prepare("SELECT status FROM quotes WHERE id=?")
+      .bind(quoteId).first<{ status: string }>();
+    expect(row?.status).toBe("draft"); // unchanged
+  });
+
+  it("403 once the quote link is revoked (link_version bumped past the token)", async () => {
+    const { userId, accessToken } = await seedAuthed();
+    const { quoteId } = await seedQuote(userId);
+    const token = await signQuoteLinkToken(env.JWT_SIGNING_KEY, quoteId, userId, 0);
+    await SELF.fetch(`${BASE}/quotes/${quoteId}/link/revoke`, {
+      method: "POST", headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const res = await SELF.fetch(`${BASE}/q/${token}/accept`, { method: "POST" });
+    expect(res.status).toBe(403);
+  });
 });

@@ -106,7 +106,8 @@ describe("POST /quotes/:id/send", () => {
     expect(row.gst_cents).toBe(10500);
     expect(row.total_cents).toBe(115500);
 
-    // sendQuoteEmail got the URL + the trader's reply-to (no pdf field anymore).
+    // sendQuoteEmail got the URL + the trader's reply-to (no pdf field anymore), plus the
+    // business identity, line items, and totals for the rich email body.
     expect(spy).toHaveBeenCalledTimes(1);
     const arg = spy.mock.calls[0]![1] as emailModule.QuoteEmail;
     expect(arg.to).toBe("jane@example.com");
@@ -114,6 +115,12 @@ describe("POST /quotes/:id/send", () => {
     expect(arg.quoteNumber).toBe("SN-0001");
     expect(arg.url).toContain("/q/");
     expect((arg as any).pdf).toBeUndefined();
+    expect(arg.business.name).toBe("Acme Pty Ltd");
+    expect(arg.business.abn).toBe("12 345 678 901");
+    expect(arg.lineItems.length).toBe(2);
+    expect(arg.subtotalCents).toBe(105000);
+    expect(arg.gstCents).toBe(10500);
+    expect(arg.appUrl).toBe("https://snapceipt.cc");
 
     // Outbox queued -> sent; export_format is NULL for a link send.
     const outbox = await env.DB.prepare(

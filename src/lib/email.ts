@@ -147,6 +147,24 @@ export async function sendExportEmail(env: Env, msg: ExportEmail): Promise<void>
   await env.EMAIL.send(message);
 }
 
+/** One line item rendered in the quote email body. */
+export interface QuoteEmailLineItem {
+  description: string;
+  quantity: number;
+  /** Line amount in cents = quantity × unitPriceCents. */
+  amountCents: number;
+}
+
+/** The trader's business identity shown in the quote email header/footer. */
+export interface QuoteEmailBusiness {
+  name: string;
+  /** R2 object key of the logo (rendered as https://api.snapceipt.cc/images/<key>); null ⇒ no logo. */
+  logoR2Key: string | null;
+  abn: string | null;
+  /** Best contact line for the trader (email/phone), shown under the business name. */
+  contact: string | null;
+}
+
 /** The quote-send email (a link to the hosted HTML quote, no attachment). */
 export interface QuoteEmail {
   to: string;
@@ -157,27 +175,191 @@ export interface QuoteEmail {
   totalCents: number;
   /** The hosted HTML quote URL (https://api.snapceipt.cc/q/<token>). */
   url: string;
+  /** The trader's business identity (name/logo/abn/contact). */
+  business: QuoteEmailBusiness;
+  /** Line items for the email body table. */
+  lineItems: QuoteEmailLineItem[];
+  subtotalCents: number;
+  gstCents: number;
+  /** True when GST applies (shows the GST row). */
+  gstEnabled: boolean;
+  /** YYYY-MM-DD valid-until date, or null. */
+  validUntil: string | null;
+  /** App/site link for the marketing footer (https://snapceipt.cc). */
+  appUrl: string;
+}
+
+/** Origin that serves business logos from R2: GET /images/<r2key>. */
+const IMAGE_ORIGIN = "https://api.snapceipt.cc";
+
+/** Dollars with a leading sign, e.g. "$40.00". */
+function emailDollars(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** HTML-escape a string (text + attribute safe). null/undefined ⇒ "". */
+function emailEsc(s: string | null | undefined): string {
+  if (s == null) return "";
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Build the EMAIL-SAFE rich HTML body for the quote email: table-based layout, inline
+ * CSS only (Gmail/Outlook strip <style>/flex/grid), ~600px max width, logo via an
+ * <img src> pointing at the R2 image URL (NOT a data-URI — email clients block those).
+ */
+function renderQuoteEmailHtml(msg: QuoteEmail): string {
+  const b = msg.business;
+  const greeting = msg.clientName ? `Hi ${emailEsc(msg.clientName)},` : "Hi,";
+  const total = emailDollars(msg.totalCents);
+
+  const logoImg = b.logoR2Key
+    ? `<img src="${IMAGE_ORIGIN}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
+    : "";
+
+  const businessSub: string[] = [];
+  if (b.contact) businessSub.push(emailEsc(b.contact));
+  if (b.abn) businessSub.push(`ABN ${emailEsc(b.abn)}`);
+  const businessSubHtml = businessSub
+    .map((l) => `<div style="font-size:13px;color:#6b7280;line-height:1.5;">${l}</div>`)
+    .join("");
+
+  const itemRows = msg.lineItems
+    .map(
+      (li) => `
+            <tr>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:left;">${li.quantity}</td>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:left;">${emailEsc(li.description)}</td>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(li.amountCents)}</td>
+            </tr>`,
+    )
+    .join("");
+
+  const gstRow = msg.gstEnabled
+    ? `
+            <tr>
+              <td style="padding:4px 8px;font-size:14px;color:#6b7280;text-align:right;">GST</td>
+              <td style="padding:4px 8px;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(msg.gstCents)}</td>
+            </tr>`
+    : "";
+
+  const validUntilRow = msg.validUntil
+    ? `<div style="font-size:13px;color:#6b7280;margin:18px 0 0;">Valid until ${emailEsc(msg.validUntil)}.</div>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eceeec;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eceeec;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <tr>
+            <td style="padding:32px 32px 0;">
+              ${logoImg}
+              <div style="font-size:20px;font-weight:700;color:#1f2937;margin:${logoImg ? "12px" : "0"} 0 4px;">${emailEsc(b.name)}</div>
+              ${businessSubHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <div style="font-size:24px;font-weight:800;letter-spacing:.06em;color:#4f7a63;">Quote ${emailEsc(msg.quoteNumber)}</div>
+              <div style="font-size:15px;color:#1f2937;margin:16px 0 0;">${greeting}</div>
+              <div style="font-size:15px;color:#1f2937;margin:8px 0 0;line-height:1.55;">Here is your quote${msg.clientName ? "" : ""} for ${total}. You can view the full quote and accept it online using the button below.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:left;">Qty</th>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:left;">Description</th>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:right;">Amount</th>
+                </tr>${itemRows}
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 0;">
+              <table role="presentation" align="right" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <td style="padding:4px 8px;font-size:14px;color:#6b7280;text-align:right;">Subtotal</td>
+                  <td style="padding:4px 8px;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(msg.subtotalCents)}</td>
+                </tr>${gstRow}
+                <tr>
+                  <td style="padding:8px 8px;font-size:16px;font-weight:700;color:#4f7a63;text-align:right;border-top:1px solid #4f7a63;">Total (AUD)</td>
+                  <td style="padding:8px 8px;font-size:16px;font-weight:700;color:#4f7a63;text-align:right;white-space:nowrap;border-top:1px solid #4f7a63;">${total}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                <td align="center" style="border-radius:6px;background:#4f7a63;">
+                  <a href="${emailEsc(msg.url)}" style="display:inline-block;padding:14px 28px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;">View &amp; accept online &rarr;</a>
+                </td>
+              </tr></table>
+              ${validUntilRow}
+              <div style="font-size:13px;color:#6b7280;margin:18px 0 0;">Reply to this email if you have any questions.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 32px;">
+              <div style="border-top:1px solid #eceeec;padding-top:16px;text-align:center;">
+                <a href="${emailEsc(msg.appUrl)}" style="font-size:12px;color:#9ca3af;text-decoration:none;">Powered by Snapceipt — snap receipts, send quotes &amp; invoices</a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** The plain-text fallback for non-HTML clients (keeps the link working). */
+function renderQuoteEmailText(msg: QuoteEmail): string {
+  const total = emailDollars(msg.totalCents);
+  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+  const validUntil = msg.validUntil ? `Valid until ${msg.validUntil}.\n\n` : "";
+  return (
+    `${greeting}\n\n` +
+    `Here is your quote ${msg.quoteNumber} from ${msg.business.name} for ${total}.\n\n` +
+    `View & accept it online here:\n\n${msg.url}\n\n` +
+    validUntil +
+    `Reply to this email if you have any questions.\n\n` +
+    `— Powered by Snapceipt: snap receipts, send quotes & invoices. ${msg.appUrl}\n`
+  );
 }
 
 /**
  * Send the quote email with a LINK to the hosted HTML quote (spec §4/§5 — no PDF
- * attachment). Mirrors sendMagicLinkEmail's plain-text SendEmail builder path (no
- * mimetext/cloudflare:email needed for a link-only message). `from` is the magic-link
- * sender; Reply-To is the trader so the client replies to them. Stubbed in route tests
- * via vi.spyOn(emailModule, "sendQuoteEmail").
+ * attachment). Uses the SendEmail builder overload's `html` + `text` fields (no
+ * mimetext/cloudflare:email needed for a link-only message): rich HTML body for HTML
+ * clients, plain-text fallback for the rest. `from` is the magic-link sender; Reply-To
+ * is the trader so the client replies to them. Stubbed in route tests via
+ * vi.spyOn(emailModule, "sendQuoteEmail").
  */
 export async function sendQuoteEmail(env: Env, msg: QuoteEmail): Promise<void> {
-  const total = `$${(msg.totalCents / 100).toFixed(2)}`;
-  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+  const businessName = msg.business.name.trim();
+  const subject = businessName
+    ? `Your quote from ${businessName}`
+    : `Your quote ${msg.quoteNumber}`;
   await env.EMAIL.send({
     from: { name: "Snapceipt", email: MAGIC_LINK_SENDER },
     to: msg.to,
     replyTo: msg.replyTo,
-    subject: `Quote ${msg.quoteNumber} — ${total}`,
-    text:
-      `${greeting}\n\n` +
-      `View your quote ${msg.quoteNumber} for ${total} here:\n\n${msg.url}\n\n` +
-      `Reply to this email if you have any questions.\n`,
+    subject,
+    text: renderQuoteEmailText(msg),
+    html: renderQuoteEmailHtml(msg),
   });
 }
 

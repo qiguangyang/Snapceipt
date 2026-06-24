@@ -44,6 +44,10 @@ export interface QuoteHtmlData {
   logoDataUri: string | null;
   /** App link for the footer badge. */
   appUrl: string;
+  /** Quote status; when "accepted" the page shows the Accepted banner instead of the Accept button. */
+  status?: string | null;
+  /** The signed quote-link token; when set the page renders the Accept button + accept script. */
+  token?: string | null;
 }
 
 const DEFAULT_GST_RATE_BP = 1000;
@@ -91,14 +95,13 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
     ? `<img class="logo" src="${esc(data.logoDataUri)}" alt="${esc(b.name)} logo">`
     : "";
 
-  // Company contact lines under the name (each only when set).
+  // Company contact lines under the name — each on its OWN line (spec §4: email/phone/website
+  // are no longer joined with " · ").
   const companyLines: string[] = [];
   if (b.address) companyLines.push(escMultiline(b.address));
-  const contactBits: string[] = [];
-  if (b.businessEmail) contactBits.push(esc(b.businessEmail));
-  if (b.phone) contactBits.push(esc(b.phone));
-  if (b.website) contactBits.push(esc(b.website));
-  if (contactBits.length) companyLines.push(contactBits.join(" &middot; "));
+  if (b.businessEmail) companyLines.push(esc(b.businessEmail));
+  if (b.phone) companyLines.push(esc(b.phone));
+  if (b.website) companyLines.push(esc(b.website));
   if (b.abn) companyLines.push(`ABN ${esc(b.abn)}`);
   const companyMeta = companyLines.map((l) => `<div class="muted">${l}</div>`).join("");
 
@@ -138,6 +141,38 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
   );
   if (b.bankDetails) termsLines.push(`Payment details: ${escMultiline(b.bankDetails)}`);
   const termsHtml = termsLines.map((l) => `<p class="terms-line">${l}</p>`).join("");
+
+  // Action area (spec §2/§3): a "Save as PDF" button (window.print) always; an "Accept
+  // quote" button only when not yet accepted AND a token is present (so the page JS can
+  // POST /q/<token>/accept). When already accepted, show the "Accepted ✓" banner instead.
+  const isAccepted = data.status === "accepted";
+  const acceptedBanner = `<div class="accepted-banner" id="accepted-banner"${isAccepted ? "" : ' style="display:none;"'}>Accepted &#10003;</div>`;
+  const acceptBtn =
+    data.token && !isAccepted
+      ? `<button type="button" class="btn btn-primary" id="accept-btn" onclick="acceptQuote()">Accept quote</button>`
+      : "";
+  const actionsHtml = `<div class="actions" id="actions">
+      ${acceptBtn}
+      <button type="button" class="btn btn-secondary" onclick="window.print()">Save as PDF</button>
+    </div>`;
+
+  // Accept script: inlines the token so the public page can POST the accept with no auth.
+  const acceptScript =
+    data.token && !isAccepted
+      ? `<script>
+  function acceptQuote(){
+    var btn=document.getElementById('accept-btn');
+    if(btn){btn.disabled=true;btn.textContent='Accepting…';}
+    fetch('/q/${esc(data.token)}/accept',{method:'POST'})
+      .then(function(r){return r.ok?r.json():Promise.reject(r);})
+      .then(function(){
+        var a=document.getElementById('actions');if(a){var s=a.querySelector('.btn-secondary');a.innerHTML='';if(s)a.appendChild(s);}
+        var bn=document.getElementById('accepted-banner');if(bn)bn.style.display='';
+      })
+      .catch(function(){if(btn){btn.disabled=false;btn.textContent='Accept quote';}alert('Could not accept the quote. Please try again or contact the sender.');});
+  }
+</script>`
+      : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -193,12 +228,26 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
   .sign-line { border-top:1px solid var(--brand); margin-bottom:6px; }
   .sign-label { color:var(--brand); font-size:13px; }
 
+  .actions { margin-top:36px; display:flex; gap:12px; flex-wrap:wrap; }
+  .btn { appearance:none; border:none; cursor:pointer; font:inherit; font-weight:700; font-size:15px;
+         padding:13px 26px; border-radius:8px; }
+  .btn-primary { background:var(--brand); color:#fff; }
+  .btn-primary:disabled { opacity:.6; cursor:default; }
+  .btn-secondary { background:var(--brand-soft); color:var(--brand); }
+  .accepted-banner { margin-top:36px; padding:16px 20px; border-radius:8px; background:var(--brand-soft);
+                     color:var(--brand); font-weight:700; font-size:16px; text-align:center; }
+
+  .footer { margin-top:36px; text-align:center; }
+  .footer a { color:var(--muted); text-decoration:none; font-size:12px; }
+
   .badge { margin-top:28px; text-align:center; }
   .badge a { color:var(--muted); text-decoration:none; font-size:11px; letter-spacing:.02em; }
 
   @media print {
     body { background:#fff; }
     .page { box-shadow:none; margin:0; max-width:none; border-radius:0; padding:32px; }
+    /* Hide the on-screen action buttons (PDF + Accept) so the saved/printed PDF is clean. */
+    .actions { display:none !important; }
   }
   @media (max-width:600px) {
     .page { padding:28px 22px; }
@@ -256,8 +305,13 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
       </div>
     </div>
 
+    ${acceptedBanner}
+    ${actionsHtml}
+
+    <div class="footer"><a href="${esc(data.appUrl)}">Powered by Snapceipt — snap receipts, send quotes &amp; invoices</a></div>
     <div class="badge"><a href="${esc(data.appUrl)}">Made with Snapceipt</a></div>
   </div>
+  ${acceptScript}
 </body>
 </html>`;
 }

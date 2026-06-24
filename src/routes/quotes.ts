@@ -43,6 +43,7 @@ interface QuoteRenderRow {
   gst_inclusive: number;
   gst_rate_bp: number | null;
   valid_until: string | null;
+  status: string;
   created_at: number;
 }
 
@@ -85,7 +86,7 @@ export async function loadQuoteForRender(
 ): Promise<QuoteHtmlData | null> {
   const quote = await env.DB.prepare(
     `SELECT id, profile_id, number, client_name, client_email, client_address, gst_enabled, gst_inclusive,
-            gst_rate_bp, valid_until, created_at
+            gst_rate_bp, valid_until, status, created_at
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<QuoteRenderRow>();
   if (!quote) return null;
@@ -142,6 +143,8 @@ export async function loadQuoteForRender(
     })),
     logoDataUri: await logoDataUri(env, profile.logo_r2_key),
     appUrl: APP_URL,
+    status: quote.status,
+    // token is injected by the /q/:token route (it knows the verified token).
   };
 }
 
@@ -151,14 +154,24 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 1. Load the quote (scoped to the authed user).
   const quote = await c.env.DB.prepare(
-    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, gst_rate_bp, link_version
+    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive, gst_rate_bp, valid_until, link_version
        FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<{
     id: string; profile_id: string; number: string | null;
     client_name: string | null; client_email: string | null;
-    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null; link_version: number;
+    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null;
+    valid_until: string | null; link_version: number;
   }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
+
+  // 1b. Load the owning profile for the rich email header (name/logo/abn/contact).
+  const profile = await c.env.DB.prepare(
+    `SELECT name, abn, business_email, phone, logo_r2_key
+       FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(quote.profile_id, userId).first<{
+    name: string; abn: string | null; business_email: string | null;
+    phone: string | null; logo_r2_key: string | null;
+  }>();
 
   // 2. Load its non-deleted line items (deterministic order).
   const { results: lineItems } = await c.env.DB.prepare(
@@ -216,6 +229,8 @@ quotesRoutes.post("/:id/send", async (c) => {
   let emailed = false;
   const trader = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
     .bind(userId).first<{ email: string | null }>();
+  const businessContact =
+    [profile?.business_email, profile?.phone].filter((v): v is string => !!v).join(" · ") || null;
   try {
     await emailModule.sendQuoteEmail(c.env, {
       to: quote.client_email,
@@ -224,6 +239,22 @@ quotesRoutes.post("/:id/send", async (c) => {
       clientName: quote.client_name,
       totalCents: totals.totalCents,
       url,
+      business: {
+        name: profile?.name ?? "",
+        logoR2Key: profile?.logo_r2_key ?? null,
+        abn: profile?.abn ?? null,
+        contact: businessContact,
+      },
+      lineItems: lineItems.map((li) => ({
+        description: li.description,
+        quantity: li.quantity,
+        amountCents: li.quantity * li.unit_price_cents,
+      })),
+      subtotalCents: totals.subtotalCents,
+      gstCents: totals.gstCents,
+      gstEnabled,
+      validUntil: quote.valid_until,
+      appUrl: APP_URL,
     });
     await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)
       .bind(nowMs(), outboxId).run();
