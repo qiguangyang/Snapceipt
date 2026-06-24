@@ -26,13 +26,17 @@ struct EmailInView: View {
             LbHeader(title: "Email-in receipts", onClose: onClose, onAdd: {}, showsAdd: false)
             ScrollView {
                 VStack(spacing: 14) {
-                    addressCard
-                    if vm.inbox.isEmpty {
-                        emptyState
-                    } else {
-                        ForEach(vm.inbox, id: \.id) { txn in
-                            row(txn)
+                    if entitlement.isPro {
+                        addressCard
+                        if vm.inbox.isEmpty {
+                            emptyState
+                        } else {
+                            ForEach(vm.inbox, id: \.id) { txn in
+                                row(txn)
+                            }
                         }
+                    } else {
+                        upgradeCard
                     }
                 }
                 .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 40)
@@ -42,8 +46,11 @@ struct EmailInView: View {
         .background(Palette.cream)
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
         .task {
-            await vm.loadAddress()
-            if !entitlement.isPro { showPaywall = true }
+            if entitlement.isPro {
+                await vm.loadAddress()
+            } else {
+                showPaywall = true
+            }
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: shareBinding) { item in EmailInActivityView(text: item.text) }
@@ -85,6 +92,31 @@ struct EmailInView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Free users see a clean Pro-upgrade surface instead of an address card that
+    /// would 403. Email-in is Pro-only (server enforces it); this just mirrors that.
+    private var upgradeCard: some View {
+        Card(padding: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                IconCircle(name: "receipt", tint: accent.base, soft: accent.soft, size: 44, iconSize: 22)
+                Text("Email-in is a Pro feature")
+                    .font(.ui(17, .semibold)).foregroundStyle(Palette.ink)
+                Text("Get a private inbox address and forward receipts straight into Snapceipt — we'll extract them for you.")
+                    .font(.ui(13.5)).foregroundStyle(Palette.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { showPaywall = true } label: {
+                    Text("Upgrade to Pro")
+                        .font(.ui(15, .semibold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(accent.base, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.emailInUpgrade)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

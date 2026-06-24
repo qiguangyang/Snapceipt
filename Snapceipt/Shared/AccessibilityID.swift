@@ -205,6 +205,7 @@ enum AccessibilityID {
     static let emailInRotate = "emailin.rotate"
     static let emailInError = "emailin.error"
     static let emailInRetry = "emailin.retry"
+    static let emailInUpgrade = "emailin.upgrade"        // free-user Pro upgrade CTA
     static let emailInListRowPrefix = "emailin.row."     // + transaction.id
     static let emailInReviewScreen = "emailin.review.screen"
     static let emailInReviewMerchant = "emailin.review.merchant"
