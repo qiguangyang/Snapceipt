@@ -246,7 +246,10 @@ struct ProfileTabView: View {
             IconCircle(name: "sparkles", tint: accent.base, soft: accent.soft, size: 36, iconSize: 19)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Cloud AI").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
-                Text("On: most accurate, uses the internet (offline uses on-device AI). Off: on-device only — private and works offline.").font(.ui(12)).foregroundStyle(Palette.ink3)
+                Text(AppSettings.isOnDeviceAIAvailable
+                     ? "On: most accurate, uses the internet (offline uses on-device AI). Off: on-device only — private and works offline."
+                     : "On: cloud AI, most accurate (uses the internet). Off: manual entry — on-device AI isn't available on this device.")
+                    .font(.ui(12)).foregroundStyle(Palette.ink3)
             }
             Spacer()
             Toggle("", isOn: $smartScanEnabled).labelsHidden().tint(Palette.income)

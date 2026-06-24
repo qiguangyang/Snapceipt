@@ -42,14 +42,14 @@ describe("currentPeriod", () => {
 describe("capForPlan", () => {
   const noOverride = {};
 
-  it("returns DEFAULT_CAP_PRO (500) for plan='pro'", () => {
+  it("returns DEFAULT_CAP_PRO (1000) for plan='pro'", () => {
     expect(capForPlan("pro", noOverride)).toBe(DEFAULT_CAP_PRO);
-    expect(capForPlan("pro", noOverride)).toBe(500);
+    expect(capForPlan("pro", noOverride)).toBe(1000);
   });
 
-  it("returns DEFAULT_CAP_FREE (10) for plan='free'", () => {
+  it("returns DEFAULT_CAP_FREE (30) for plan='free'", () => {
     expect(capForPlan("free", noOverride)).toBe(DEFAULT_CAP_FREE);
-    expect(capForPlan("free", noOverride)).toBe(10);
+    expect(capForPlan("free", noOverride)).toBe(30);
   });
 
   it("returns DEFAULT_CAP_FREE for plan=null", () => {
