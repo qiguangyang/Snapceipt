@@ -6,6 +6,7 @@ import { mintInboxToken, addressForToken } from "../src/lib/inboxToken";
 import { inboundEmailLogic } from "../src/email/inbound";
 import { currentPeriod } from "../src/lib/smartScan";
 import * as deepseek from "../src/lib/deepseek";
+import * as apns from "../src/lib/apns";
 
 // A multipart/mixed MIME with one base64 image/jpeg attachment.
 function mimeWithImage(messageId: string): ArrayBuffer {
@@ -74,6 +75,16 @@ async function seedProfileWithInbox(
   ).bind(profileId, userId, type, t, t).run();
   const token = await mintInboxToken(env.DB, userId, profileId, t);
   return { userId, profileId, address: addressForToken(token) };
+}
+
+/** Seed one push-enabled device with an apns_token for `userId` so notifyEmailInReceipt's
+ * device query returns a row and sendPush is invoked. */
+async function seedDevice(userId: string, apnsToken = `tok-${uuidv7()}`): Promise<void> {
+  const t = nowMs();
+  await env.DB.prepare(
+    `INSERT INTO devices (id, user_id, platform, apns_token, push_enabled, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, 1, ?, ?)`,
+  ).bind(uuidv7(), userId, apnsToken, t, t).run();
 }
 
 /** A Gemini-shaped fetch response carrying `obj` as the JSON receipt in the first candidate part. */
@@ -296,5 +307,62 @@ describe("inboundEmailLogic", () => {
       .bind(res.transactionId).first<{ merchant: string; amount_cents: number }>();
     expect(txn!.merchant).toBe("Coles");
     expect(txn!.amount_cents).toBe(-3487); // 34.87, groceries (expense) -> signed negative
+  });
+
+  it("pushes on a created email-in receipt", async () => {
+    const { userId, address } = await seedProfileWithInbox("business", "pro");
+    await seedDevice(userId);
+    globalThis.fetch = mockGemini({
+      merchant: "Coles", date: "2026-06-20", currencyCode: "AUD", total: 34.87, gst: 0.36,
+      category: "groceries", deductible: 0, lineItems: [{ name: "Milk", price: 3.5 }], confidence: 0.9,
+    });
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
+    try {
+      const res = await inboundEmailLogic(
+        emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
+        { to: address, from: "x@e.com", messageId: "<push1>", raw: mimeWithImage("push1") },
+        nowMs(),
+      );
+      expect(res.status).toBe("created");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][2].type).toBe("email_in");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not push when a free user is bounced", async () => {
+    const { userId, address } = await seedProfileWithInbox("business", "free");
+    await seedDevice(userId);
+    const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
+    try {
+      const res = await inboundEmailLogic(emailEnv(), {
+        to: address, from: "x@e.com", messageId: "<push2>", raw: mimeWithImage("push2"),
+      }, nowMs());
+      expect(res).toEqual({ status: "rejected", reason: "pro_only" });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("still creates the txn if the push throws (best-effort)", async () => {
+    const { userId, address } = await seedProfileWithInbox("business", "pro");
+    await seedDevice(userId);
+    globalThis.fetch = mockGemini({
+      merchant: "Coles", date: "2026-06-20", currencyCode: "AUD", total: 34.87, gst: 0.36,
+      category: "groceries", deductible: 0, lineItems: [{ name: "Milk", price: 3.5 }], confidence: 0.9,
+    });
+    const spy = vi.spyOn(apns, "sendPush").mockRejectedValue(new Error("apns down"));
+    try {
+      const res = await inboundEmailLogic(
+        emailEnv({ E2E_EXTRACT_MODE: undefined, GEMINI_API_KEY: "real-key" }),
+        { to: address, from: "x@e.com", messageId: "<push3>", raw: mimeWithImage("push3") },
+        nowMs(),
+      );
+      expect(res.status).toBe("created");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

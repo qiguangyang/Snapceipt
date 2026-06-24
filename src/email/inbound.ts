@@ -9,6 +9,7 @@ import { runGeminiVisionExtraction, type ExtractedReceipt } from "../lib/deepsee
 import { isProUser } from "../lib/plan";
 import { writeReceiptRows } from "../lib/receiptRows";
 import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smartScan";
+import { notifyEmailInReceipt } from "./notify";
 
 const MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors images.ts
 /** Max inbound emails accepted per inbox alias per hour (coarse flood throttle). */
@@ -231,5 +232,6 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
     extraction === "done" ? "created" : "failed",
     overCap ? "over_cap" : null, now,
   );
+  await notifyEmailInReceipt(env, owner.userId, transactionId, receipt.merchant, extraction, now);
   return { status: "created", transactionId, extraction };
 }
