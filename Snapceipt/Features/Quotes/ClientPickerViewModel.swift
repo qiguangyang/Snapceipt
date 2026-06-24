@@ -45,15 +45,18 @@ final class ClientPickerViewModel {
     /// name/email/address; an empty email/address becomes nil. Returns nil for a blank
     /// name. Address is freeform multiline (whitespace+newlines trimmed at the edges).
     @discardableResult
-    func create(name: String, email: String?, address: String? = nil) -> Client? {
+    func create(name: String, email: String?, mobilePhone: String? = nil, address: String? = nil) -> Client? {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard !trimmedName.isEmpty else { return nil }
         let trimmedEmail = email?.trimmingCharacters(in: .whitespaces)
         let normalizedEmail = (trimmedEmail?.isEmpty ?? true) ? nil : trimmedEmail
+        let trimmedMobile = mobilePhone?.trimmingCharacters(in: .whitespaces)
+        let normalizedMobile = (trimmedMobile?.isEmpty ?? true) ? nil : trimmedMobile
         let trimmedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAddress = (trimmedAddress?.isEmpty ?? true) ? nil : trimmedAddress
         let client = Client(userId: userId, profileId: profileId,
-                            name: trimmedName, email: normalizedEmail, address: normalizedAddress)
+                            name: trimmedName, email: normalizedEmail,
+                            mobilePhone: normalizedMobile, address: normalizedAddress)
         context.insert(client)
         try? context.save()
         reload()

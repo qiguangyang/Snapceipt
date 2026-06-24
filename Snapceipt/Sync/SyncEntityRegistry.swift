@@ -844,6 +844,7 @@ private struct ClientSyncMapper: SyncRowMapper {
         row.profileId = env.profileId
         if let v = env.string("name") { row.name = v }
         if let v = env.string("email") { row.email = v }
+        if let v = env.string("mobilePhone") { row.mobilePhone = v }
         if let v = env.string("address") { row.address = v }
     }
 
@@ -851,6 +852,7 @@ private struct ClientSyncMapper: SyncRowMapper {
         var f = sharedFields(r)
         f["name"] = .string(r.name)
         f["email"] = str(r.email)
+        f["mobilePhone"] = str(r.mobilePhone)
         f["address"] = str(r.address)
         return f
     }
