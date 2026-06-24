@@ -35,9 +35,11 @@ struct ClientPickerSheet: View {
                                 .padding(.top, 8)
                             VStack(spacing: 10) {
                                 ForEach(clients) { client in
-                                    Button { onPick(client.name, client.email, client.address) } label: { row(client) }
-                                        .buttonStyle(.plain)
-                                        .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                                    SwipeToDelete(onDelete: { withAnimation { vm.delete(client) } }) {
+                                        Button { onPick(client.name, client.email, client.address) } label: { row(client) }
+                                            .buttonStyle(.plain)
+                                            .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                                    }
                                 }
                             }
                         }

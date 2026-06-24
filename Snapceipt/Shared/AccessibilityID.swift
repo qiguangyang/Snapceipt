@@ -196,6 +196,7 @@ enum AccessibilityID {
     static let clientPickerScreen = "client.picker.screen"
     static let clientPickerAdd = "client.picker.add"
     static let clientRowPrefix = "client.row."           // + client.id
+    static let swipeDeleteButton = "swipe.delete"        // reveal-on-swipe Delete (e.g. client rows)
 
     // Email-in
     static let profileRowEmailIn = "profile.row.emailin"
