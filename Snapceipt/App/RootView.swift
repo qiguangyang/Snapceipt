@@ -388,7 +388,8 @@ struct ShellView: View {
                 EmailInView(context: profiles.context, sync: sync, api: captureAPI,
                             userId: profiles.userId, profileId: profiles.activeProfileId,
                             onClose: { router.dismissOverlay() },
-                            onReview: { router.present(.emailInReview(id: $0)) })
+                            onReview: { router.present(.emailInReview(id: $0)) },
+                            onRefresh: { await sync.sync() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
