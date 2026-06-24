@@ -177,11 +177,11 @@ describe("inboundEmailLogic", () => {
     expect(c!.c).toBe(0);
   });
 
-  it("creates a failed transaction (image preserved) when extraction throws", async () => {
+  it("creates a failed transaction (image preserved) when vision extraction throws", async () => {
     const { address } = await seedProfileWithInbox();
-    const spy = vi.spyOn(deepseek, "runDeepseekExtraction").mockRejectedValue(new Error("boom"));
+    const spy = vi.spyOn(deepseek, "runDeepseekVisionExtraction").mockRejectedValue(new Error("boom"));
     try {
-      // DEEPSEEK_API_KEY present + E2E_EXTRACT_MODE unset => real extraction path => the spy throws.
+      // DEEPSEEK_API_KEY present + E2E_EXTRACT_MODE unset => real vision path => the spy throws.
       const res = await inboundEmailLogic(
         emailEnv({ E2E_EXTRACT_MODE: undefined, DEEPSEEK_API_KEY: "real-key" }),
         { to: address, from: "x@e.com", messageId: "<m4>", raw: mimeWithImage("m4") },
@@ -192,8 +192,38 @@ describe("inboundEmailLogic", () => {
       expect(res.extraction).toBe("failed");
       const txn = await env.DB.prepare("SELECT extraction_status FROM transactions WHERE id = ?").bind(res.transactionId).first<any>();
       expect(txn.extraction_status).toBe("failed");
+      // No OCR step anymore — ocr_text is stored null.
       const img = await env.DB.prepare("SELECT ocr_text FROM receipt_images WHERE transaction_id = ?").bind(res.transactionId).first<any>();
-      expect(img.ocr_text).not.toBeNull(); // OCR stub still ran
+      expect(img.ocr_text).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("marks the transaction failed when vision returns an empty/implausible result (sanity gate)", async () => {
+    const { address } = await seedProfileWithInbox();
+    // A successful (usedLlm:true) vision extraction with no total and no items must NOT persist
+    // a zeros receipt — the sanity gate flips it to failed (image kept for review).
+    const spy = vi.spyOn(deepseek, "runDeepseekVisionExtraction").mockResolvedValue({
+      receipt: {
+        merchant: "", date: "2026-06-24", currencyCode: "AUD", total: 0, gst: null,
+        category: "office", deductible: null, lineItems: [], confidence: 0.3, needsReview: true,
+      },
+      meta: { model: "deepseek-v4-flash", attempts: 1, stub: false, usedLlm: true },
+    });
+    try {
+      const res = await inboundEmailLogic(
+        emailEnv({ E2E_EXTRACT_MODE: undefined, DEEPSEEK_API_KEY: "real-key" }),
+        { to: address, from: "x@e.com", messageId: "<m5>", raw: mimeWithImage("m5") },
+        nowMs(),
+      );
+      expect(res.status).toBe("created");
+      if (res.status !== "created") return;
+      expect(res.extraction).toBe("failed");
+      const txn = await env.DB.prepare("SELECT extraction_status FROM transactions WHERE id = ?").bind(res.transactionId).first<any>();
+      expect(txn.extraction_status).toBe("failed");
+      const img = await env.DB.prepare("SELECT COUNT(*) c FROM receipt_images WHERE transaction_id = ?").bind(res.transactionId).first<{ c: number }>();
+      expect(img!.c).toBe(1); // image kept
     } finally {
       spy.mockRestore();
     }

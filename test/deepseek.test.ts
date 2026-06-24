@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   runDeepseekExtraction,
+  runDeepseekVisionExtraction,
   reconcileGst,
   trimReceiptTail,
   detectMerchant,
@@ -477,5 +478,68 @@ describe("runDeepseekExtraction()", () => {
     const out = await runDeepseekExtraction(ENV, { ocrText: OCR, source: "scan", defaultDate: "2026-05-30" });
     expect(out.receipt.needsReview).toBe(true);
     expect(out.receipt.category).toBe("office");
+  });
+});
+
+describe("runDeepseekVisionExtraction()", () => {
+  // A tiny fake JPEG payload (binary bytes) to be base64-encoded into the data URL.
+  const imageBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46])
+    .buffer as ArrayBuffer;
+
+  it("sends an image_url data URL in the user content array and parses+finalizes the result", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse(VALID_CONTENT));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await runDeepseekVisionExtraction(ENV, imageBytes, "image/jpeg", "2026-06-24");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    // user message content is the OpenAI-compatible multimodal array
+    const userMsg = sentBody.messages.find((m: any) => m.role === "user");
+    expect(Array.isArray(userMsg.content)).toBe(true);
+    const imagePart = userMsg.content.find((p: any) => p.type === "image_url");
+    expect(imagePart).toBeTruthy();
+    expect(imagePart.image_url.url).toMatch(/^data:image\/jpeg;base64,/);
+    const textPart = userMsg.content.find((p: any) => p.type === "text");
+    expect(textPart.text).toContain("json");
+    expect(sentBody.model).toBe("deepseek-chat"); // ENV.DEEPSEEK_MODEL
+
+    // parsed + finalized into an ExtractedReceipt
+    expect(out.meta.usedLlm).toBe(true);
+    expect(out.meta.stub).toBe(false);
+    expect(out.receipt.merchant).toBe("The Grounds");
+    expect(out.receipt.category).toBe("meals");
+    expect(out.receipt.total).toBe(33.0);
+  });
+
+  it("backfills the date to defaultDate (no OCR text for detectDate)", async () => {
+    const withNullDate = JSON.stringify({
+      merchant: "Cafe", date: null, currencyCode: "AUD", total: 11.0, gst: 1.0,
+      category: "meals", deductible: 50, lineItems: [{ name: "Coffee", price: 11.0 }], confidence: 0.9,
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(chatResponse(withNullDate)));
+    const out = await runDeepseekVisionExtraction(ENV, imageBytes, "image/jpeg", "2026-06-24");
+    expect(out.receipt.date).toBe("2026-06-24");
+  });
+
+  it("uses the default model when DEEPSEEK_MODEL is unset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse(VALID_CONTENT));
+    vi.stubGlobal("fetch", fetchMock);
+    const envNoModel = { DEEPSEEK_API_KEY: "sk-test" } as unknown as import("../src/env").Env;
+    await runDeepseekVisionExtraction(envNoModel, imageBytes, "image/png", "2026-06-24");
+    const sentBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sentBody.model).toBe("deepseek-v4-flash");
+  });
+
+  it("THROWS when fetch fails (network/timeout) so the caller marks it failed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
+    await expect(runDeepseekVisionExtraction(ENV, imageBytes, "image/jpeg", "2026-06-24")).rejects.toThrow();
+  });
+
+  it("THROWS when the response is never parseable (after the corrective retry)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse("not json at all"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(runDeepseekVisionExtraction(ENV, imageBytes, "image/jpeg", "2026-06-24")).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2); // one corrective retry
   });
 });

@@ -3,9 +3,9 @@ import PostalMime from "postal-mime";
 import type { Env } from "../env";
 import { uuidv7 } from "../lib/ids";
 import { resolveInboxToken, tokenFromRecipient, type InboxOwner } from "../lib/inboxToken";
-import { workersAiOcr } from "../lib/ocr";
+import { STUB_OCR_TEXT } from "../lib/ocr";
 import { heuristicExtract } from "../lib/extractionHeuristic";
-import { runDeepseekExtraction, type ExtractedReceipt } from "../lib/deepseek";
+import { runDeepseekVisionExtraction, type ExtractedReceipt } from "../lib/deepseek";
 import { writeReceiptRows } from "../lib/receiptRows";
 import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smartScan";
 
@@ -59,17 +59,22 @@ function failedReceipt(date: string): ExtractedReceipt {
   };
 }
 
-/** Extraction with the same stub gate as POST /extract. `usedLlm` mirrors the /extract
- *  contract: true only when DeepSeek produced a parseable answer, so the caller charges a
- *  smart-scan slot only then (a heuristic fallback during an outage is free). */
+/** Extraction with the same stub gate as POST /extract. The image goes DIRECTLY to the
+ *  multimodal DeepSeek model in one call (no Workers-AI OCR step). `usedLlm` mirrors the
+ *  /extract contract: true only when DeepSeek produced a parseable answer, so the caller
+ *  charges a smart-scan slot only then.
+ *
+ *  Stub gate (E2E_EXTRACT_MODE or no key): returns the SAME deterministic heuristic stub as
+ *  before (over STUB_OCR_TEXT) so the suite stays hermetic — no image bytes are read. */
 async function runExtraction(
   env: Env,
-  ocrText: string,
+  imageBytes: ArrayBuffer,
+  contentType: string,
   defaultDate: string,
 ): Promise<{ receipt: ExtractedReceipt; model: string; usedLlm: boolean }> {
   const stubGate = env.E2E_EXTRACT_MODE === "1" || !env.DEEPSEEK_API_KEY;
   if (stubGate) {
-    const h = heuristicExtract(ocrText, defaultDate);
+    const h = heuristicExtract(STUB_OCR_TEXT, defaultDate);
     return {
       receipt: {
         merchant: h.merchant, date: h.date, currencyCode: "AUD", total: h.total,
@@ -80,7 +85,7 @@ async function runExtraction(
       usedLlm: false,
     };
   }
-  const result = await runDeepseekExtraction(env, { ocrText, source: "email_in", defaultDate });
+  const result = await runDeepseekVisionExtraction(env, imageBytes, contentType, defaultDate);
   return { receipt: result.receipt, model: result.meta.model, usedLlm: result.meta.usedLlm };
 }
 
@@ -104,10 +109,10 @@ async function logInbound(
 
 /**
  * Pure inbound core (the email() handler is not invocable in vitest-pool-workers).
- * Resolve alias -> dedup -> parse -> store image -> OCR (gated) -> extract (gated)
- * -> write rows. OCR/extraction failure still creates a 'failed' transaction so the
- * receipt is never lost. The inbound_email_log row is written only on a terminal
- * outcome, so a mid-flight crash safely reprocesses on redelivery.
+ * Resolve alias -> dedup -> parse -> store image -> vision extract (gated, image
+ * direct to DeepSeek) -> write rows. Extraction failure still creates a 'failed'
+ * transaction so the receipt is never lost. The inbound_email_log row is written only
+ * on a terminal outcome, so a mid-flight crash safely reprocesses on redelivery.
  */
 export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: number): Promise<InboundResult> {
   // 1. Resolve the alias -> owner.
@@ -164,7 +169,8 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
   const cap = capForPlan(planRow?.plan, env);
   const overCap = (await getUsage(env.DB, owner.userId, period)) >= cap;
 
-  let ocrText: string | null = null;
+  // No OCR step anymore: the image goes straight to the multimodal model. ocrText is null.
+  const ocrText: string | null = null;
   let receipt: ExtractedReceipt;
   let extraction: "done" | "failed" = "done";
   let model: string | null = null;
@@ -173,21 +179,24 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
     extraction = "failed";
     receipt = failedReceipt(defaultDate);
   } else {
-    // OCR (gated) -> extraction (gated). Any failure => failed transaction, image kept.
+    // Vision extraction (gated). Any failure => failed transaction, image kept.
     try {
-      ocrText = await workersAiOcr(env, buf, contentType);
-      const out = await runExtraction(env, ocrText, defaultDate);
+      const out = await runExtraction(env, buf, contentType, defaultDate);
       receipt = out.receipt;
       model = out.model;
-      // Charge a slot only when DeepSeek actually ran (parity with /extract): a heuristic
-      // fallback during an outage is free.
+      // Charge a slot only when DeepSeek actually ran (parity with /extract).
       chargeSlot = out.usedLlm;
+      // Sanity gate (real extractions only — the stub returns a populated receipt): an empty /
+      // implausible result (no total AND no line items) is honestly marked "failed" so the
+      // image is kept for review instead of persisting a misleading zeros receipt.
+      if (chargeSlot && receipt.total <= 0 && receipt.lineItems.length === 0) {
+        extraction = "failed";
+        receipt = failedReceipt(defaultDate);
+      }
     } catch (err) {
-      // Surface the failure (it was silently swallowed): which step + the error. OCR threw
-      // if ocrText is still null; otherwise extraction did.
+      // Surface the failure (it was silently swallowed): the error from the vision call.
       console.error(
-        "[email-in] extraction failed",
-        ocrText === null ? "at OCR" : `after OCR (ocrLen=${ocrText.length})`,
+        "[email-in] vision extraction failed",
         err instanceof Error ? `${err.name}: ${err.message}` : String(err),
         err instanceof Error ? (err.stack ?? "") : "",
       );
