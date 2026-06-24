@@ -105,7 +105,7 @@ final class StubAPIClient: APIClient {
     func testPush() async throws -> TestPushResponse {
         TestPushResponse(deviceCount: 0, detail: "stub")
     }
-    func simulateEmailIn(jpeg: Data) async throws -> SimulateInboundResponse {
+    func simulateEmailIn(jpeg: Data, profileId: String) async throws -> SimulateInboundResponse {
         SimulateInboundResponse(transactionId: "stub-txn", extraction: "done", merchant: "Stub", deviceCount: 0)
     }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {

@@ -8,6 +8,8 @@ import SwiftUI
 /// IconCircle-led rows with income-track toggles, and a paper-2 info note.
 struct NotificationsSettingsView: View {
     let api: APIClient
+    /// Active profile id — so the Debug "Simulate email-in" files the receipt where the user is looking.
+    var activeProfileId: String = ""
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
@@ -66,7 +68,7 @@ struct NotificationsSettingsView: View {
                                             return
                                         }
                                         do {
-                                            let r = try await api.simulateEmailIn(jpeg: data)
+                                            let r = try await api.simulateEmailIn(jpeg: data, profileId: activeProfileId)
                                             testPushMessage = "Created receipt (extraction=\(r.extraction), "
                                                 + "merchant=\(r.merchant.isEmpty ? "—" : r.merchant)).\n"
                                                 + "Pushed to \(r.deviceCount) device(s)."
