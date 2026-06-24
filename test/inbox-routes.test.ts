@@ -39,7 +39,7 @@ describe("GET /profiles/:id/inbox", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { profileId: string; token: string; address: string };
     expect(body.profileId).toBe(profileId);
-    expect(body.token).toMatch(/^[0-9a-f]{32}$/);
+    expect(body.token).toMatch(/^[a-z2-7]{13}$/);
     expect(body.address).toBe(`r.${body.token}@in.snapceipt.cc`);
 
     // Idempotent: a second GET returns the same token.
