@@ -1,141 +1,115 @@
 // src/routes/extract.ts
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
+import { ApiError } from "../lib/errors";
 import { uuidv7 } from "../lib/ids";
 import { nowMs } from "../lib/time";
-import { validate } from "./auth";
-import { extractRequestSchema } from "../schemas/extract";
-import { heuristicExtract } from "../lib/extractionHeuristic";
-import { runDeepseekExtraction, fallback, type ExtractedReceipt } from "../lib/deepseek";
-import {
-  currentPeriod,
-  capForPlan,
-  getUsage,
-  incrementUsage,
-} from "../lib/smartScan";
+import { type ExtractedReceipt } from "../lib/deepseek";
+import { runExtraction } from "../email/inbound";
+import { currentPeriod, capForPlan, getUsage, incrementUsage } from "../lib/smartScan";
 
 /**
- * POST /extract — auth (global middleware) + rate tier "extract" (mounted in
- * app.ts). Validates the body, resolves the fallback date (capturedAt ?? today),
- * and either returns a deterministic stub (when E2E_EXTRACT_MODE === "1" OR no
- * DEEPSEEK_API_KEY) or runs the real DeepSeek extraction subject to the
- * free/Pro smart-scan monthly cap. Always answers 200 with the §9 response
- * (needsReview may be true — the client still shows Review).
+ * POST /extract — auth (global middleware) + rate tier "extract" (mounted in app.ts).
+ * Body is the raw receipt IMAGE bytes (image/jpeg or image/png); `source`, `capturedAt`, and
+ * `requestId` ride as query params. The image goes STRAIGHT to Gemini vision — the SAME
+ * extractor as email-in (`runExtraction`) — subject to the free/Pro monthly smart-scan cap.
+ * Stub gate (E2E_EXTRACT_MODE or no GEMINI_API_KEY) → deterministic stub (no cap/no spend).
+ * Over cap → a "needs review" draft (no AI). Always answers 200 with the §9 response shape.
  */
 export const extractRoutes = new Hono<AppEnv>();
+
+const MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors images.ts / email-in
 
 /** Today's date as YYYY-MM-DD (UTC) — the final date fallback. */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** The deterministic stub: the same heuristic as the fallback, but confident. */
-function stubReceipt(ocrText: string, defaultDate: string): ExtractedReceipt {
-  const h = heuristicExtract(ocrText, defaultDate);
+/** A "needs review" receipt (over cap / no AI) — the client shows Review with manual entry. */
+function needsReviewReceipt(defaultDate: string): ExtractedReceipt {
   return {
-    merchant: h.merchant,
-    date: h.date,
-    currencyCode: "AUD",
-    total: h.total,
-    gst: h.total === 0 ? null : h.gst,
-    category: h.category,
-    deductible: h.deductible,
-    lineItems: h.lineItems,
-    confidence: 0.9,
-    needsReview: false,
+    merchant: "", date: defaultDate, currencyCode: "AUD", total: 0, gst: null,
+    category: "office", deductible: null, lineItems: [], confidence: 0, needsReview: true,
   };
 }
 
-extractRoutes.post("/", validate("json", extractRequestSchema), async (c) => {
-  const body = c.req.valid("json");
+extractRoutes.post("/", async (c) => {
   const startedAt = nowMs();
-  const defaultDate = body.capturedAt ?? todayIso();
-  const requestId = body.requestId ?? uuidv7();
+  const source = c.req.query("source") ?? "scan";
+  const capturedAt = c.req.query("capturedAt") || undefined;
+  const requestId = c.req.query("requestId") || uuidv7();
+  const defaultDate = capturedAt ?? todayIso();
+  const contentType = (c.req.header("content-type") ?? "image/jpeg").toLowerCase();
 
-  // stubGate: E2E_EXTRACT_MODE or no DEEPSEEK_API_KEY → deterministic stub,
-  // no cap check, no incrementing.
-  const stubGate = c.env.E2E_EXTRACT_MODE === "1" || !c.env.DEEPSEEK_API_KEY;
+  const buf = await c.req.arrayBuffer();
+  if (buf.byteLength === 0 || buf.byteLength > MAX_IMAGE_BYTES) {
+    throw new ApiError("VALIDATION_FAILED", "A receipt image (≤6 MiB) is required in the body");
+  }
+
+  // Stub gate: deterministic stub when E2E or no Gemini key (hermetic tests) — no cap, no spend.
+  const stubGate = c.env.E2E_EXTRACT_MODE === "1" || !c.env.GEMINI_API_KEY;
 
   let receipt: ExtractedReceipt;
-  let model: string;
-  let attempts: number;
+  let model: string | null;
   let stub: boolean;
   let capped: boolean;
   let smartScan: { used: number; cap: number; plan: string } | undefined;
 
   if (stubGate) {
-    receipt = stubReceipt(body.ocrText, defaultDate);
-    model = c.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
-    attempts = 0;
+    const out = await runExtraction(c.env, buf, contentType, defaultDate);
+    receipt = out.receipt;
+    model = out.model;
     stub = true;
     capped = false;
-    // smartScan is intentionally omitted on the stub path.
+    // smartScan intentionally omitted on the stub path.
   } else {
     const now = nowMs();
     const userId = c.var.userId;
-
-    // 1. Read plan (mirrors plan.ts SELECT pattern).
     const userRow = await c.env.DB.prepare(
       "SELECT plan FROM users WHERE id = ? AND deleted_at IS NULL",
-    )
-      .bind(userId)
-      .first<{ plan: string }>();
+    ).bind(userId).first<{ plan: string }>();
     const plan = userRow?.plan ?? "free";
-
-    // 2. Compute period + cap + current usage.
     const period = currentPeriod(now);
     const cap = capForPlan(plan, c.env);
     const used = await getUsage(c.env.DB, userId, period);
 
     if (used < cap) {
-      // 3a. Under cap: run DeepSeek (real LLM), then count the slot.
-      const result = await runDeepseekExtraction(c.env, {
-        ocrText: body.ocrText,
-        layoutText: body.layoutText,
-        source: body.source,
-        defaultDate,
-      });
-      receipt = result.receipt;
-      model = result.meta.model;
-      attempts = result.meta.attempts;
+      // Under cap: Gemini vision (same as email-in). Count a slot only when it actually ran.
       stub = false;
       capped = false;
-      if (result.meta.usedLlm) {
-        // LLM produced a parseable answer — consume one smart-scan slot.
-        // NOTE: TOCTOU race — this read-then-increment is NOT atomic. Two concurrent
-        // under-cap requests for the same user can both pass the `used < cap` check
-        // and both proceed, briefly exceeding the cap by at most 1. This is accepted:
-        // the per-user extract rate limit bounds the overage, and a lock / serialised
-        // transaction is not worth the latency cost for this use case.
-        await incrementUsage(c.env.DB, userId, period, nowMs());
-        smartScan = { used: used + 1, cap, plan };
-      } else {
-        // DeepSeek exhausted all attempts and fell back to heuristic (e.g. outage).
-        // Do NOT burn a slot — the user got a heuristic result through no fault of
-        // their own; meta.capped stays false so the client knows the slot was free.
+      model = c.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
+      try {
+        const out = await runExtraction(c.env, buf, contentType, defaultDate);
+        model = out.model;
+        // Sanity gate (email-in parity): an empty/implausible result → "needs review".
+        receipt = (out.usedLlm && out.receipt.total <= 0 && out.receipt.lineItems.length === 0)
+          ? needsReviewReceipt(defaultDate)
+          : out.receipt;
+        if (out.usedLlm) {
+          // TOCTOU: read-then-increment isn't atomic; the per-user extract rate limit bounds any
+          // overage to at most 1, which is accepted (cheaper than a lock/serialised txn).
+          await incrementUsage(c.env.DB, userId, period, nowMs());
+          smartScan = { used: used + 1, cap, plan };
+        } else {
+          // Stub path inside runExtraction (no Gemini key) — don't burn a slot.
+          smartScan = { used, cap, plan };
+        }
+      } catch (err) {
+        // Gemini outage / parse failure → "needs review" draft, do NOT burn a slot (the user
+        // got no AI result through no fault of their own). Mirrors the old DeepSeek fallback.
+        console.error(
+          "[extract] vision extraction failed",
+          err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+        );
+        receipt = needsReviewReceipt(defaultDate);
         smartScan = { used, cap, plan };
       }
     } else {
-      // 3b. Cap exhausted: serve heuristic, do NOT call DeepSeek.
-      // Use the heuristic's own category/confidence/needsReview (graded 0.30–0.75).
-      const h = heuristicExtract(body.ocrText, defaultDate);
-      receipt = {
-        merchant: h.merchant,
-        date: h.date,
-        currencyCode: "AUD",
-        total: h.total,
-        gst: h.total === 0 ? null : h.gst,
-        category: h.category,
-        deductible: h.deductible,
-        lineItems: h.lineItems,
-        confidence: h.confidence,
-        needsReview: h.needsReview,
-      };
-      model = c.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
-      attempts = 0;
+      // Over cap: a "needs review" draft, NO AI spend (client → manual entry + upgrade nudge).
+      receipt = needsReviewReceipt(defaultDate);
+      model = c.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
       stub = false;
       capped = true;
-      // Do NOT increment — the cap is already hit.
       smartScan = { used, cap, plan };
     }
   }
@@ -145,9 +119,9 @@ extractRoutes.post("/", validate("json", extractRequestSchema), async (c) => {
     receipt,
     meta: {
       model,
-      source: body.source,
+      source,
       latencyMs: nowMs() - startedAt,
-      attempts,
+      attempts: 0,
       stub,
       capped,
       ...(smartScan !== undefined ? { smartScan } : {}),

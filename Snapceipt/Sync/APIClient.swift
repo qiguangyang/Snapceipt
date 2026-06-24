@@ -27,7 +27,7 @@ protocol APIClient {
     func recordPurchase(signedTransaction: String) async throws
     func syncPush(deviceId: String, mutations: [PushMutation]) async throws -> PushResponse
     func syncPull(cursor: String?, limit: Int) async throws -> PullResponse
-    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse
+    func extract(jpeg: Data, source: String, capturedAt: String?) async throws -> ExtractionResponse
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage
     /// GET /images/by-transaction/<txnId> — fetch the receipt JPEG from R2 by transaction
     /// id (the local copy is reclaimed after upload). Returns nil when none exists (404).
@@ -195,29 +195,22 @@ final class LiveAPIClient: APIClient {
                               body: NoBody(), authenticated: true)
     }
 
-    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+    func extract(jpeg: Data, source: String, capturedAt: String?) async throws -> ExtractionResponse {
         #if DEBUG
-        // J18c offline seam (test-only): when -uiTestOffline is set the live client also
-        // throws a transport error so the capture flow falls back to the queued-for-the-
-        // cloud path (empty draft + outbox queue) against the REAL backend — on-device AI
-        // if available, else queued for the cloud reconciler. Compiled out of Release entirely.
-        // Seam scope: only extract/uploadImage are gated — push/pull still reach the live
-        // Worker, so the transaction row syncs while just the image + re-extract queue.
+        // J18c offline seam (test-only): -uiTestOffline → transport error so the capture flow
+        // falls back to the queued-for-cloud path (on-device AI if available, else reconciler).
+        // Compiled out of Release. Only extract/uploadImage are gated; push/pull stay live.
         if AppLaunch.current.offline {
             throw APIError.uiTestOffline
         }
         #endif
-        // iOS hard-codes AUD / en-AU and always sends a client-generated requestId
-        // (UUIDv7 from the same `ID` helper the model inits use).
-        let body = ExtractBody(ocrText: ocrText, layoutText: layoutText, source: source,
-                               defaultCurrency: "AUD", locale: "en-AU",
-                               capturedAt: capturedAt, requestId: ID.uuidv7())
-        // 35s cap: long enough to WAIT for the AI inline (the server is bounded to ~30s —
-        // 2 attempts × 15s — see deepseek.ts), so the normal scan lands the AI result on
-        // Review instead of falling back. The "Review now" button (ScanStep) is the escape
-        // hatch for impatience; a genuine transport failure still falls back to the
-        // on-device heuristic + a pending receipt the reconciler re-extracts later.
-        return try await send("POST", "/extract", body: body, authenticated: true, timeout: 35)
+        // The receipt IMAGE goes straight to Gemini vision on the server (the SAME extractor as
+        // email-in). source/capturedAt ride as query params; requestId is server-generated.
+        var query = [URLQueryItem(name: "source", value: source)]
+        if let capturedAt { query.append(URLQueryItem(name: "capturedAt", value: capturedAt)) }
+        let data = try await performRawImage("/extract", query: query, bytes: jpeg, contentType: "image/jpeg")
+        do { return try decoder.decode(ExtractionResponse.self, from: data) }
+        catch { throw APIError.decoding }
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {
@@ -521,17 +514,6 @@ final class LiveAPIClient: APIClient {
 /// a stray JSON `null`.
 struct NoBody: Encodable {
     func encode(to encoder: Encoder) throws {}
-}
-
-/// POST /extract request body. iOS hard-codes AUD/en-AU and always sends a requestId.
-private struct ExtractBody: Encodable {
-    let ocrText: String
-    let layoutText: String?       // visual-row text for the line-item parser (nil → server uses ocrText)
-    let source: String            // "scan" | "email_in"
-    let defaultCurrency: String   // "AUD"
-    let locale: String            // "en-AU"
-    let capturedAt: String?       // "YYYY-MM-DD"
-    let requestId: String
 }
 
 /// Serializes token refreshes so that N concurrent 401s trigger at most one refresh

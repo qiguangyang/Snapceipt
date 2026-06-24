@@ -39,7 +39,7 @@ struct CaptureViewModelTests {
     }
 
     private func fixture(activeType: String = "personal",
-                         extractHandler: ((String, String, String?) async throws -> ExtractionResponse)?)
+                         extractHandler: ((Data, String, String?) async throws -> ExtractionResponse)?)
         throws -> (CaptureViewModel, MockAPIClient, SpySync, ModelContext) {
         UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
         // Default these tests to Cloud (ON) — the cloud path (MockAPIClient) is their extraction
@@ -247,7 +247,7 @@ struct CaptureViewModelTests {
 
     @Test("ScanDiagnostics.summary renders the DeepSeek engine line")
     func diagnosticsSummaryDeepseek() {
-        let d = ScanDiagnostics(engine: .deepseek, model: "deepseek-v4-flash",
+        let d = ScanDiagnostics(engine: .gemini, model: "deepseek-v4-flash",
                                 clientMs: 850, serverMs: 700, attempts: 1,
                                 stub: false, capped: false, confidence: 0.91)
         #expect(d.summary == "Snapceipt AI · 1 try · 700ms srv · 850ms · conf 0.91")
@@ -280,7 +280,7 @@ struct CaptureViewModelTests {
         await vm.onScanned(image: image(), lines: zeroLines("CAFE\nTOTAL 10.00"))
         #expect(api.extractCalls.count == 1)
         #expect(vm.draft?.extractionStatus == "done")
-        #expect(vm.diagnostics?.engine == .deepseek)
+        #expect(vm.diagnostics?.engine == .gemini)
         #expect(vm.diagnostics?.model == "x")     // okResponse() meta.model == "x"
         #expect(vm.diagnostics?.attempts == 1)
     }
@@ -336,7 +336,7 @@ struct CaptureViewModelTests {
         #expect(vm.stage == .review)                      // stayed on Review (not yanked)
         #expect(vm.draft?.merchant == "AICafe")           // refreshed in place
         #expect(vm.draft?.extractionStatus == "done")
-        #expect(vm.diagnostics?.engine == .deepseek)
+        #expect(vm.diagnostics?.engine == .gemini)
         #expect(vm.draftRevision > revBefore)             // signalled ReviewStep to re-seed rows/total
     }
 

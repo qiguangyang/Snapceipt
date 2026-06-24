@@ -33,7 +33,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
 
     // MARK: Capture scripting
 
-    var extractHandler: ((_ ocrText: String, _ source: String, _ capturedAt: String?) async throws -> ExtractionResponse)?
+    var extractHandler: ((_ jpeg: Data, _ source: String, _ capturedAt: String?) async throws -> ExtractionResponse)?
     var uploadImageHandler: ((_ jpeg: Data, _ transactionId: String?, _ width: Int, _ height: Int) async throws -> UploadedImage)?
     var exportHandler: ((_ profileId: String, _ format: String, _ from: String, _ to: String, _ toEmail: String?) async throws -> ExportResult)?
     var exportBasHandler: ((_ profileId: String, _ from: String, _ to: String, _ paygInstalmentCents: Int, _ toEmail: String?) async throws -> ExportResult)?
@@ -56,7 +56,7 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     private(set) var revokeDeviceCalls: [String] = []
     private(set) var deleteAccountCallCount = 0
 
-    private(set) var extractCalls: [(ocrText: String, source: String, capturedAt: String?)] = []
+    private(set) var extractCalls: [(jpegBytes: Int, source: String, capturedAt: String?)] = []
     private(set) var uploadCalls: [(transactionId: String?, width: Int, height: Int, byteCount: Int)] = []
     private(set) var exportCalls: [(profileId: String, format: String, from: String, to: String, toEmail: String?)] = []
     private(set) var exportBasCalls: [(profileId: String, from: String, to: String, paygInstalmentCents: Int, toEmail: String?)] = []
@@ -152,10 +152,10 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return pullPages.removeFirst()
     }
 
-    func extract(ocrText: String, layoutText: String?, source: String, capturedAt: String?) async throws -> ExtractionResponse {
-        extractCalls.append((ocrText, source, capturedAt))
+    func extract(jpeg: Data, source: String, capturedAt: String?) async throws -> ExtractionResponse {
+        extractCalls.append((jpeg.count, source, capturedAt))
         guard let h = extractHandler else { throw MockAPIClientError.unscripted }
-        return try await h(ocrText, source, capturedAt)
+        return try await h(jpeg, source, capturedAt)
     }
 
     func uploadImage(jpeg: Data, transactionId: String?, width: Int, height: Int) async throws -> UploadedImage {

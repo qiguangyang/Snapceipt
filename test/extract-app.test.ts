@@ -28,25 +28,24 @@ beforeEach(async () => {
   await env.DB.exec("DELETE FROM users");
 });
 
-const OCR = "THE GROUNDS\n28/05/2026\nTOTAL 33.00";
 const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
 
 describe("POST /extract (through the real app)", () => {
   it("requires auth (401 without a bearer token)", async () => {
-    const res = await SELF.fetch("https://x/extract", {
+    const res = await SELF.fetch("https://x/extract?source=scan", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ocrText: OCR, source: "scan" }),
+      headers: { "content-type": "image/jpeg" },
+      body: JPEG_BYTES,
     });
     expect(res.status).toBe(401);
   });
 
-  it("returns the stub §9 shape for an authed request (no DeepSeek key in tests)", async () => {
+  it("returns the stub §9 shape for an authed request (no Gemini key in tests)", async () => {
     const { accessToken } = await seedSession();
-    const res = await SELF.fetch("https://x/extract", {
+    const res = await SELF.fetch("https://x/extract?source=scan", {
       method: "POST",
-      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-      body: JSON.stringify({ ocrText: OCR, source: "scan" }),
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "image/jpeg" },
+      body: JPEG_BYTES,
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
@@ -58,11 +57,10 @@ describe("POST /extract (through the real app)", () => {
 
   it("rate-limits the extract tier at 30/user/hr (the 31st request is 429)", async () => {
     const { accessToken } = await seedSession();
-    const headers = { authorization: `Bearer ${accessToken}`, "content-type": "application/json" };
-    const body = JSON.stringify({ ocrText: OCR, source: "scan" });
+    const headers = { authorization: `Bearer ${accessToken}`, "content-type": "image/jpeg" };
     let last = 200;
     for (let i = 0; i < 31; i++) {
-      const res = await SELF.fetch("https://x/extract", { method: "POST", headers, body });
+      const res = await SELF.fetch("https://x/extract?source=scan", { method: "POST", headers, body: JPEG_BYTES });
       last = res.status;
     }
     expect(last).toBe(429); // exact-path limiter engaged for POST /extract

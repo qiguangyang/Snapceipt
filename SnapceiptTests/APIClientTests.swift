@@ -195,7 +195,7 @@ struct APIClientTests {
         #expect(token == nil)
     }
 
-    @Test("extract POSTs /extract with AUD/en-AU + a requestId and decodes the receipt")
+    @Test("extract POSTs /extract with the raw image body + source/capturedAt query, decodes the receipt")
     func extractPostsAndDecodes() async throws {
         let (client, _) = makeClient()
         MockURLProtocol.setHandler { _ in
@@ -204,27 +204,22 @@ struct APIClientTests {
              "receipt":{"merchant":"The Grounds","date":"2026-05-28","currencyCode":"AUD",
                "total":42.50,"gst":3.86,"category":"meals","deductible":50,
                "lineItems":[{"name":"Flat White","price":9.00}],"confidence":0.98,"needsReview":false},
-             "meta":{"model":"deepseek-chat","source":"scan","latencyMs":5,"attempts":1,"stub":false}}
+             "meta":{"model":"gemini-3.1-flash-lite","source":"scan","latencyMs":5,"attempts":0,"stub":false}}
             """))
         }
-        let resp = try await client.extract(ocrText: "THE GROUNDS\nTOTAL 42.50",
-                                            layoutText: nil, source: "scan", capturedAt: "2026-05-28")
+        let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0, 0, 16])
+        let resp = try await client.extract(jpeg: jpeg, source: "scan", capturedAt: "2026-05-28")
         #expect(resp.receipt.categoryKey == "meals")
         #expect(resp.receipt.total == Decimal(string: "42.50"))
         #expect(MockURLProtocol.lastRequest?.url?.path == "/extract")
         #expect(MockURLProtocol.lastRequest?.httpMethod == "POST")
-        // /extract carries a 35s timeout: long enough to WAIT for the AI inline (the server
-        // is bounded to ~30s) while the "Review now" button lets the user bail early; a real
-        // transport failure still falls back to the on-device heuristic.
-        #expect(MockURLProtocol.lastRequest?.timeoutInterval == 35)
-        let body = MockURLProtocol.lastRequest?.httpBodyData() ?? Data()
-        let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-        #expect(obj?["ocrText"] as? String == "THE GROUNDS\nTOTAL 42.50")
-        #expect(obj?["source"] as? String == "scan")
-        #expect(obj?["defaultCurrency"] as? String == "AUD")
-        #expect(obj?["locale"] as? String == "en-AU")
-        #expect(obj?["capturedAt"] as? String == "2026-05-28")
-        #expect((obj?["requestId"] as? String)?.isEmpty == false)
+        // The receipt IMAGE rides as the raw body; source/capturedAt are query params (Gemini vision).
+        #expect(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
+        #expect(MockURLProtocol.lastRequest?.httpBodyData() == jpeg)
+        let comps = URLComponents(url: MockURLProtocol.lastRequest!.url!, resolvingAgainstBaseURL: false)
+        let q = Dictionary(uniqueKeysWithValues: (comps?.queryItems ?? []).map { ($0.name, $0.value) })
+        #expect(q["source"] == "scan")
+        #expect(q["capturedAt"] == "2026-05-28")
     }
 
     @Test("magicLinkRequest body includes the install deviceId")

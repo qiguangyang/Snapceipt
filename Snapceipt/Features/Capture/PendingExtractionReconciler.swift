@@ -41,8 +41,18 @@ final class PendingExtractionReconciler {
     private func reconcileOne(_ txn: Transaction, _ receipt: PendingReceipt) async {
         receipt.extractionAttempts += 1
         do {
-            let resp = try await api.extract(ocrText: receipt.ocrText, layoutText: nil, source: "scan",
-                                             capturedAt: txn.txnDate)
+            // Cloud-fill via Gemini vision (same as a live scan): use the locally-cached reduced
+            // JPEG when present, else fetch it back from R2 (uploaded by the image queue).
+            let jpeg: Data
+            if !receipt.imageLocalPath.isEmpty,
+               let local = try? Data(contentsOf: URL(fileURLWithPath: receipt.imageLocalPath)) {
+                jpeg = local
+            } else if let remote = try await api.fetchReceiptImage(transactionId: txn.id) {
+                jpeg = remote
+            } else {
+                return  // image not available yet (upload pending) — leave pending, retry next pass
+            }
+            let resp = try await api.extract(jpeg: jpeg, source: "scan", capturedAt: txn.txnDate)
             let r = resp.receipt
             // Always enrich the classification/GST/deductible from the AI result.
             txn.catKey = r.categoryKey

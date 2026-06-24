@@ -14,7 +14,12 @@ struct PendingExtractionReconcilerTests {
 
     private func fixture() throws -> (ModelContext, MockAPIClient, SpySync) {
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
-        return (ModelContext(container), MockAPIClient(), SpySync())
+        let api = MockAPIClient()
+        // The reconciler cloud-fills via Gemini vision now: it fetches the receipt image (local
+        // path, else R2) and POSTs it to /extract. The seeded imageLocalPath ("/tmp/x.jpg") won't
+        // exist, so it falls to R2 — stub that fetch so the extractHandler runs.
+        api.fetchReceiptImageHandler = { _ in Data([0xFF, 0xD8, 0xFF]) }
+        return (ModelContext(container), api, SpySync())
     }
 
     private func okResponse(category: String, gst: String, deductible: Int) -> ExtractionResponse {
