@@ -482,7 +482,7 @@ describe("runDeepseekExtraction()", () => {
 });
 
 describe("runGeminiVisionExtraction", () => {
-  const img = new TextEncoder().encode("fake-image-bytes").buffer;
+  const img = new TextEncoder().encode("fake-image-bytes").buffer as ArrayBuffer;
   const geminiBody = (obj: unknown) => ({
     ok: true, status: 200,
     json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }),

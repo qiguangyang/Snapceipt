@@ -46,11 +46,8 @@ struct EmailInView: View {
         .background(Palette.cream)
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
         .task {
-            if entitlement.isPro {
-                await vm.loadAddress()
-            } else {
-                showPaywall = true
-            }
+            await vm.loadAddressIfPro(isPro: entitlement.isPro)
+            if !entitlement.isPro { showPaywall = true }
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .sheet(item: shareBinding) { item in EmailInActivityView(text: item.text) }
