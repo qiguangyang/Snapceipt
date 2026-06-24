@@ -78,6 +78,8 @@ struct ExtractedReceipt: Decodable, Equatable {
     var lineItems: [LineItemDraft]
     var confidence: Double
     var needsReview: Bool
+    /// ISO currency the server detected (AUD/NZD/USD/CAD); drives the localized tax label. Default AUD.
+    var currencyCode: String = "AUD"
 
     // Review-editable extras (not on the wire).
     var paymentMethod: String? = nil
@@ -98,6 +100,7 @@ struct ExtractedReceipt: Decodable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case merchant, date, total, gst
         case categoryKey = "category"
+        case currencyCode
         case deductible, lineItems, confidence, needsReview
     }
 
@@ -113,19 +116,21 @@ struct ExtractedReceipt: Decodable, Equatable {
         lineItems = wireItems.map { LineItemDraft(name: $0.name, price: $0.price) }
         confidence = try c.decode(Double.self, forKey: .confidence)
         needsReview = try c.decode(Bool.self, forKey: .needsReview)
+        currencyCode = (try c.decodeIfPresent(String.self, forKey: .currencyCode)) ?? "AUD"
         // extras default; not present on the wire.
     }
 
     /// Memberwise (used by the two convenience builders + tests).
     init(merchant: String, date: String, total: Decimal, gst: Decimal?,
          categoryKey: String, deductible: Int?, lineItems: [LineItemDraft],
-         confidence: Double, needsReview: Bool,
+         confidence: Double, needsReview: Bool, currencyCode: String = "AUD",
          paymentMethod: String? = nil, taxLabel: String? = nil,
          gstFree: Bool = false, capital: Bool = false,
          extractionStatus: String = "done") {
         self.merchant = merchant; self.date = date; self.total = total; self.gst = gst
         self.categoryKey = categoryKey; self.deductible = deductible
         self.lineItems = lineItems; self.confidence = confidence; self.needsReview = needsReview
+        self.currencyCode = currencyCode
         self.paymentMethod = paymentMethod; self.taxLabel = taxLabel
         self.gstFree = gstFree
         self.capital = capital

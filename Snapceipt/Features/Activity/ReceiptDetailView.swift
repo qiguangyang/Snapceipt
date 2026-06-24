@@ -123,7 +123,7 @@ struct ReceiptDetailView: View {
         items.append(("Date", Self.longDate(txn.txnDate), Palette.ink))
         if let pm = txn.paymentMethod, !pm.isEmpty { items.append(("Payment", pm.capitalized, Palette.ink)) }
         if let gst = txn.gstCents {
-            items.append(("GST included", txn.gstFree ? "GST-free"
+            items.append(("\(receiptTaxLabel(for: txn.currency)) included", txn.gstFree ? "GST-free"
                           : (Decimal(gst) / 100).formatted(.currency(code: txn.currency)), Palette.ink))
         }
         if let tax = txn.taxLabel, !tax.isEmpty { items.append(("Tax note", tax, Palette.ink)) }
