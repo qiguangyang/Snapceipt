@@ -28,7 +28,6 @@ enum Overlay: Equatable, Identifiable {
     case invoices
     case invoiceEditor(id: String?)   // nil id = create a new invoice
     case emailIn
-    case emailInReview(id: String)
     case tax
     case categories
     case ruleEditor(id: String?)   // nil = new rule
@@ -60,7 +59,6 @@ enum Overlay: Equatable, Identifiable {
         case .invoices: return "invoices"
         case .invoiceEditor(let id): return "invoiceEditor-\(id ?? "new")"
         case .emailIn: return "emailIn"
-        case .emailInReview(let id): return "emailInReview-\(id)"
         case .tax: return "tax"
         case .categories: return "categories"
         case .ruleEditor(let id): return "ruleEditor-\(id ?? "new")"

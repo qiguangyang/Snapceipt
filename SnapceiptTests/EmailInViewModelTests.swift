@@ -29,33 +29,6 @@ struct EmailInViewModelTests {
         #expect(vm.inbox.map(\.merchant) == ["Failed-old", "Done-new", "Done-old"]) // p2 excluded
     }
 
-    @Test("save applies edits, flips failed->done, signs the amount, and enqueues an upsert")
-    func saveFlips() throws {
-        let (ctx, sync, api) = try fixture()
-        seedTxn(ctx, profileId: "p1", status: "failed", date: "2026-05-10", merchant: "")
-        try ctx.save()
-        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
-        let txn = vm.inbox[0]
-
-        vm.save(txn, merchant: "Bunnings", amountCentsAbs: 4250, txnDate: "2026-05-11", catKey: "office")
-
-        #expect(txn.merchant == "Bunnings")
-        #expect(txn.amountCents == -4250)   // expense category -> negative
-        #expect(txn.extractionStatus == "done")
-        #expect(sync.calls.last?.op == "upsert")
-        #expect(sync.calls.last?.entityType == .transaction)
-    }
-
-    @Test("save stores a positive amount for the income category")
-    func saveIncomeSign() throws {
-        let (ctx, sync, api) = try fixture()
-        seedTxn(ctx, profileId: "p1", status: "done", date: "2026-05-10", merchant: "x")
-        try ctx.save()
-        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
-        vm.save(vm.inbox[0], merchant: "Client", amountCentsAbs: 9000, txnDate: "2026-05-10", catKey: "income")
-        #expect(vm.inbox[0].amountCents == 9000)
-    }
-
     @Test("loadAddress + rotate go through the API client")
     func addressFlow() async throws {
         let (ctx, sync, api) = try fixture()

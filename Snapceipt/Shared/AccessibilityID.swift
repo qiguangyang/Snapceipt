@@ -207,10 +207,6 @@ enum AccessibilityID {
     static let emailInRetry = "emailin.retry"
     static let emailInUpgrade = "emailin.upgrade"        // free-user Pro upgrade CTA
     static let emailInListRowPrefix = "emailin.row."     // + transaction.id
-    static let emailInReviewScreen = "emailin.review.screen"
-    static let emailInReviewMerchant = "emailin.review.merchant"
-    static let emailInReviewAmount = "emailin.review.amount"
-    static let emailInReviewSave = "emailin.review.save"
 
     // Settings hub (F7)
     static let profileHubScreen = "profile.hub.screen"

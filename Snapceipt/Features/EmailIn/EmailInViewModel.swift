@@ -68,19 +68,4 @@ final class EmailInViewModel {
             errorMessage = "Couldn't rotate the address."
         }
     }
-
-    /// Apply review edits, flip failed->done, sign the amount per category, and
-    /// enqueue an upsert. `amountCentsAbs` is the positive magnitude from the editor.
-    func save(_ txn: Transaction, merchant: String, amountCentsAbs: Int, txnDate: String, catKey: String) {
-        let sign = catKey == "income" ? 1 : -1
-        txn.merchant = merchant
-        txn.amountCents = sign * abs(amountCentsAbs)
-        txn.txnDate = txnDate
-        txn.catKey = catKey
-        if txn.extractionStatus == "failed" { txn.extractionStatus = "done" }
-        txn.updatedAt = Epoch.nowMs()
-        try? context.save()
-        reload()
-        sync.enqueue(op: "upsert", entityType: .transaction, entity: txn)
-    }
 }

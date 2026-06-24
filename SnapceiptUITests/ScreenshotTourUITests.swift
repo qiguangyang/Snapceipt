@@ -297,8 +297,8 @@ final class ScreenshotTourUITests: UITestCase {
             _ = app.descendants(matching: .any)[AccessibilityID.profileHubScreen].waitForExistence(timeout: 4)
         }
         sub(AccessibilityID.profileRowEmailIn, screenID: AccessibilityID.emailInScreen, name: "emailin-inbox")
-        // EmailInReviewView — tap the first email-in row (fixture seeds a failed +
-        // a done item under emailInListRowPrefix + transaction.id).
+        // Receipt detail opened from an email-in row (ReceiptDetailView replaced the old form;
+        // fixture seeds a failed + a done item under emailInListRowPrefix + transaction.id).
         let emailInRow = hubRow(AccessibilityID.profileRowEmailIn)
         if emailInRow.waitForExistence(timeout: 4) {
             emailInRow.tap()
@@ -306,12 +306,10 @@ final class ScreenshotTourUITests: UITestCase {
             app.descendants(matching: .any)
                 .matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.emailInListRowPrefix))
                 .firstMatch.tap()
-            if app.descendants(matching: .any)[AccessibilityID.emailInReviewScreen].waitForExistence(timeout: 4) {
-                shoot(app, "emailin-review")
-                // Back to hub: the review REPLACED the list (router single slot), and
-                // EmailInReviewView also lacks .accessibilityElement(children: .contain),
-                // so its LbHeader close id is flattened to the screen id.
-                app.buttons[AccessibilityID.emailInReviewScreen].firstMatch.tap()
+            if app.descendants(matching: .any)[AccessibilityID.receiptDetailScreen].waitForExistence(timeout: 4) {
+                shoot(app, "emailin-detail")
+                // Detail REPLACED the list (single router slot); close lands on the profile hub.
+                app.buttons[AccessibilityID.receiptDetailClose].firstMatch.tap()
             }
             _ = app.descendants(matching: .any)[AccessibilityID.profileHubScreen].waitForExistence(timeout: 4)
         }
