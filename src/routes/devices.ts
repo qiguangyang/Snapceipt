@@ -11,16 +11,28 @@ import { uuidv7 } from "../lib/ids";
 import { type ExtractedReceipt } from "../lib/deepseek";
 import { writeReceiptRows } from "../lib/receiptRows";
 import { notifyEmailInReceipt } from "../email/notify";
-import { runExtraction } from "../email/inbound";
 
-/** Mirrors inbound.ts: a "needs review" receipt when extraction fails (image kept). */
-function simFailedReceipt(date: string): ExtractedReceipt {
-  return {
-    merchant: "", date, currencyCode: "AUD", total: 0, gst: null,
-    category: "office", deductible: null, lineItems: [], confidence: 0, needsReview: true,
-  };
-}
 const SIM_MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors inbound.ts
+
+/** Dev simulator ONLY: a small set of varied synthetic receipts so each simulated email-in
+ * lands as a DIFFERENT receipt (the bundled test image is fixed). The REAL email-in path
+ * (src/email/inbound.ts) still extracts via Gemini — this only affects /devices/simulate-inbound. */
+function pickSyntheticReceipt(date: string): ExtractedReceipt {
+  const all = [
+    { merchant: "Bunnings Warehouse", total: 89.5, gst: 8.14, category: "office", deductible: 100,
+      lineItems: [{ name: "Cordless drill", price: 79 }, { name: "Drill bits 10pk", price: 10.5 }] },
+    { merchant: "Coles", total: 42.3, gst: null, category: "groceries", deductible: 0,
+      lineItems: [{ name: "Milk 2L", price: 3.5 }, { name: "Chicken breast 1kg", price: 12 }, { name: "Vegetables", price: 26.8 }] },
+    { merchant: "Officeworks", total: 24.95, gst: 2.27, category: "office", deductible: 100,
+      lineItems: [{ name: "A4 paper ream", price: 7.95 }, { name: "Pens 10pk", price: 6 }, { name: "USB-C cable", price: 11 }] },
+    { merchant: "Caltex", total: 65, gst: 5.91, category: "vehicle", deductible: 100,
+      lineItems: [{ name: "Unleaded 91 38.2L", price: 65 }] },
+    { merchant: "JB Hi-Fi", total: 149, gst: 13.55, category: "office", deductible: 0,
+      lineItems: [{ name: "Wireless mouse", price: 49 }, { name: "USB hub", price: 100 }] },
+  ];
+  const p = all[Math.floor(Math.random() * all.length)]!;
+  return { ...p, date, currencyCode: "AUD", confidence: 0.95, needsReview: false };
+}
 
 /**
  * Device routes mounted under `/devices`. PROTECTED — the global auth middleware
@@ -203,27 +215,14 @@ deviceRoutes.post("/simulate-inbound", async (c) => {
   const now = nowMs();
   const defaultDate = new Date(now).toISOString().slice(0, 10);
 
-  // Store the image (so the review screen shows it), then extract via Gemini (gated).
+  // Store the posted image (so the detail screen shows a photo), then attach a varied
+  // synthetic receipt so each simulated email-in is a DIFFERENT receipt.
   const r2Key = `u/${userId}/${uuidv7()}.${ext}`;
   await c.env.RECEIPTS.put(r2Key, buf, { httpMetadata: { contentType } });
 
-  let receipt: ExtractedReceipt;
-  let extraction: "done" | "failed" = "done";
-  let model: string | null = null;
-  try {
-    // Same stub-gated extractor as the real email path: Gemini in prod, deterministic stub
-    // when GEMINI_API_KEY is absent (hermetic tests).
-    const out = await runExtraction(c.env, buf, contentType, defaultDate);
-    receipt = out.receipt;
-    model = out.model;
-    if (out.usedLlm && receipt.total <= 0 && receipt.lineItems.length === 0) {
-      extraction = "failed";
-      receipt = simFailedReceipt(defaultDate);
-    }
-  } catch {
-    extraction = "failed";
-    receipt = simFailedReceipt(defaultDate);
-  }
+  const receipt = pickSyntheticReceipt(defaultDate);
+  const extraction: "done" | "failed" = "done";
+  const model = "synthetic";
 
   const transactionId = await writeReceiptRows(c.env.DB, {
     userId, profileId: prof.id, profileType: prof.type,
