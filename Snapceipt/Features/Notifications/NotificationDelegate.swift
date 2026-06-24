@@ -79,9 +79,13 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = Self.hexToken(deviceToken)
         UserDefaults.standard.set(token, forKey: "sc.apnsToken")
+        // Re-uploading the token must NOT re-enable push — leave pushEnabled nil so the server's
+        // COALESCE preserves the user's Notifications toggle. (New devices still default to ON via
+        // the INSERT's `COALESCE(?, 1)`.) The toggle is the single source of truth for push_enabled;
+        // forcing `true` here silently overrode every "off" on the next launch/foreground/register.
         let body = UpdateDeviceBody(apnsToken: token, quietHoursStartMin: nil,
                                     quietHoursEndMin: nil, timezone: Self.timezoneProvider(),
-                                    pushEnabled: true, apnsEnvironment: Self.apnsEnvironment)
+                                    pushEnabled: nil, apnsEnvironment: Self.apnsEnvironment)
         Task { _ = try? await Self.api?.updateDevice(body) }
     }
 
