@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if DEBUG
+import UIKit   // beginBackgroundTask for the -bgDelay simulate mode (DEBUG-only dev tooling)
+#endif
 
 /// Top-level auth + first-run gate, then the authed app shell.
 ///
@@ -510,6 +513,20 @@ struct ShellView: View {
     /// `xcrun devicectl device process launch … -simulateEmailIn` (no tap, no auth bypass).
     private func runSimulateEmailInIfFlagged() async {
         guard CommandLine.arguments.contains("-simulateEmailIn") else { return }
+        // -bgDelay: keep the app alive ~12s via a background task before firing, so the app can be
+        // backgrounded and the push arrives as a REAL backgrounded notification banner. Without it,
+        // fire immediately (foreground "tap" use).
+        if CommandLine.arguments.contains("-bgDelay") {
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "simEmailIn")
+            try? await Task.sleep(for: .seconds(12))
+            await fireSimulateEmailIn()
+            UIApplication.shared.endBackgroundTask(bg)
+        } else {
+            await fireSimulateEmailIn()
+        }
+    }
+
+    private func fireSimulateEmailIn() async {
         await NotificationDelegate.requestAndRegister()
         guard let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
               let data = try? Data(contentsOf: url) else { return }
