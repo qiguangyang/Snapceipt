@@ -103,6 +103,16 @@ describe("PUT /devices/me", () => {
     expect(body.detail).toContain("status=stub"); // no APNS_KEY in tests → sendPush stubs
   });
 
+  it("POST /devices/simulate-inbound is Pro-only (403 for a free user)", async () => {
+    const { accessToken } = await seedAuthedDevice(); // free plan
+    const res = await SELF.fetch("https://x/devices/simulate-inbound", {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "image/jpeg" },
+      body: new Uint8Array([1, 2, 3, 4]),
+    });
+    expect(res.status).toBe(403);
+  });
+
   it("creates the device row if X-Device-Id is new for this user", async () => {
     const { accessToken } = await seedAuthedDevice();
     const newDeviceId = uuidv7();

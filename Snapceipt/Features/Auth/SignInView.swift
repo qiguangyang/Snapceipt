@@ -199,6 +199,9 @@ final class PreviewAPIClient: APIClient {
     func testPush() async throws -> TestPushResponse {
         TestPushResponse(deviceCount: 0, detail: "preview")
     }
+    func simulateEmailIn(jpeg: Data) async throws -> SimulateInboundResponse {
+        SimulateInboundResponse(transactionId: "preview-txn", extraction: "done", merchant: "Preview", deviceCount: 0)
+    }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         SendQuoteResponse(url: "https://api.snapceipt.cc/q/preview-token", emailed: false,
                           number: "SN-0001")

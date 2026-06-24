@@ -68,7 +68,7 @@ function failedReceipt(date: string): ExtractedReceipt {
  *
  *  Stub gate (E2E_EXTRACT_MODE or no key): returns the SAME deterministic heuristic stub as
  *  before (over STUB_OCR_TEXT) so the suite stays hermetic — no image bytes are read. */
-async function runExtraction(
+export async function runExtraction(
   env: Env,
   imageBytes: ArrayBuffer,
   contentType: string,

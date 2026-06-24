@@ -54,24 +54,32 @@ struct NotificationsSettingsView: View {
                             Card {
                                 Button {
                                     Task {
-                                        // Ensure the device is registered, then fire the email-in push
-                                        // to this device and surface the delivery diagnostics.
+                                        // Full email-in simulation: ensure the device is registered,
+                                        // then send a bundled test receipt through the real ingestion
+                                        // (extract → create txn → push) without sending an email.
                                         await NotificationDelegate.requestAndRegister()
+                                        guard let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
+                                              let data = try? Data(contentsOf: url) else {
+                                            testPushMessage = "Bundled test receipt image not found."
+                                            return
+                                        }
                                         do {
-                                            let r = try await api.testPush()
-                                            testPushMessage = "\(r.deviceCount) device(s)\n\(r.detail)"
+                                            let r = try await api.simulateEmailIn(jpeg: data)
+                                            testPushMessage = "Created receipt (extraction=\(r.extraction), "
+                                                + "merchant=\(r.merchant.isEmpty ? "—" : r.merchant)).\n"
+                                                + "Pushed to \(r.deviceCount) device(s)."
                                         } catch {
                                             testPushMessage = "Failed: \(error.localizedDescription)"
                                         }
                                     }
                                 } label: {
-                                    Text("Simulate email-in push")
+                                    Text("Simulate email-in receipt")
                                         .font(.ui(15, .semibold))
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 8)
                                 }
                             }
-                            infoNote("Sends the email-in push to this device. If it says “0 devices”, tap once more — the first tap registers for push.")
+                            infoNote("Runs the full email-in pipeline on a bundled test receipt — creates a transaction, extracts via Gemini, and pushes the notification. If it says “0 devices”, tap once more (the first tap registers for push).")
                             #endif
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
