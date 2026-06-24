@@ -192,15 +192,23 @@ deviceRoutes.post("/simulate-inbound", async (c) => {
   if (!(await isProUser(c.env.DB, userId))) {
     throw new ApiError("FORBIDDEN", "Snapceipt Pro is required for this feature");
   }
-  // Prefer the profile that has an email-in alias — that's where REAL email-in receipts land
-  // and what the iOS Email-in screen shows (it mints the alias for the active profile). Fall
-  // back to the oldest profile if no alias has been minted yet.
-  const prof = (await c.env.DB.prepare(
-    `SELECT p.id, p.type FROM profiles p
-       JOIN profile_inbox_tokens t ON t.profile_id = p.id
-      WHERE p.user_id = ? AND p.deleted_at IS NULL
-      ORDER BY t.created_at DESC LIMIT 1`,
-  ).bind(userId).first<{ id: string; type: string }>())
+  // Attach to the caller's ACTIVE profile when supplied (?profileId=, verified to belong to the
+  // user) so the simulated receipt lands where the Email-in screen is actually looking. Without
+  // it, fall back to the most-recently-aliased profile, then the oldest. (The active profile is a
+  // client concept the server can't infer — a multi-profile user's newest alias may not be the
+  // one currently on screen, which previously filed simulated receipts under the wrong profile.)
+  const requestedProfileId = c.req.query("profileId");
+  const prof = (requestedProfileId
+    ? await c.env.DB.prepare(
+        "SELECT id, type FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+      ).bind(requestedProfileId, userId).first<{ id: string; type: string }>()
+    : null)
+    ?? (await c.env.DB.prepare(
+      `SELECT p.id, p.type FROM profiles p
+         JOIN profile_inbox_tokens t ON t.profile_id = p.id
+        WHERE p.user_id = ? AND p.deleted_at IS NULL
+        ORDER BY t.created_at DESC LIMIT 1`,
+    ).bind(userId).first<{ id: string; type: string }>())
     ?? (await c.env.DB.prepare(
       "SELECT id, type FROM profiles WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1",
     ).bind(userId).first<{ id: string; type: string }>());

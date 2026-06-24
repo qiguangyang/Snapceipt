@@ -76,6 +76,38 @@ describe("POST /devices/simulate-inbound (full email-in simulation)", () => {
     expect(txn?.source).toBe("email_in");
   });
 
+  it("?profileId attaches the receipt to the requested (active) profile, not the alias one", async () => {
+    const { userId, bearer, t } = await seedProUserWithDevice();
+    const active = await addProfile(userId, "Active", t);          // the profile the user is viewing
+    const aliasProfile = await addProfile(userId, "Aliased", t + 1000); // newer alias → the fallback pick
+    await addAlias(userId, aliasProfile, t + 1000);
+
+    const res = await SELF.fetch(`https://x/devices/simulate-inbound?profileId=${active}`, {
+      method: "POST", headers: { authorization: bearer, "content-type": "image/jpeg" }, body: IMG,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { transactionId: string };
+    const txn = await env.DB.prepare(`SELECT profile_id FROM transactions WHERE id = ?`)
+      .bind(body.transactionId).first<{ profile_id: string }>();
+    expect(txn?.profile_id).toBe(active); // honoured the requested profile over the newer alias
+  });
+
+  it("a ?profileId not owned by the user is ignored (falls back), never cross-user", async () => {
+    const a = await seedProUserWithDevice();
+    const ap = await addProfile(a.userId, "A", a.t); await addAlias(a.userId, ap, a.t);
+    const b = await seedProUserWithDevice();
+    const bp = await addProfile(b.userId, "B", b.t); await addAlias(b.userId, bp, b.t);
+    // User A requests user B's profile id → must NOT attach to B's profile.
+    const res = await SELF.fetch(`https://x/devices/simulate-inbound?profileId=${bp}`, {
+      method: "POST", headers: { authorization: a.bearer, "content-type": "image/jpeg" }, body: IMG,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { transactionId: string };
+    const txn = await env.DB.prepare(`SELECT profile_id FROM transactions WHERE id = ?`)
+      .bind(body.transactionId).first<{ profile_id: string }>();
+    expect(txn?.profile_id).toBe(ap); // fell back to A's own profile, not B's
+  });
+
   it("the created transaction is returned by /sync/pull (so the app receives it)", async () => {
     const { userId, bearer, t } = await seedProUserWithDevice();
     const p = await addProfile(userId, "P", t);

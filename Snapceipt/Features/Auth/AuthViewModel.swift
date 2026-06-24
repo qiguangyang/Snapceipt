@@ -204,10 +204,13 @@ final class AuthViewModel {
         } catch let e as APIError {
             state = .error(Self.message(for: e))
         } catch {
-            if (error as NSError).code == ASAuthorizationError.canceled.rawValue {
+            let ns = error as NSError
+            if ns.code == ASAuthorizationError.canceled.rawValue {
                 state = .signedOut
             } else {
-                state = .error("Couldn't sign in with Apple. Please try again.")
+                // Surface the underlying error (domain/code/description) so a failing Apple
+                // sign-in can be diagnosed instead of hiding behind a generic message.
+                state = .error("Apple sign-in failed: \(ns.domain) \(ns.code) — \(ns.localizedDescription)")
             }
         }
     }

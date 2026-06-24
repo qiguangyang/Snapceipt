@@ -307,7 +307,8 @@ struct ShellView: View {
         }
         .overlay {
             if router.overlay == .notificationSettings {
-                NotificationsSettingsView(api: captureAPI, onClose: { router.dismissOverlay() })
+                NotificationsSettingsView(api: captureAPI, activeProfileId: profiles.activeProfileId,
+                                          onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }
@@ -530,7 +531,7 @@ struct ShellView: View {
         await NotificationDelegate.requestAndRegister()
         guard let url = Bundle.main.url(forResource: "canned-receipt", withExtension: "jpg"),
               let data = try? Data(contentsOf: url) else { return }
-        _ = try? await captureAPI.simulateEmailIn(jpeg: data)
+        _ = try? await captureAPI.simulateEmailIn(jpeg: data, profileId: profiles.activeProfileId)
         await sync.sync()
     }
 
