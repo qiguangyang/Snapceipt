@@ -102,6 +102,9 @@ final class StubAPIClient: APIClient {
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "stub-device")
     }
+    func testPush() async throws -> TestPushResponse {
+        TestPushResponse(deviceCount: 0, detail: "stub")
+    }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         SendQuoteResponse(url: "https://api.snapceipt.cc/q/stub-token", emailed: false,
                           number: "SN-0001")

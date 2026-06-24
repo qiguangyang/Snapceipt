@@ -13,6 +13,7 @@ struct NotificationsSettingsView: View {
     @State private var vm: NotificationsSettingsViewModel?
     @State private var quietStart = Date()
     @State private var quietEnd = Date()
+    @State private var testPushMessage: String?
 
     var body: some View {
         ZStack {
@@ -47,6 +48,31 @@ struct NotificationsSettingsView: View {
                             quietHoursCard(vm)
 
                             infoNote("Quiet hours pause push notifications during the times you choose. Critical sync alerts still arrive.")
+
+                            #if DEBUG
+                            groupLabel("Developer")
+                            Card {
+                                Button {
+                                    Task {
+                                        // Ensure the device is registered, then fire the email-in push
+                                        // to this device and surface the delivery diagnostics.
+                                        await NotificationDelegate.requestAndRegister()
+                                        do {
+                                            let r = try await api.testPush()
+                                            testPushMessage = "\(r.deviceCount) device(s)\n\(r.detail)"
+                                        } catch {
+                                            testPushMessage = "Failed: \(error.localizedDescription)"
+                                        }
+                                    }
+                                } label: {
+                                    Text("Simulate email-in push")
+                                        .font(.ui(15, .semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                }
+                            }
+                            infoNote("Sends the email-in push to this device. If it says “0 devices”, tap once more — the first tap registers for push.")
+                            #endif
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
@@ -56,6 +82,10 @@ struct NotificationsSettingsView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.notifSettingsScreen)
         .transition(.opacity)
+        .alert("Test push", isPresented: Binding(get: { testPushMessage != nil },
+                                                 set: { if !$0 { testPushMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(testPushMessage ?? "") }
         .task {
             if vm == nil {
                 let model = NotificationsSettingsViewModel(api: api)

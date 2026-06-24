@@ -196,6 +196,9 @@ final class PreviewAPIClient: APIClient {
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         UpdateDeviceResponse(id: "preview-device")
     }
+    func testPush() async throws -> TestPushResponse {
+        TestPushResponse(deviceCount: 0, detail: "preview")
+    }
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         SendQuoteResponse(url: "https://api.snapceipt.cc/q/preview-token", emailed: false,
                           number: "SN-0001")

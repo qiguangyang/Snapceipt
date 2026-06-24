@@ -89,6 +89,20 @@ describe("PUT /devices/me", () => {
     expect(await readEnv()).toBe("development");
   });
 
+  it("POST /devices/test-push reports the authed user's eligible device count", async () => {
+    const { accessToken, deviceId } = await seedAuthedDevice();
+    await env.DB.prepare(`UPDATE devices SET apns_token = 'toktest', push_enabled = 1 WHERE id = ?`)
+      .bind(deviceId).run();
+    const res = await SELF.fetch("https://x/devices/test-push", {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deviceCount: number; detail: string };
+    expect(body.deviceCount).toBe(1);
+    expect(body.detail).toContain("status=stub"); // no APNS_KEY in tests → sendPush stubs
+  });
+
   it("creates the device row if X-Device-Id is new for this user", async () => {
     const { accessToken } = await seedAuthedDevice();
     const newDeviceId = uuidv7();
