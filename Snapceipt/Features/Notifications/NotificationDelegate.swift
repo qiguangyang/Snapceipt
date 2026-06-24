@@ -12,6 +12,17 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     static var api: APIClient?
     static var timezoneProvider: () -> String = { QuietHours.deviceTimezone() }
 
+    /// The build's APNs environment, reported to the server so it pushes to the matching host.
+    /// Debug builds (Xcode/devicectl) have aps-environment=development → SANDBOX tokens; Release
+    /// (TestFlight/App Store) → production. `#if DEBUG` mirrors the entitlement files exactly.
+    static var apnsEnvironment: String {
+        #if DEBUG
+        return "development"
+        #else
+        return "production"
+        #endif
+    }
+
     /// Set by SnapceiptApp: refresh app data when an email-in push arrives (SyncEngine.sync()).
     /// A closure seam so the delegate can trigger a sync without holding the whole SyncEngine.
     static var refreshOnPush: (@Sendable () async -> Void)?
@@ -70,7 +81,7 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         UserDefaults.standard.set(token, forKey: "sc.apnsToken")
         let body = UpdateDeviceBody(apnsToken: token, quietHoursStartMin: nil,
                                     quietHoursEndMin: nil, timezone: Self.timezoneProvider(),
-                                    pushEnabled: true)
+                                    pushEnabled: true, apnsEnvironment: Self.apnsEnvironment)
         Task { _ = try? await Self.api?.updateDevice(body) }
     }
 
@@ -105,4 +116,10 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             .requestAuthorization(options: [.alert, .badge, .sound])) ?? false
         if granted { UIApplication.shared.registerForRemoteNotifications() }
     }
+}
+
+/// Posted (on the main actor) after an email-in push triggers a sync, so an open
+/// EmailInView can re-fetch its inbox and show the just-arrived receipt.
+extension Notification.Name {
+    static let emailInReceiptArrived = Notification.Name("emailInReceiptArrived")
 }

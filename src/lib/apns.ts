@@ -45,13 +45,20 @@ export async function signApnsJwt(env: Env): Promise<string> {
 /**
  * Send one APNs alert push. GATED: when env.APNS_KEY is absent the .p8 is not
  * provisioned, so this logs and returns { stub: true } with NO network call.
- * Otherwise it POSTs to api.push.apple.com with the ES256 bearer JWT, the
- * bundle-id apns-topic, alert push-type, and priority 10.
+ * Otherwise it POSTs to the APNs host for the device's environment with the ES256
+ * bearer JWT, the bundle-id apns-topic, alert push-type, and priority 10.
+ *
+ * `apnsEnvironment` selects the host: "development" (Xcode/devicectl builds, whose
+ * aps-environment=development register SANDBOX tokens) → api.sandbox.push.apple.com;
+ * "production" (TestFlight/App Store) → api.push.apple.com. Sending a sandbox token to
+ * the production host (or vice-versa) yields 400 BadDeviceToken, so this MUST match the
+ * token's origin. Defaults to production (the safe default for any token of unknown origin).
  */
 export async function sendPush(
   env: Env,
   apnsToken: string,
   payload: ApnsPayload,
+  apnsEnvironment: "development" | "production" = "production",
 ): Promise<SendPushResult> {
   if (!env.APNS_KEY) {
     // Don't log the device token (a sensitive push credential); a short prefix is enough
@@ -60,7 +67,8 @@ export async function sendPush(
     return { stub: true };
   }
   const jwt = await signApnsJwt(env);
-  const res = await fetch(`https://api.push.apple.com/3/device/${apnsToken}`, {
+  const host = apnsEnvironment === "development" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
+  const res = await fetch(`https://${host}/3/device/${apnsToken}`, {
     method: "POST",
     headers: {
       authorization: `bearer ${jwt}`,

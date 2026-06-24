@@ -133,9 +133,13 @@ struct SnapceiptApp: App {
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
         NotificationDelegate.router = router
         NotificationDelegate.api = api
-        // Email-in push refresh seam: a tapped/foreground email-in push triggers a sync
-        // so the open list refreshes and the tapped receipt is present to review.
-        NotificationDelegate.refreshOnPush = { await sync.sync() }
+        // Email-in push refresh seam: a tapped/foreground email-in push triggers a sync,
+        // then posts .emailInReceiptArrived so an open EmailInView re-fetches its inbox
+        // (the list is a manual fetch, not a @Query, so it won't auto-refresh on the sync write).
+        NotificationDelegate.refreshOnPush = {
+            await sync.sync()
+            await MainActor.run { NotificationCenter.default.post(name: .emailInReceiptArrived, object: nil) }
+        }
     }
 
     var body: some Scene {

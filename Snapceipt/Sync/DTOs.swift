@@ -206,6 +206,10 @@ struct UpdateDeviceBody: Encodable {
     var quietHoursEndMin: Int?
     var timezone: String?
     var pushEnabled: Bool?
+    /// The build's APNs environment ("development" for Xcode/devicectl builds, "production"
+    /// for TestFlight/App Store) so the server pushes to the matching APNs host. Defaulted
+    /// so quiet-hours-only callers can omit it (the encoder drops nil keys → server COALESCE keeps it).
+    var apnsEnvironment: String? = nil
 }
 
 /// PUT /devices/me response — the upserted device row (only `id` is asserted).

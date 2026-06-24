@@ -18,6 +18,7 @@ interface DeviceRow {
   timezone: string | null;
   quiet_hours_start_min: number | null;
   quiet_hours_end_min: number | null;
+  apns_environment: string | null;
 }
 
 /** UTC `YYYY-MM` for an epoch-ms instant. */
@@ -101,7 +102,7 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
     // Eligible devices: push_enabled, token present, not currently quiet.
     const { results: devices } = await db
       .prepare(
-        `SELECT apns_token, timezone, quiet_hours_start_min, quiet_hours_end_min
+        `SELECT apns_token, timezone, quiet_hours_start_min, quiet_hours_end_min, apns_environment
            FROM devices
           WHERE user_id = ? AND deleted_at IS NULL
             AND push_enabled = 1 AND apns_token IS NOT NULL`,
@@ -126,7 +127,8 @@ export async function budgetCronLogic(db: D1Database, env: Env, nowMs: number): 
     for (const d of devices) {
       if (inQuietHours(d, nowMs)) continue;
       try {
-        const result = await apns.sendPush(env, d.apns_token, payload);
+        const apnsEnv = d.apns_environment === "development" ? "development" : "production";
+        const result = await apns.sendPush(env, d.apns_token, payload, apnsEnv);
         if (result.stub === false) {
           if (result.status === 200) {
             pushed++;

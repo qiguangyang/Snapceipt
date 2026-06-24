@@ -21,12 +21,13 @@ export async function notifyEmailInReceipt(
       deepLink: `snapceipt://receipt/${transactionId}`,
     };
     const { results } = await env.DB.prepare(
-      `SELECT apns_token FROM devices
+      `SELECT apns_token, apns_environment FROM devices
         WHERE user_id = ? AND deleted_at IS NULL AND push_enabled = 1 AND apns_token IS NOT NULL`,
-    ).bind(userId).all<{ apns_token: string }>();
+    ).bind(userId).all<{ apns_token: string; apns_environment: string | null }>();
     for (const d of results) {
       try {
-        const r = await apns.sendPush(env, d.apns_token, payload);
+        const apnsEnv = d.apns_environment === "development" ? "development" : "production";
+        const r = await apns.sendPush(env, d.apns_token, payload, apnsEnv);
         if (r.stub === false && (r.status === 410 || r.status === 400)) {
           await env.DB.prepare(`UPDATE devices SET apns_token = NULL, updated_at = ? WHERE apns_token = ?`)
             .bind(nowMs, d.apns_token).run();
