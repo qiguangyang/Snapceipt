@@ -63,6 +63,12 @@ export default defineWorkersConfig({
             // is declared in wrangler.jsonc).
             APPLE_TRUST_ANCHOR_PEM: appleChain.rootCertPem,
             TEST_APPLE_CHAIN: JSON.stringify(appleChain),
+            // Force the extraction stub path in tests, hermetically: the workers pool DOES
+            // load .dev.vars, so a real DEEPSEEK_API_KEY/GEMINI_API_KEY there would otherwise
+            // leak in and break the "no key -> stub" tests. Empty overrides keep tests stub-only
+            // regardless of local .dev.vars. Real keys stay in .dev.vars / `wrangler secret`.
+            DEEPSEEK_API_KEY: "",
+            GEMINI_API_KEY: "",
           },
           // .dev.vars isn't read in tests; inject the secrets/vars tests need.
           // (real secrets stay in .dev.vars locally / `wrangler secret` on deploy)
