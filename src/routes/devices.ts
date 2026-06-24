@@ -10,7 +10,7 @@ import { isProUser } from "../lib/plan";
 import { uuidv7 } from "../lib/ids";
 import { type ExtractedReceipt } from "../lib/deepseek";
 import { writeReceiptRows } from "../lib/receiptRows";
-import { notifyEmailInReceipt } from "../email/notify";
+import { notifyEmailInBatch } from "../email/notify";
 
 const SIM_MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors inbound.ts
 
@@ -242,7 +242,7 @@ deviceRoutes.post("/simulate-inbound", async (c) => {
     receipt, ocrText: null, r2Key, contentType, byteSize: buf.byteLength,
     extractionStatus: extraction, extractionModel: model, nowMs: now,
   });
-  await notifyEmailInReceipt(c.env, userId, transactionId, receipt.merchant, extraction, now);
+  await notifyEmailInBatch(c.env, userId, 1, now);
 
   const { results } = await c.env.DB.prepare(
     `SELECT 1 FROM devices WHERE user_id = ? AND deleted_at IS NULL AND push_enabled = 1 AND apns_token IS NOT NULL`,
