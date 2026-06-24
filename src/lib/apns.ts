@@ -1,14 +1,18 @@
 import { SignJWT, importPKCS8 } from "jose";
 import type { Env } from "../env";
 
-/** The APNs JSON payload (spec §4.5). */
+/** The APNs JSON payload (spec §4.5). Fields beyond `aps` are app-defined deep-link
+ * hints; they vary by notification kind (budget alert vs. email-in receipt), so all
+ * are optional. */
 export interface ApnsPayload {
   aps: {
     alert: { title: string; body: string };
     sound: string;
   };
-  budgetId: string;
-  deepLink: string;
+  deepLink?: string;
+  budgetId?: string;
+  type?: string;
+  transactionId?: string;
 }
 
 /** sendPush result. `stub` is true when APNS_KEY is absent (no network call made). */
