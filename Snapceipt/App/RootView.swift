@@ -785,7 +785,7 @@ struct ShellView: View {
                 case .capture, .mileage, .wfh, .manual, .receiptDetail, .budgets, .budgetEditor, .alerts, .notificationSettings,
                      .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
                      .invoices, .invoiceEditor,
-                     .emailIn, .emailInReview,
+                     .emailIn,
                      .tax, .categories, .ruleEditor, .profileDetail,
                      .account, .privacy, .changeEmail:
                     return nil
@@ -808,7 +808,6 @@ struct ShellView: View {
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
                    !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("invoiceEditor"),
-                   !cur.id.hasPrefix("emailInReview"),
                    !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail"),
                    !cur.id.hasPrefix("manual"), !cur.id.hasPrefix("receiptDetail") {
                     router.dismissOverlay()
@@ -864,7 +863,7 @@ struct ShellView: View {
         case .receiptDetail, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
              .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
              .invoices, .invoiceEditor,
-             .emailIn, .emailInReview,
+             .emailIn,
              .tax, .categories, .ruleEditor, .profileDetail,
              .account, .privacy, .changeEmail:
             EmptyView()  // handled by the full-screen overlays (overlay blocks added in Task 5)
