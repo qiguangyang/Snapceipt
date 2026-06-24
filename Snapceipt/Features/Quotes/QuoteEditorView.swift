@@ -308,8 +308,8 @@ struct QuoteEditorView: View {
                     Divider().overlay(Palette.line2)
                     Toggle(isOn: Binding(get: { vm.gstInclusive }, set: { vm.gstInclusive = $0 })) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("GST inclusive").font(.ui(13.5, .semibold)).foregroundStyle(Palette.ink)
-                            Text("Line prices already include GST").font(.ui(11.5)).foregroundStyle(Palette.ink3)
+                            Text("\(vm.taxLabel) inclusive").font(.ui(13.5, .semibold)).foregroundStyle(Palette.ink)
+                            Text("Line prices already include \(vm.taxLabel)").font(.ui(11.5)).foregroundStyle(Palette.ink3)
                         }
                     }
                     .tint(Palette.income)
