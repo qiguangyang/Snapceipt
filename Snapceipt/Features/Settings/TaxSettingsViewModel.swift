@@ -59,6 +59,9 @@ final class TaxSettingsViewModel {
     var entityType: String { didSet { defaults.set(entityType, forKey: key("entityType")) } }
     var gstBasis: String { didSet { defaults.set(gstBasis, forKey: key("gstBasis")) } }
     var basPeriodRaw: String { didSet { defaults.set(basPeriodRaw, forKey: key("basPeriod")) } }
+    /// Business currency (local pref; AUD/NZD/USD/CAD) — drives the localized tax label on the
+    /// user's own docs + the default currency for new invoices/quotes. See AppSettings.businessCurrency.
+    var businessCurrency: String { didSet { AppSettings.setBusinessCurrency(businessCurrency, profileId: profile.id) } }
 
     @ObservationIgnored private let defaults: UserDefaults
     private func key(_ k: String) -> String { "sc.tax.\(profile.id).\(k)" }
@@ -106,6 +109,7 @@ final class TaxSettingsViewModel {
         self.entityType = defaults.string(forKey: "sc.tax.\(pid).entityType") ?? "Sole trader"
         self.gstBasis = defaults.string(forKey: "sc.tax.\(pid).gstBasis") ?? "Cash"
         self.basPeriodRaw = defaults.string(forKey: "sc.tax.\(pid).basPeriod") ?? BasPeriod.quarterly.rawValue
+        self.businessCurrency = AppSettings.businessCurrency(profileId: pid)
     }
 
     private func saveSettings() {

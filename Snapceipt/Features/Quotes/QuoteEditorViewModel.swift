@@ -14,6 +14,9 @@ final class QuoteEditorViewModel {
     @ObservationIgnored private let userId: String
     @ObservationIgnored let profileId: String
 
+    /// Localized tax label (GST / Sales tax / GST/HST) for the profile's business currency.
+    var taxLabel: String { receiptTaxLabel(for: AppSettings.businessCurrency(profileId: profileId)) }
+
     /// The active profile's GST rate (basis points), resolved lazily from storage; used
     /// for live totals + snapshotted onto the quote at save. (spec §3)
     @ObservationIgnored private lazy var profileGstRateBp: Int = {
@@ -163,7 +166,8 @@ final class QuoteEditorViewModel {
     func saveDraft() {
         guard let qid = quoteId else { return }
         let quote = fetchQuote(qid) ?? {
-            let q = Quote(userId: userId, profileId: profileId)
+            let q = Quote(userId: userId, profileId: profileId,
+                          currency: AppSettings.businessCurrency(profileId: profileId))
             q.id = qid
             context.insert(q)
             return q

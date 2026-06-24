@@ -344,7 +344,8 @@ struct AddManualView: View {
     private var gstRow: some View {
         HStack(spacing: 12) {
             Icon(name: "shield", size: 19, color: Palette.ink3).frame(width: 32)
-            Text("GST").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+            Text(receiptTaxLabel(for: AppSettings.businessCurrency(profileId: profileId)))
+                .font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
             Spacer(minLength: 8)
             Text("$").font(.ui(14, .semibold)).foregroundStyle(Palette.ink3)
             TextField("0.00", text: $gstText)
@@ -491,6 +492,7 @@ struct AddManualView: View {
                 merchant: cleanMerchant,
                 catKey: category.rawValue,
                 amountCents: amountCents,
+                currency: AppSettings.businessCurrency(profileId: profileId),
                 txnDate: f.string(from: date),
                 mode: isBusiness ? "business" : "personal",
                 deductiblePct: isBusiness && !isIncome ? 100 : nil,

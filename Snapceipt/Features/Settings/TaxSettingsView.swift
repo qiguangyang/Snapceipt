@@ -159,7 +159,17 @@ struct TaxSettingsView: View {
                     .accessibilityIdentifier(AccessibilityID.taxGstToggle)
                 divider
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("GST rate").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+                    Text("Business currency").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
+                    Picker("Business currency", selection: Binding(
+                        get: { vm.businessCurrency },
+                        set: { vm.businessCurrency = $0 })) {
+                            ForEach(AppSettings.businessCurrencies, id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                }
+                divider
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(receiptTaxLabel(for: vm.businessCurrency)) rate").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
                     Picker("GST rate", selection: Binding(
                         get: { vm.gstRatePreset },
                         set: { vm.setGstRatePreset($0) })) {

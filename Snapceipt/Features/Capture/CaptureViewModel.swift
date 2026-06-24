@@ -463,6 +463,21 @@ enum AppSettings {
             UserDefaults.standard.set(true, forKey: smartScanEnabledKey)
         }
     }
+
+    /// The currencies the app localizes tax labels for.
+    static let businessCurrencies = ["AUD", "NZD", "USD", "CAD"]
+
+    /// Per-profile business currency (LOCAL preference; AUD/NZD/USD/CAD, default AUD). Drives the
+    /// localized tax label on the user's OWN documents (tax setting, invoices, quotes, manual
+    /// entries) and the default currency for NEW invoices/quotes. Per-device — each invoice/quote
+    /// still stamps + syncs its own `currency`, so documents stay correct across devices.
+    static func businessCurrencyKey(_ profileId: String) -> String { "sc.businessCurrency.\(profileId)" }
+    static func businessCurrency(profileId: String) -> String {
+        UserDefaults.standard.string(forKey: businessCurrencyKey(profileId)) ?? "AUD"
+    }
+    static func setBusinessCurrency(_ code: String, profileId: String) {
+        UserDefaults.standard.set(code, forKey: businessCurrencyKey(profileId))
+    }
 }
 
 /// Which engine produced the current Review draft, plus timing/confidence, surfaced
