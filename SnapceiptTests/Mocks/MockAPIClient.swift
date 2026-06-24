@@ -189,6 +189,9 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         guard let h = updateDeviceHandler else { throw MockAPIClientError.unscripted }
         return try await h(body)
     }
+    func testPush() async throws -> TestPushResponse {
+        TestPushResponse(deviceCount: 0, detail: "mock")
+    }
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {
         sendQuoteCalls.append(id)

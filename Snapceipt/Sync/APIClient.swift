@@ -43,6 +43,9 @@ protocol APIClient {
     /// PUT /devices/me — upsert this device's apns token / quiet-hours / timezone /
     /// push_enabled. Keyed by the X-Device-Id header (attached by makeRequest). (§4.2)
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse
+    /// POST /devices/test-push — dev/QA: send the email-in push to the authed user's own
+    /// devices and report delivery diagnostics (device count + per-device APNs status).
+    func testPush() async throws -> TestPushResponse
     /// POST /quotes/:id/send — recompute totals, assign SN-#### (if unset), email the
     /// client the hosted HTML quote; returns the link + email status + minted number. (§4.5)
     func sendQuote(_ id: String) async throws -> SendQuoteResponse
@@ -263,6 +266,10 @@ final class LiveAPIClient: APIClient {
 
     func updateDevice(_ body: UpdateDeviceBody) async throws -> UpdateDeviceResponse {
         try await send("PUT", "/devices/me", body: body, authenticated: true)
+    }
+
+    func testPush() async throws -> TestPushResponse {
+        try await send("POST", "/devices/test-push", body: NoBody(), authenticated: true)
     }
 
     func sendQuote(_ id: String) async throws -> SendQuoteResponse {

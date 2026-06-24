@@ -5,6 +5,7 @@ import { ApiError } from "../lib/errors";
 import { revokeSessionFamily } from "../lib/sessions";
 import { nowMs } from "../lib/time";
 import { validate } from "./auth";
+import * as apns from "../lib/apns";
 
 /**
  * Device routes mounted under `/devices`. PROTECTED — the global auth middleware
@@ -115,6 +116,40 @@ deviceRoutes.put("/me", validate("json", putBody), async (c) => {
     timezone: row.timezone,
     lastSeenAt: row.last_seen_at,
   });
+});
+
+/**
+ * POST /devices/test-push
+ * Dev/QA helper: send the email-in push to the authed user's OWN registered devices
+ * and report the outcome, so push delivery can be exercised without sending a real
+ * email. Returns the eligible-device count and a per-device "env=… status=…" detail
+ * (status 200 = delivered, 400/410 = bad/expired token, "stub" = no APNS_KEY). Safe:
+ * authed, owner's devices only, no side effects beyond the push.
+ */
+deviceRoutes.post("/test-push", async (c) => {
+  const userId = c.var.userId;
+  const { results } = await c.env.DB.prepare(
+    `SELECT apns_token, apns_environment FROM devices
+      WHERE user_id = ? AND deleted_at IS NULL AND push_enabled = 1 AND apns_token IS NOT NULL`,
+  ).bind(userId).all<{ apns_token: string; apns_environment: string | null }>();
+
+  const payload: apns.ApnsPayload = {
+    aps: { alert: { title: "New receipt", body: "Test email-in — tap to review." }, sound: "default" },
+    type: "email_in",
+    transactionId: "test",
+    deepLink: "snapceipt://receipt/test",
+  };
+
+  const sends: string[] = [];
+  for (const d of results) {
+    const apnsEnv = d.apns_environment === "development" ? "development" : "production";
+    const r = await apns.sendPush(c.env, d.apns_token, payload, apnsEnv);
+    sends.push(`env=${apnsEnv} status=${r.stub ? "stub" : r.status}`);
+  }
+  const detail = results.length === 0
+    ? "No registered device — enable notifications in the app first."
+    : sends.join("; ");
+  return c.json({ deviceCount: results.length, detail });
 });
 
 /**

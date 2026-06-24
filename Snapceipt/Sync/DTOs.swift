@@ -217,6 +217,12 @@ struct UpdateDeviceResponse: Decodable {
     let id: String
 }
 
+/// POST /devices/test-push response — dev/QA push-delivery diagnostics.
+struct TestPushResponse: Decodable {
+    let deviceCount: Int
+    let detail: String
+}
+
 // MARK: - Quotes (spec §4.5)
 
 /// `POST /quotes/:id/send` → the hosted HTML quote link + email status + minted number.
