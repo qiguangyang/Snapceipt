@@ -23,7 +23,7 @@ enum ReceiptMapper {
             merchant: draft.merchant,
             catKey: draft.categoryKey,
             amountCents: signed,
-            currency: "AUD",
+            currency: draft.currencyCode,
             txnDate: draft.date,
             mode: mode.lowercased(),
             taxLabel: draft.taxLabel,

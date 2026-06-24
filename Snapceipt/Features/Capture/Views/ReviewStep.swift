@@ -324,7 +324,7 @@ struct ReviewStep: View {
             // (some items can be GST-free, so total/11 is wrong). Hidden only when a
             // business receipt is marked GST-free.
             if !(selectedType == "business" && draft.gstFree) {
-                field("GST") {
+                field(receiptTaxLabel(for: draft.currencyCode)) {
                     TextField("0.00", text: Binding(
                         get: { draft.gst.map { NSDecimalNumber(decimal: $0).stringValue } ?? "" },
                         set: { s in
