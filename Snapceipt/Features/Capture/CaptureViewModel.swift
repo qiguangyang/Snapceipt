@@ -442,6 +442,20 @@ enum AppSettings {
         guard UserDefaults.standard.object(forKey: smartScanEnabledKey) == nil else { return }
         UserDefaults.standard.set(!isOnDeviceAIAvailable, forKey: smartScanEnabledKey)
     }
+
+    /// One-time migration: an EXISTING device WITHOUT on-device AI that's stuck on OFF (manual,
+    /// no AI — from the old always-OFF default) is flipped to ON (Cloud) so it gets AI again.
+    /// FM devices (OFF = on-device, correct) and any EXPLICIT ON are left untouched. Cloud is
+    /// strictly better than manual for these users, and they can toggle back. Runs once (flag).
+    static func migrateNonFMOffToCloudIfNeeded() {
+        let flagKey = "sc.smartScan.nonFMCloudMigration.v1"
+        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+        UserDefaults.standard.set(true, forKey: flagKey)
+        if !isOnDeviceAIAvailable,
+           UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool == false {
+            UserDefaults.standard.set(true, forKey: smartScanEnabledKey)
+        }
+    }
 }
 
 /// Which engine produced the current Review draft, plus timing/confidence, surfaced

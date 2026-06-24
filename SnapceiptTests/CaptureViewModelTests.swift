@@ -217,6 +217,34 @@ struct CaptureViewModelTests {
         UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
     }
 
+    @Test("migrateNonFMOffToCloudIfNeeded: non-FM OFF → Cloud once; explicit ON untouched")
+    func nonFMOffToCloudMigration() {
+        let flagKey = "sc.smartScan.nonFMCloudMigration.v1"
+        // On a non-FM device (the simulator) an OFF device is flipped to cloud; on an FM device
+        // OFF is left as on-device. Drive the expectation off the actual capability either way.
+        let expectFlip = !AppSettings.isOnDeviceAIAvailable
+
+        // (a) OFF + no flag → flips to cloud on non-FM (no-op on FM).
+        UserDefaults.standard.removeObject(forKey: flagKey)
+        UserDefaults.standard.set(false, forKey: AppSettings.smartScanEnabledKey)
+        AppSettings.migrateNonFMOffToCloudIfNeeded()
+        #expect(AppSettings.smartScanEnabled == expectFlip)
+
+        // (b) Idempotent: the flag is set now, so a toggled-back OFF is NOT re-flipped.
+        UserDefaults.standard.set(false, forKey: AppSettings.smartScanEnabledKey)
+        AppSettings.migrateNonFMOffToCloudIfNeeded()
+        #expect(AppSettings.smartScanEnabled == false)
+
+        // (c) An explicit ON is never touched (reset the flag so the migration runs again).
+        UserDefaults.standard.removeObject(forKey: flagKey)
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
+        AppSettings.migrateNonFMOffToCloudIfNeeded()
+        #expect(AppSettings.smartScanEnabled == true)
+
+        UserDefaults.standard.removeObject(forKey: flagKey)
+        UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey)
+    }
+
     @Test("ScanDiagnostics.summary renders the DeepSeek engine line")
     func diagnosticsSummaryDeepseek() {
         let d = ScanDiagnostics(engine: .deepseek, model: "deepseek-v4-flash",

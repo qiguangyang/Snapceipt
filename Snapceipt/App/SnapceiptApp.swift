@@ -52,6 +52,8 @@ struct SnapceiptApp: App {
         // Seed the Cloud AI default by device capability (FM available → on-device, else cloud)
         // before any view reads the @AppStorage toggle. No-op once set; never overrides a choice.
         AppSettings.seedSmartScanDefaultIfUnset()
+        // One-time: lift EXISTING non-FM devices off the old OFF (manual) default onto Cloud.
+        AppSettings.migrateNonFMOffToCloudIfNeeded()
         let auth = AuthStore()
 #if DEBUG
         // UI-test seam: under -uiTestStub/-uiTestReset/API_BASE_URL the app wires itself
