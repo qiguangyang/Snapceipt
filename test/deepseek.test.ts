@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   runGeminiVisionExtraction,
   reconcileGst,
+  normalizeCurrency,
+  inclusiveTaxCap,
   trimReceiptTail,
   detectMerchant,
   detectDate,
@@ -34,24 +36,44 @@ const WOOLIES = [
 
 describe("GST reconcile + tail trim + merchant detect", () => {
   it("prefers the printed GST over an impossible model value (ABN $88)", () => {
-    expect(reconcileGst(88, 176.98, WOOLIES)).toBe(1.64);
+    expect(reconcileGst(88, 176.98, WOOLIES, "AUD")).toBe(1.64);
   });
-  it("clamps an impossible GST to total/11 when none is printed", () => {
-    expect(reconcileGst(88, 176.98, "TOTAL 176.98")).toBe(16.09);
+  it("clamps an impossible GST to total/11 when none is printed (AUD)", () => {
+    expect(reconcileGst(88, 176.98, "TOTAL 176.98", "AUD")).toBe(16.09);
   });
-  it("keeps a valid GST at or under total/11", () => {
-    expect(reconcileGst(1.64, 176.98, WOOLIES)).toBe(1.64);
+  it("keeps a valid GST at or under total/11 (AUD)", () => {
+    expect(reconcileGst(1.64, 176.98, WOOLIES, "AUD")).toBe(1.64);
   });
   it("honors a printed GST slightly above total/11 (surcharge/rounding), not just at/under it", () => {
     // Yakitori case: GST 11.55 on a 115.50 subtotal, total 117.23 includes a 1.73 surcharge,
     // so 11.55 > total/11 (10.66) yet is the merchant's printed GST — must be kept, not clamped.
     const txt = "Subtotal (9) 115.50\nGST 11.55\nVISA 1.73\nTotal 117.23";
-    expect(reconcileGst(11.55, 117.23, txt)).toBe(11.55);
+    expect(reconcileGst(11.55, 117.23, txt, "AUD")).toBe(11.55);
   });
-  it("still rejects a gross GST mis-read above ~12% of total and clamps to total/11", () => {
+  it("still rejects a gross GST mis-read above ~12% of total and clamps to total/11 (AUD)", () => {
     // A "GST" line carrying an absurd figure (e.g. an ABN/payment grab) is not trusted; with
     // no valid printed line the model value clamps to total/11.
-    expect(reconcileGst(11.55, 117.23, "GST 88.00\nTotal 117.23")).toBe(10.66); // 117.23/11 rounded
+    expect(reconcileGst(11.55, 117.23, "GST 88.00\nTotal 117.23", "AUD")).toBe(10.66); // 117.23/11
+  });
+  it("clamps an impossible GST to the NZ inclusive cap (15% = total×3/23) when none is printed", () => {
+    expect(reconcileGst(88, 115, "TOTAL 115.00", "NZD")).toBe(15); // 115 × 3/23 = 15.00
+  });
+  it("does NOT clamp US/Canada sales tax (exclusive + variable) — the model value stands", () => {
+    expect(reconcileGst(8.88, 100, "", "USD")).toBe(8.88); // 8.875% NYC tax, no inclusive cap
+    expect(reconcileGst(13, 100, "", "CAD")).toBe(13);     // 13% Ontario HST, no inclusive cap
+  });
+  it("normalizeCurrency accepts AUD/NZD/USD/CAD, defaults unknown/empty to AUD", () => {
+    for (const c of ["AUD", "NZD", "USD", "CAD"]) expect(normalizeCurrency(c)).toBe(c);
+    expect(normalizeCurrency("nzd")).toBe("NZD");      // case-insensitive
+    expect(normalizeCurrency("GBP")).toBe("AUD");      // unsupported → default
+    expect(normalizeCurrency(null)).toBe("AUD");
+    expect(normalizeCurrency("")).toBe("AUD");
+  });
+  it("inclusiveTaxCap: AU total/11, NZ total×3/23, US/CA null (exclusive)", () => {
+    expect(inclusiveTaxCap("AUD", 176.98)).toBe(16.09);
+    expect(inclusiveTaxCap("NZD", 115)).toBe(15);
+    expect(inclusiveTaxCap("USD", 100)).toBeNull();
+    expect(inclusiveTaxCap("CAD", 100)).toBeNull();
   });
   it("trims the payment block + promo tail but keeps items + totals", () => {
     const t = trimReceiptTail(WOOLIES);

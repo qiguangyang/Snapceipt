@@ -29,11 +29,12 @@ const DEDUCTIBLE_DEFAULTS: Record<string, number | null> = {
  * mode requires it).
  */
 const SYSTEM_PROMPT = [
-  "You extract structured data from noisy Australian receipt OCR text. Respond with ONLY a json object, no prose, no markdown fences:",
-  '{ "merchant": string, "date": "YYYY-MM-DD", "currencyCode": "AUD", "total": number, "gst": number|null, "category": one of ["meals","groceries","fuel","software","office","home","health","travel","income"], "deductible": number 0-100|null, "lineItems": [{"name": string, "price": number}], "confidence": number 0-1 }',
-  'Rules: AUD only. `category` MUST be exactly one of the nine keys above (no others). Set `deductible` to the per-category default unless the receipt clearly implies otherwise: meals 50, groceries 0, fuel 100, software 100, office 100, home 50, health 0, travel 100, income null. `total` is the GST-inclusive grand total as a positive number. Use `income` only for money received.',
-  'GST: if a GST/tax amount is printed (e.g. "TOTAL includes GST $1.64"), use that EXACT printed value for `gst`. Only if no GST amount is printed, set `gst` to total/11 rounded to cents. Australian receipts are often largely GST-free (fresh food) — never overwrite a printed GST with total/11.',
-  '`lineItems` are ONLY actually-purchased products. EXCLUDE: payment/card/EFTPOS/balance/change/approval blocks; loyalty/rewards/points/credits; store/ABN/legal/contact/terminal details; barcodes; savings or "you saved" lines; subtotals and totals; and promotional/advertising/coupon offers (e.g. "BUY ANY 2 WINES", BWS beer/wine specials, "PRESENT YOUR COUPON"). A product name and its price may be on SEPARATE lines (e.g. "Kiwifruit Gold New Zealand" then "0.977 kg NET @ $10.90/kg 10.65") — pair them so `name` is the PRODUCT (\"Kiwifruit Gold New Zealand\"), not the weight/qty line. Each `price` is the line\'s RIGHTMOST dollar amount = the line total (10.65), NEVER a per-unit price ("$10.90/kg", "$2.50 each") and NEVER a size/weight token ("130g", "750ml", "1kg") — those are not prices.',
+  "You extract structured data from a photo or scan of a retail receipt or tax invoice from Australia, New Zealand, the United States, or Canada. Respond with ONLY a json object, no prose, no markdown fences:",
+  '{ "merchant": string, "date": "YYYY-MM-DD", "currencyCode": one of ["AUD","NZD","USD","CAD"], "total": number, "gst": number|null, "category": one of ["meals","groceries","fuel","software","office","home","health","travel","income"], "deductible": number 0-100|null, "lineItems": [{"name": string, "price": number}], "confidence": number 0-1 }',
+  'Country/currency: infer from the receipt — language, the address/state/province, phone format, and tax wording (AU & NZ say "GST"; Canada says "GST"/"HST"/"PST"/"QST"; the US says "Sales Tax" or "Tax"). Set `currencyCode` to AUD, NZD, USD, or CAD; if genuinely ambiguous (all four use "$"), default to AUD.',
+  '`category` MUST be exactly one of the nine keys above (no others). Set `deductible` to the per-category default unless the receipt clearly implies otherwise: meals 50, groceries 0, fuel 100, software 100, office 100, home 50, health 0, travel 100, income null. `total` is the grand total actually paid (tax included) as a positive number. Use `income` only for money received.',
+  'Tax (`gst` = the receipt\'s TOTAL tax amount): if a tax amount is printed (GST/HST/PST/QST/Sales Tax — sum them if several are shown), use that EXACT printed value. AU & NZ GST is INCLUDED in the total; US & Canadian sales tax is ADDED on top. If NO tax is printed: for AUD set `gst` to total/11; for NZD set it to total×3/23; for USD and CAD set `gst` to null (sales-tax rates vary and cannot be inferred). Never overwrite a printed tax with a formula.',
+  '`lineItems` are ONLY actually-purchased products. EXCLUDE: payment/card/EFTPOS/balance/change/approval blocks; loyalty/rewards/points/credits; store/ABN/GST-number/tax-ID/legal/contact/terminal details; barcodes; savings or "you saved" lines; subtotals, tax lines, and totals; and promotional/advertising/coupon offers (e.g. "BUY ANY 2 WINES", BWS beer/wine specials, "PRESENT YOUR COUPON"). A product name and its price may be on SEPARATE lines (e.g. "Kiwifruit Gold New Zealand" then "0.977 kg NET @ $10.90/kg 10.65") — pair them so `name` is the PRODUCT (\"Kiwifruit Gold New Zealand\"), not the weight/qty line. Each `price` is the line\'s RIGHTMOST dollar amount = the line total (10.65), NEVER a per-unit price ("$10.90/kg", "$2.50 each") and NEVER a size/weight token ("130g", "750ml", "1kg") — those are not prices.',
 ].join("\n");
 
 export interface ExtractionInput {
@@ -134,20 +135,42 @@ function printedGst(ocrText: string): number | null {
   return found;
 }
 
-/** GST on a GST-inclusive total can never exceed total/11. Prefer a printed "GST $X" line;
- * otherwise clamp an impossible model value down to the cap. */
-export function reconcileGst(gst: number | null, total: number, ocrText: string): number | null {
+/** Supported receipt locales: Australia, New Zealand, the US, and Canada. */
+const SUPPORTED_CURRENCIES = new Set(["AUD", "NZD", "USD", "CAD"]);
+
+/** Normalize the model's currency to a supported ISO code; default AUD (the primary market) when
+ * the receipt is ambiguous or the code is unrecognized. */
+export function normalizeCurrency(code: string | null | undefined): string {
+  const c = (code ?? "").trim().toUpperCase();
+  return SUPPORTED_CURRENCIES.has(c) ? c : "AUD";
+}
+
+/** Max tax on a tax-INCLUSIVE total: AU GST 10% → total/11, NZ GST 15% → total×3/23. Returns
+ * null for tax-EXCLUSIVE locales (US sales tax, Canada GST/HST/PST), where tax is added on top
+ * and the rate varies — there is no formula to infer or cap it, so the printed amount is trusted. */
+export function inclusiveTaxCap(currency: string, total: number): number | null {
+  if (currency === "AUD") return roundCents(total / 11);
+  if (currency === "NZD") return roundCents((total * 3) / 23);
+  return null; // USD / CAD — exclusive, variable-rate sales tax
+}
+
+/** Reconcile the model's tax (the `gst` field carries the receipt's TOTAL tax) against the
+ * receipt's currency. Prefer a printed "GST $X" line (text paths); otherwise, for tax-INCLUSIVE
+ * currencies (AU/NZ) clamp an impossible model value down to the inclusive cap. For tax-EXCLUSIVE
+ * currencies (US/CA) the printed/model amount stands (no formula cap). */
+export function reconcileGst(
+  gst: number | null, total: number, ocrText: string, currency: string,
+): number | null {
   if (total <= 0) return null;
-  const cap = roundCents(total / 11);
-  // A printed "GST $X" line is authoritative. Allow it slightly above the 1/11 baseline — a
-  // card surcharge or rounding can push the real GST a little higher (e.g. GST 11.55 on a
-  // 115.50 subtotal with a 1.73 surcharge → total 117.23, 11.55 > total/11 = 10.66) — while
-  // still rejecting a gross mis-read (an ABN/payment figure) above ~12% of total.
-  const printedCap = total * 0.12;
+  // A printed tax line is authoritative. Allow headroom for surcharge/rounding: AU GST is ~10%
+  // (accept up to 12%); other locales (NZ 15%, US/CA combined taxes) up to 30% — still rejecting
+  // a gross mis-read of an ABN/payment figure.
+  const printedCap = total * (currency === "AUD" ? 0.12 : 0.3);
   const printed = printedGst(ocrText);
   if (printed != null && printed >= 0 && printed <= printedCap) return roundCents(printed);
-  // No trusted printed line: clamp an impossible MODEL-derived value down to the 1/11 cap.
-  if (gst != null && gst > cap + 0.005) return cap;
+  // No trusted printed line: clamp an impossible MODEL value to the inclusive cap (AU/NZ only).
+  const cap = inclusiveTaxCap(currency, total);
+  if (cap != null && gst != null && gst > cap + 0.005) return cap;
   return gst;
 }
 
@@ -312,14 +335,17 @@ function reconcileLineItems(
 function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt {
   const total = roundCents(Math.max(0, r.total));
 
-  // GST non-null guarantee: infer round(total/11) when absent and total>0; null only at total==0.
+  const currency = normalizeCurrency(r.currencyCode);
+
+  // Tax (`gst` = the receipt's TOTAL tax). Infer the INCLUSIVE tax only for AU/NZ when the model
+  // omitted it (AU total/11, NZ total×3/23); US/CA sales tax is exclusive + variable, so leave it
+  // as the model read it (null if absent). total==0 → null.
   let gst = r.gst;
   if (total === 0) gst = null;
-  else if (gst === null || gst === undefined) gst = roundCents(total / 11);
+  else if (gst === null || gst === undefined) gst = inclusiveTaxCap(currency, total);
   else gst = roundCents(gst);
-  // Deterministic guard: trust a printed "GST $X" line over the model. Read from the layout
-  // text so the GST amount is paired with its label ("GST 11.55"); raw order splits them.
-  gst = reconcileGst(gst, total, extractionText(input));
+  // Deterministic guard: trust a printed tax line over the model; clamp impossible AU/NZ values.
+  gst = reconcileGst(gst, total, extractionText(input), currency);
 
   // Deductible backfill from the per-category default when the model omitted it,
   // then coerce to an INTEGER literal so the wire never emits a float like 50.0
@@ -340,7 +366,7 @@ function finalize(input: ExtractionInput, r: DeepseekReceipt): ExtractedReceipt 
     // r.date may be null (schema allows it now); backfill from the OCR text, else the
     // capture date (capturedAt/today) so the wire date is always a valid YYYY-MM-DD.
     date: detectDate(input.ocrText) ?? r.date ?? input.defaultDate,
-    currencyCode: "AUD",
+    currencyCode: currency,
     total,
     gst,
     category: r.category,
