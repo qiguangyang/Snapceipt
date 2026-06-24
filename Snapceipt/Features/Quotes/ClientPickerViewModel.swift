@@ -60,4 +60,14 @@ final class ClientPickerViewModel {
         sync.enqueue(op: "upsert", entityType: .client, entity: client)
         return client
     }
+
+    /// Soft-delete a client (+ enqueue a delete). Mirrors InvoiceListViewModel.delete. Sent
+    /// quotes/invoices keep their copied name/email/address snapshot, so they're unaffected.
+    func delete(_ client: Client) {
+        client.deletedAt = Epoch.nowMs()
+        client.updatedAt = Epoch.nowMs()
+        try? context.save()
+        reload()
+        sync.enqueue(op: "delete", entityType: .client, entity: client)
+    }
 }
