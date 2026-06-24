@@ -27,6 +27,13 @@ export type Env = {
    * Optional; the route falls back to "deepseek-v4-flash" when unset.
    */
   DEEPSEEK_MODEL?: string;
+  /** Secret: Gemini API key — used by the email-in vision extractor (runGeminiVisionExtraction). */
+  GEMINI_API_KEY: string;
+  /**
+   * Var: Gemini model id used in the generateContent URL + echoed as meta.model.
+   * Optional; runGeminiVisionExtraction falls back to "gemini-3.1-flash-lite" when unset.
+   */
+  GEMINI_MODEL?: string;
   /** Var: Apple bundle id; Apple identityToken `aud` must equal this. */
   APPLE_BUNDLE_ID: string;
   /**
