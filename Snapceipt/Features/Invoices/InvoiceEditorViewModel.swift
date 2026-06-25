@@ -53,6 +53,8 @@ final class InvoiceEditorViewModel {
     private(set) var emailed = false
 
     private(set) var isIssuing = false
+    private(set) var isSending = false
+    private(set) var isGeneratingPdf = false
     var errorMessage: String?
 
     @ObservationIgnored private var originalLineIds: Set<String> = []
@@ -287,6 +289,8 @@ final class InvoiceEditorViewModel {
     func send(api: APIClient) async -> Bool {
         guard let iid = invoiceId else { return false }
         errorMessage = nil
+        isSending = true
+        defer { isSending = false }
         do {
             let r = try await api.sendInvoice(iid)
             if let url = r.pdfUrl { pdfUrl = url }
@@ -298,6 +302,27 @@ final class InvoiceEditorViewModel {
         } catch {
             errorMessage = "Couldn’t send the invoice. Try again."
             return false
+        }
+    }
+
+    /// Build/refresh the invoice PDF on demand (POST /invoices/:id/pdf) and return its share
+    /// URL. Mirrors send()'s error handling; used by the PDF button so it always produces a
+    /// fresh PDF rather than only opening a previously-built one.
+    func generatePdf(api: APIClient) async -> String? {
+        guard let iid = invoiceId else { return nil }
+        errorMessage = nil
+        isGeneratingPdf = true
+        defer { isGeneratingPdf = false }
+        do {
+            let r = try await api.invoicePdf(iid)
+            pdfUrl = r.pdfUrl
+            return r.pdfUrl
+        } catch let e as APIError {
+            errorMessage = e.message
+            return nil
+        } catch {
+            errorMessage = "Couldn’t generate the PDF. Try again."
+            return nil
         }
     }
 

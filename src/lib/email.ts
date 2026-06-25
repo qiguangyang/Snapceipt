@@ -363,14 +363,28 @@ export async function sendQuoteEmail(env: Env, msg: QuoteEmail): Promise<void> {
   });
 }
 
-/** The invoice-send email (tax-invoice PDF attachment). */
+/** The invoice-send email: a quote-style HTML body + a link to the hosted invoice page,
+ *  with the tax-invoice PDF attached. */
 export interface InvoiceEmail {
   to: string;
-  /** The trader's own email — set as Reply-To so the client replies to them. */
+  /** The trader's own/business email — set as Reply-To so the client replies to them. */
   replyTo: string;
   invoiceNumber: string;
   clientName: string | null;
   totalCents: number;
+  /** The hosted HTML invoice URL (https://api.snapceipt.cc/i/<token>). */
+  url: string;
+  business: QuoteEmailBusiness;
+  lineItems: QuoteEmailLineItem[];
+  subtotalCents: number;
+  gstCents: number;
+  /** True when GST applies (shows the GST row). */
+  gstEnabled: boolean;
+  /** YYYY-MM-DD due date, or null. */
+  dueDate: string | null;
+  /** App/site link for the marketing footer (https://snapceipt.cc). */
+  appUrl: string;
+  /** The tax-invoice PDF to attach. */
   pdf: Uint8Array;
 }
 
@@ -378,12 +392,144 @@ export interface InvoiceEmail {
 const MAX_INVOICE_PDF_BYTES = 25 * 1024 * 1024; // 25 MiB
 
 /**
- * Send the invoice email with the tax-invoice PDF attached (spec §4.5). Mirrors
- * sendQuoteEmail: mimetext/browser MIME (self-contained, workerd-safe), base64 PDF
- * attachment, cloudflare:email EmailMessage(from,to,raw) + env.EMAIL.send. `from` is
- * the magic-link sender (the only allowed_sender_addresses entry); Reply-To is the
- * trader so the client replies to them. Stubbed in route tests via
- * vi.spyOn(emailModule, "sendInvoiceEmail").
+ * Build the EMAIL-SAFE rich HTML body for the invoice email (mirrors renderQuoteEmailHtml):
+ * table-based layout, inline CSS only, ~600px wide, logo via an <img src> at the R2 image URL.
+ */
+function renderInvoiceEmailHtml(msg: InvoiceEmail): string {
+  const b = msg.business;
+  const greeting = msg.clientName ? `Hi ${emailEsc(msg.clientName)},` : "Hi,";
+  const total = emailDollars(msg.totalCents);
+
+  const logoImg = b.logoR2Key
+    ? `<img src="${IMAGE_ORIGIN}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
+    : "";
+
+  const businessSub: string[] = [];
+  if (b.contact) businessSub.push(emailEsc(b.contact));
+  if (b.abn) businessSub.push(`ABN ${emailEsc(b.abn)}`);
+  const businessSubHtml = businessSub
+    .map((l) => `<div style="font-size:13px;color:#6b7280;line-height:1.5;">${l}</div>`)
+    .join("");
+
+  const itemRows = msg.lineItems
+    .map(
+      (li) => `
+            <tr>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:left;">${li.quantity}</td>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:left;">${emailEsc(li.description)}</td>
+              <td style="padding:10px 8px;border-bottom:1px solid #eceeec;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(li.amountCents)}</td>
+            </tr>`,
+    )
+    .join("");
+
+  const gstRow = msg.gstEnabled
+    ? `
+            <tr>
+              <td style="padding:4px 8px;font-size:14px;color:#6b7280;text-align:right;">GST</td>
+              <td style="padding:4px 8px;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(msg.gstCents)}</td>
+            </tr>`
+    : "";
+
+  const dueRow = msg.dueDate
+    ? `<div style="font-size:13px;color:#6b7280;margin:18px 0 0;">Payment due by ${emailEsc(msg.dueDate)}.</div>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eceeec;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eceeec;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+          <tr>
+            <td style="padding:32px 32px 0;">
+              ${logoImg}
+              <div style="font-size:20px;font-weight:700;color:#1f2937;margin:${logoImg ? "12px" : "0"} 0 4px;">${emailEsc(b.name)}</div>
+              ${businessSubHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <div style="font-size:24px;font-weight:800;letter-spacing:.06em;color:#4f7a63;">Tax invoice ${emailEsc(msg.invoiceNumber)}</div>
+              <div style="font-size:15px;color:#1f2937;margin:16px 0 0;">${greeting}</div>
+              <div style="font-size:15px;color:#1f2937;margin:8px 0 0;line-height:1.55;">Here is your tax invoice for ${total}. You can view it online and download a PDF using the button below — the PDF is also attached to this email.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:left;">Qty</th>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:left;">Description</th>
+                  <th style="padding:8px 8px;border-bottom:2px solid #4f7a63;font-size:12px;color:#4f7a63;text-transform:uppercase;letter-spacing:.04em;text-align:right;">Amount</th>
+                </tr>${itemRows}
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 32px 0;">
+              <table role="presentation" align="right" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <td style="padding:4px 8px;font-size:14px;color:#6b7280;text-align:right;">Subtotal</td>
+                  <td style="padding:4px 8px;font-size:14px;color:#1f2937;text-align:right;white-space:nowrap;">${emailDollars(msg.subtotalCents)}</td>
+                </tr>${gstRow}
+                <tr>
+                  <td style="padding:8px 8px;font-size:16px;font-weight:700;color:#4f7a63;text-align:right;border-top:1px solid #4f7a63;">Total (AUD)</td>
+                  <td style="padding:8px 8px;font-size:16px;font-weight:700;color:#4f7a63;text-align:right;white-space:nowrap;border-top:1px solid #4f7a63;">${total}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                <td align="center" style="border-radius:6px;background:#4f7a63;">
+                  <a href="${emailEsc(msg.url)}" style="display:inline-block;padding:14px 28px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;">View invoice online &rarr;</a>
+                </td>
+              </tr></table>
+              ${dueRow}
+              <div style="font-size:13px;color:#6b7280;margin:18px 0 0;">Reply to this email if you have any questions.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 32px;">
+              <div style="border-top:1px solid #eceeec;padding-top:16px;text-align:center;">
+                <a href="${emailEsc(msg.appUrl)}" style="font-size:12px;color:#9ca3af;text-decoration:none;">Powered by Snapceipt — snap receipts, send quotes &amp; invoices</a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** The plain-text fallback for non-HTML clients (keeps the link working). */
+function renderInvoiceEmailText(msg: InvoiceEmail): string {
+  const total = emailDollars(msg.totalCents);
+  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+  const due = msg.dueDate ? `Payment due by ${msg.dueDate}.\n\n` : "";
+  return (
+    `${greeting}\n\n` +
+    `Here is your tax invoice ${msg.invoiceNumber} from ${msg.business.name} for ${total}.\n\n` +
+    `View it online here:\n\n${msg.url}\n\n` +
+    `The PDF is attached to this email.\n\n` +
+    due +
+    `Reply to this email if you have any questions.\n\n` +
+    `— Powered by Snapceipt: snap receipts, send quotes & invoices. ${msg.appUrl}\n`
+  );
+}
+
+/**
+ * Send the invoice email: quote-style HTML body + plain-text fallback + a link to the hosted
+ * invoice page, with the tax-invoice PDF attached. Uses mimetext/browser (self-contained,
+ * workerd-safe) so a multipart message (HTML + text + attachment) can be built, then
+ * cloudflare:email EmailMessage(from,to,raw) + env.EMAIL.send. `from` is the magic-link sender
+ * (the only allowed_sender_addresses entry); Reply-To is the trader so the client replies to
+ * them. Stubbed in route tests via vi.spyOn(emailModule, "sendInvoiceEmail").
  */
 export async function sendInvoiceEmail(env: Env, msg: InvoiceEmail): Promise<void> {
   if (msg.pdf.byteLength > MAX_INVOICE_PDF_BYTES) {
@@ -393,21 +539,18 @@ export async function sendInvoiceEmail(env: Env, msg: InvoiceEmail): Promise<voi
   const { createMimeMessage, Mailbox } = await import("mimetext/browser");
   const { EmailMessage } = await import("cloudflare:email");
 
-  const total = `$${(msg.totalCents / 100).toFixed(2)}`;
-  const greeting = msg.clientName ? `Hi ${msg.clientName},` : "Hi,";
+  const businessName = msg.business.name.trim();
+  const subject = businessName
+    ? `Your tax invoice from ${businessName}`
+    : `Tax invoice ${msg.invoiceNumber}`;
 
   const mime = createMimeMessage();
   mime.setSender({ name: "Snapceipt", addr: MAGIC_LINK_SENDER });
   mime.setRecipient(msg.to);
   mime.setHeader("Reply-To", new Mailbox(msg.replyTo, { type: "Reply-To" } as any));
-  mime.setSubject(`Tax invoice ${msg.invoiceNumber} — ${total}`);
-  mime.addMessage({
-    contentType: "text/plain",
-    data:
-      `${greeting}\n\n` +
-      `Please find attached tax invoice ${msg.invoiceNumber} for ${total}.\n\n` +
-      `Reply to this email if you have any questions.\n`,
-  });
+  mime.setSubject(subject);
+  mime.addMessage({ contentType: "text/plain", data: renderInvoiceEmailText(msg) });
+  mime.addMessage({ contentType: "text/html", data: renderInvoiceEmailHtml(msg) });
   mime.addAttachment({
     filename: `invoice-${msg.invoiceNumber}.pdf`,
     contentType: "application/pdf",

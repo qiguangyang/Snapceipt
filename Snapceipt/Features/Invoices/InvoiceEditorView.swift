@@ -317,9 +317,12 @@ struct InvoiceEditorView: View {
         VStack(spacing: 8) {
             if let err = vm.errorMessage { Text(err).font(.ui(12.5)).foregroundStyle(Palette.alert) }
             HStack(spacing: 12) {
-                // PDF / share — enabled once the invoice has a pdf url.
-                Button { openPDF(vm) } label: { iconButton("doc") }
-                    .buttonStyle(.plain).disabled(vm.pdfUrl == nil).opacity(vm.pdfUrl == nil ? 0.45 : 1)
+                // PDF — GENERATE (rebuild) the invoice PDF on demand, then open the share sheet.
+                // Always enabled (builds a fresh PDF) rather than only opening a prior one.
+                Button {
+                    Task { if let url = await vm.generatePdf(api: api) { openURL(url) } }
+                } label: { iconButton("doc", busy: vm.isGeneratingPdf) }
+                    .buttonStyle(.plain).disabled(vm.isGeneratingPdf)
                     .accessibilityIdentifier(AccessibilityID.invoiceEditorPdf)
 
                 if vm.status == "draft" {
@@ -329,11 +332,12 @@ struct InvoiceEditorView: View {
                         Task { _ = await vm.issue(api: api) }
                     }
                 } else {
-                    // Issued: Record payment (secondary) + Send invoice (primary).
+                    // Issued: PDF generate (above, left) + Record payment (secondary) + Send (primary).
                     Button { showRecordPayment = true } label: { iconButton("plus") }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier(AccessibilityID.invoiceEditorRecordPayment)
-                    primaryButton(title: "Send invoice", icon: "share", busy: false, enabled: true,
+                    primaryButton(title: vm.isSending ? "Sending…" : "Send invoice", icon: "share",
+                                  busy: vm.isSending, enabled: !vm.isSending,
                                   a11y: AccessibilityID.invoiceEditorSend) {
                         Task {
                             // Route through the VM so a backend failure (e.g. 400 "no
@@ -349,12 +353,15 @@ struct InvoiceEditorView: View {
         .background(LinearGradient(colors: [Palette.cream.opacity(0), Palette.cream], startPoint: .top, endPoint: .bottom))
     }
 
-    private func iconButton(_ name: String) -> some View {
-        Icon(name: name, size: 22, color: Palette.ink2)
-            .frame(width: 56, height: 56)
-            .background(Palette.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
-            .contentShape(Rectangle())
+    private func iconButton(_ name: String, busy: Bool = false) -> some View {
+        Group {
+            if busy { ProgressView().tint(Palette.ink2) }
+            else { Icon(name: name, size: 22, color: Palette.ink2) }
+        }
+        .frame(width: 56, height: 56)
+        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.line, lineWidth: 1))
+        .contentShape(Rectangle())
     }
 
     private func primaryButton(title: String, icon: String, busy: Bool, enabled: Bool,
@@ -373,7 +380,6 @@ struct InvoiceEditorView: View {
         .buttonStyle(.plain).disabled(!enabled || busy).accessibilityIdentifier(a11y)
     }
 
-    private func openPDF(_ vm: InvoiceEditorViewModel) { if let u = vm.pdfUrl { openURL(u) } }
     private func openURL(_ url: String) {
         let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
         shareURL = URL(string: full)
