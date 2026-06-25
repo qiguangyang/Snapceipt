@@ -130,7 +130,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       ? `Payment due by ${esc(data.dueDate)}.`
       : `Payment due on receipt.`,
   );
-  if (b.bankDetails) termsLines.push(`Payment details: ${escMultiline(b.bankDetails)}`);
+  if (b.bankDetails) termsLines.push(`Payment details:<br>${escMultiline(b.bankDetails)}`);
   const termsHtml = termsLines.map((l) => `<p class="terms-line">${l}</p>`).join("");
 
   const paidBanner = isPaid

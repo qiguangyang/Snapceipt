@@ -142,11 +142,11 @@ struct QuoteEditorView: View {
         }
     }
 
-    /// Paper-2 info note with a lock glyph (design ref: "Valid for 14 days…").
+    /// Paper-2 info note with a lock glyph (design ref: "Valid for 28 days…").
     private var infoNote: some View {
         HStack(alignment: .top, spacing: 10) {
             Icon(name: "lock", size: 15, color: Palette.ink3)
-            Text("Valid for 14 days. Accepted quotes convert straight into an invoice.")
+            Text("Valid for 28 days. Accepted quotes convert straight into an invoice.")
                 .font(.ui(12.5)).foregroundStyle(Palette.ink2)
             Spacer(minLength: 0)
         }

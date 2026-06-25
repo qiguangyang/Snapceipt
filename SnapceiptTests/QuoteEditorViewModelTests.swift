@@ -39,6 +39,9 @@ struct QuoteEditorViewModelTests {
         #expect(v.clientName == nil)
         #expect(v.canSend == false)
         #expect(v.quoteId != nil)
+        // New quotes are valid for 28 days (a real date, shown as "Valid until <date>").
+        #expect(v.validUntil == QuoteEditorViewModel.validUntilPlus28())
+        #expect(QuoteEditorViewModel.validUntilPlus28() != QuoteEditorViewModel.dueDatePlus14())
     }
 
     @Test("addLine then setting a client makes the quote sendable; totals compute")
