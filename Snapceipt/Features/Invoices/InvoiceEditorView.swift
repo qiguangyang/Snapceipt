@@ -18,6 +18,7 @@ struct InvoiceEditorView: View {
     @State private var showClientPicker = false
     @State private var showRecordPayment = false
     @State private var shareURL: URL?
+    @State private var sent = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -27,7 +28,9 @@ struct InvoiceEditorView: View {
                 if let vm { content(vm) } else { Color.clear }
             }
             if let vm { actionBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
+            if sent, let vm { successOverlay(vm) }
         }
+        .sensoryFeedback(.success, trigger: sent)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(AccessibilityID.invoiceEditorScreen)
         .transition(.opacity)
@@ -350,7 +353,12 @@ struct InvoiceEditorView: View {
                         Task {
                             // Routed through the VM so failures surface via vm.errorMessage.
                             if vm.canEmail {
-                                if await vm.send(api: api), let url = vm.pdfUrl { openURL(url) }
+                                // EMAIL the invoice → confirm with the success overlay. Do NOT pop
+                                // the PDF share sheet (that made a successful send look like a PDF
+                                // action). The overlay offers "View PDF" only if the email failed.
+                                if await vm.send(api: api) {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { sent = true }
+                                }
                             } else if let url = await vm.generatePdf(api: api) {
                                 openURL(url)
                             }
@@ -388,6 +396,38 @@ struct InvoiceEditorView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain).disabled(!enabled || busy).accessibilityIdentifier(a11y)
+    }
+
+    /// Post-send confirmation (mirrors QuoteEditorView): "Invoice sent!" when the email went
+    /// out, or "Invoice ready!" + a "View PDF" share if the email failed. "Done" closes the editor.
+    private func successOverlay(_ vm: InvoiceEditorViewModel) -> some View {
+        ZStack {
+            Palette.cream.opacity(0.97).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(Palette.income).frame(width: 92, height: 92)
+                    Icon(name: "check", size: 40, color: .white, lineWidth: 3)
+                }
+                .shadow(color: Palette.income.opacity(0.4), radius: 16, x: 0, y: 12)
+                Text(vm.emailed ? "Invoice sent!" : "Invoice ready!")
+                    .font(.display(23, .bold)).foregroundStyle(Palette.ink)
+                Text("\(vm.displayNumber) · \(fmt(vm.totals.total))").font(.ui(14)).foregroundStyle(Palette.ink2)
+                if !vm.emailed, let url = vm.pdfUrl {
+                    Button { openURL(url) } label: {
+                        Text("View PDF").font(.ui(15, .semibold)).foregroundStyle(.white)
+                            .frame(minWidth: 160, minHeight: 46)
+                            .background(accent.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }.buttonStyle(.plain)
+                }
+                Button { onClose() } label: {
+                    Text("Done").font(.ui(15, .semibold)).foregroundStyle(Palette.ink)
+                        .frame(minWidth: 160, minHeight: 46)
+                        .background(Palette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.line, lineWidth: 1))
+                }.buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
     }
 
     private func openURL(_ url: String) {
