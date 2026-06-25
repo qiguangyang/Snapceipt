@@ -111,6 +111,14 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
         return try await h(email, code)
     }
 
+    var passwordLoginHandler: ((String, String) async throws -> PasswordLoginResult)?
+    private(set) var passwordSetCalls: [String] = []
+    func passwordLogin(email: String, password: String) async throws -> PasswordLoginResult {
+        guard let h = passwordLoginHandler else { throw MockAPIClientError.unscripted }
+        return try await h(email, password)
+    }
+    func passwordSet(password: String) async throws { passwordSetCalls.append(password) }
+
     func refresh(refreshToken: String) async throws -> SessionResponse {
         guard let h = refreshHandler else { throw MockAPIClientError.unscripted }
         return try await h(refreshToken)

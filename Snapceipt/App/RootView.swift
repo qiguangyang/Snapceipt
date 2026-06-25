@@ -10,8 +10,8 @@ import Combine // .onReceive(publisher) for the Darwin-notification simulate tri
 /// Composition order (foundation): Task 1 shipped the placeholder shell; Task 12
 /// gated on auth + first profile; Task 14 (here) replaces the placeholder with the
 /// real tab-bar shell. Routing:
-/// - no session → `SignInView`
-/// - magic link requested / sent / verifying → `MagicLinkWaitView`
+/// - no session → `SignInView` (email + password + Apple + code paths)
+/// - 6-digit code request / entry / verify → `CodeEntryView`; set password → `SetPasswordView`
 /// - signed in but no profile → `OnboardingView`
 /// - signed in with a profile → `ShellView` (TabBar + tabs + overlays + cross-cutting)
 struct RootView: View {
@@ -84,27 +84,18 @@ struct RootView: View {
                         if phase == .background { appLock.lockIfEnabled() }
                     }
                 }
-            case .requestingLink, .awaitingLink, .awaitingOTP:
-                // A link request is in flight OR sent — render the wait screen from ONE
-                // switch branch so it keeps a single structural identity across the
-                // `.requestingLink → .awaitingLink` round-trip a resend drives. Splitting
-                // these into separate @ViewBuilder cases would destroy + recreate the view
-                // mid-resend, wiping any transient confirmation state. (The spinner derives
-                // from `vm.state`; the "Link sent" flash derives from `vm.linkSentCount`,
-                // which lives on the VM and survives regardless.) `.awaitingOTP` is also
-                // matched here so the OTP entry sheet (presented from MagicLinkWaitView)
-                // survives the `.requestingLink → .awaitingOTP` state transition that
-                // requestOTP drives on appear — without this the sheet's host would
-                // fall through to SignInView and tear down the presentation.
-                MagicLinkWaitView()
-            case .verifying where authVM.pendingEmail != nil:
-                // A tapped magic link is verifying — keep the wait screen up so the UI
-                // doesn't flash back to Sign-in mid-verify.
-                MagicLinkWaitView()
-            case .error where authVM.pendingEmail != nil:
-                // An expired/invalid link after a request: show the error on the wait screen.
-                MagicLinkWaitView()
-            default:
+            case .settingPassword:
+                // Signed in via a sign-up / reset code — set a password before the shell.
+                SetPasswordView()
+            case .awaitingCode, .verifying:
+                // Entering / verifying a 6-digit code (sign-up, reset, passwordless, or
+                // new-device MFA). One branch so the code screen keeps a single identity
+                // across the `.awaitingCode → .verifying` round-trip a submit/resend drives.
+                CodeEntryView()
+            case .signedOut, .working:
+                // Sign-in (email + password + Apple). `.working` keeps it up with a spinner
+                // while a login / code request is in flight, before it advances to the code
+                // screen or the shell.
                 SignInView()
             }
         }
@@ -119,7 +110,7 @@ struct RootView: View {
         // clears the session underneath us. authVM.state isn't otherwise re-synced, so the
         // app would sit on a signed-in shell that 401s every call and shows a permanent
         // "Offline". Bounce to sign-in instead. Guarded to the signed-in case so it never
-        // clobbers the transient sign-in flow states (.awaitingLink/.verifying have a nil
+        // clobbers the transient sign-in flow states (.awaitingCode/.verifying have a nil
         // session by design).
         .onChange(of: auth.session == nil) { _, isCleared in
             if isCleared { authVM.handleSessionInvalidated() }

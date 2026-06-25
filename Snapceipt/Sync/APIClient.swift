@@ -15,6 +15,11 @@ protocol APIClient {
     func otpVerify(email: String, code: String) async throws -> SessionResponse
     func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
+    /// POST /auth/password/login — trusted device → .session; new/untrusted device → .mfaRequired
+    /// (the backend emails a 6-digit code; verify it via otpVerify to trust the device + sign in).
+    func passwordLogin(email: String, password: String) async throws -> PasswordLoginResult
+    /// POST /auth/password/set (authenticated) — set/change the password + trust this device.
+    func passwordSet(password: String) async throws
     func me() async throws -> MeResponse
     /// GET /auth/me, decoding only the plan ("free" | "pro").
     func mePlan() async throws -> String
@@ -138,6 +143,23 @@ final class LiveAPIClient: APIClient {
     func otpRequest(email: String) async throws {
         try await sendNoContent("POST", "/auth/otp/request",
                                 body: OTPRequestBody(email: email), authenticated: false)
+    }
+
+    func passwordLogin(email: String, password: String) async throws -> PasswordLoginResult {
+        let r: PasswordLoginResponse = try await send(
+            "POST", "/auth/password/login",
+            body: PasswordLoginBody(email: email, password: password), authenticated: false)
+        if r.mfaRequired == true { return .mfaRequired }
+        guard let at = r.accessToken, let rt = r.refreshToken, let exp = r.expiresIn, let u = r.user else {
+            throw APIError(code: "INTERNAL", message: "Unexpected login response", status: 500)
+        }
+        return .session(SessionResponse(accessToken: at, refreshToken: rt, expiresIn: exp, user: u))
+    }
+
+    func passwordSet(password: String) async throws {
+        struct OkResp: Decodable { let ok: Bool? }
+        let _: OkResp = try await send("POST", "/auth/password/set",
+                                       body: PasswordSetBody(password: password), authenticated: true)
     }
 
     func otpVerify(email: String, code: String) async throws -> SessionResponse {

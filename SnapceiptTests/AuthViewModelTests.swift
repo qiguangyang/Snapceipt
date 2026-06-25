@@ -12,295 +12,274 @@ struct AuthViewModelTests {
         return store
     }
 
-    /// The canonical scriptable `MockAPIClient` wired with a stub session + recorders.
-    /// Returns the mock plus mutable recorder boxes so each test can assert on calls.
-    private final class Recorder {
-        var requestedEmails: [String] = []
-        var verifiedTokens: [String] = []
-        var appleBodies: [AppleAuthBody] = []
-        var signedOut = false
+    private var stub: SessionResponse {
+        SessionResponse(accessToken: "header.payload.sig",
+                        refreshToken: "refresh-token-value-0123456789abcdef",
+                        expiresIn: 900,
+                        user: SessionUser(id: "u1", email: "maya@example.com", displayName: "Maya Reyes"))
     }
 
-    private func makeMock(rec: Recorder, verifyShouldFail: Bool = false) -> MockAPIClient {
-        let stub = SessionResponse(
-            accessToken: "header.payload.sig",
-            refreshToken: "refresh-token-value-0123456789abcdef",
-            expiresIn: 900,
-            user: SessionUser(id: "u1", email: "maya@example.com", displayName: "Maya Reyes")
-        )
+    /// A mock wired so OTP request/verify + password login succeed by default; tests override.
+    private func makeMock() -> MockAPIClient {
+        let s = stub
         let mock = MockAPIClient()
-        mock.magicLinkRequestHandler = { email in rec.requestedEmails.append(email) }
-        mock.magicLinkVerifyHandler = { token in
-            rec.verifiedTokens.append(token)
-            if verifyShouldFail {
-                throw APIError(code: "AUTH_INVALID_TOKEN",
-                               message: "Invalid or expired magic link", status: 401)
-            }
-            return stub
-        }
-        mock.authAppleHandler = { body in rec.appleBodies.append(body); return stub }
-        mock.signOutHandler = { rec.signedOut = true }
         mock.otpRequestHandler = { _ in }
-        mock.otpVerifyHandler = { _, _ in stub }
+        mock.otpVerifyHandler = { _, _ in s }
+        mock.passwordLoginHandler = { _, _ in .session(s) }
+        mock.signOutHandler = { }
         return mock
     }
 
-    @Test("requestMagicLink moves to awaitingLink and calls the API once")
-    func requestMovesToAwaiting() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
+    // MARK: Password login (email + password; new device → MFA)
 
-        await vm.requestMagicLink(email: "  Maya@Example.com ")
-
-        #expect(rec.requestedEmails == ["maya@example.com"])  // normalized
-        #expect(vm.state == .awaitingLink(email: "maya@example.com"))
-        #expect(vm.pendingEmail == "maya@example.com")
-    }
-
-    @Test("requestMagicLink with an invalid email errors without calling the API")
-    func requestInvalidEmail() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-
-        await vm.requestMagicLink(email: "not-an-email")
-
-        #expect(rec.requestedEmails.isEmpty)
-        if case .error = vm.state { } else { Issue.record("expected .error, got \(vm.state)") }
-    }
-
-    @Test("verifyMagicLink success → signedIn and persists the session")
-    func verifySuccess() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
+    @Test("password login on a trusted device → signedIn + saves the session")
+    func passwordLoginTrusted() async {
+        let mock = makeMock()
         let store = makeStore()
-        let vm = AuthViewModel(api: api, auth: store)
-
-        await vm.verifyMagicLink(token: "good-token")
-
-        #expect(rec.verifiedTokens == ["good-token"])
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.signInWithPassword(email: "  Maya@Example.com ", password: "supersecret1")
         #expect(vm.state == .signedIn)
         #expect(store.session != nil)
         #expect(store.bearer() == "Bearer header.payload.sig")
     }
 
-    @Test("verifyMagicLink 401 → error state, no session saved")
-    func verifyExpired() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec, verifyShouldFail: true)
+    @Test("password login on a new device → awaitingCode(.mfa), no session yet")
+    func passwordLoginMfa() async {
+        let mock = makeMock()
+        mock.passwordLoginHandler = { _, _ in .mfaRequired }
         let store = makeStore()
-        let vm = AuthViewModel(api: api, auth: store)
-
-        await vm.verifyMagicLink(token: "expired")
-
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.signInWithPassword(email: "maya@example.com", password: "supersecret1")
+        #expect(vm.state == .awaitingCode(email: "maya@example.com", purpose: .mfa))
         #expect(store.session == nil)
-        if case .error(let msg) = vm.state {
-            #expect(msg.isEmpty == false)
-        } else {
-            Issue.record("expected .error, got \(vm.state)")
-        }
+        #expect(vm.codeSentCount == 1)   // the backend already emailed the MFA code
     }
 
-    @Test("handleDeepLink extracts the token, drives verify, and signs in")
-    func deepLinkVerifies() async throws {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        let url = try #require(URL(string: "https://snapceipt.cc/auth/verify?token=deep-tok"))
-
-        await vm.handleDeepLink(url)
-
-        #expect(rec.verifiedTokens == ["deep-tok"])
-        #expect(vm.state == .signedIn)
-    }
-
-    @Test("handleDeepLink extracts the token from the custom-scheme link too")
-    func deepLinkCustomScheme() async throws {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        let url = try #require(URL(string: "snapceipt://auth/verify?token=cust-tok"))
-
-        await vm.handleDeepLink(url)
-
-        #expect(rec.verifiedTokens == ["cust-tok"])
-        #expect(vm.state == .signedIn)
-    }
-
-    @Test("handleDeepLink ignores a non-auth URL")
-    func deepLinkIgnored() async throws {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        let url = try #require(URL(string: "https://snapceipt.cc/help"))
-
-        await vm.handleDeepLink(url)
-
-        #expect(rec.verifiedTokens.isEmpty)
+    @Test("password login with a bad email errors without calling the API")
+    func passwordLoginInvalidEmail() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.signInWithPassword(email: "nope", password: "supersecret1")
+        #expect(vm.lastError != nil)
         #expect(vm.state == .signedOut)
     }
 
-    @Test("resendMagicLink re-requests the pending email")
-    func resend() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        await vm.requestMagicLink(email: "maya@example.com")
-
-        await vm.resendMagicLink()
-
-        #expect(rec.requestedEmails == ["maya@example.com", "maya@example.com"])
-        #expect(vm.state == .awaitingLink(email: "maya@example.com"))
-    }
-
-    @Test("each successful send bumps linkSentCount so the wait screen can confirm it fired")
-    func linkSentCountTracksSuccessfulSends() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        #expect(vm.linkSentCount == 0)
-
-        await vm.requestMagicLink(email: "maya@example.com")
-        #expect(vm.linkSentCount == 1)
-
-        await vm.resendMagicLink()
-        #expect(vm.linkSentCount == 2)
-    }
-
-    @Test("a failed send does not bump linkSentCount")
-    func linkSentCountUnchangedOnFailure() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        api.magicLinkRequestHandler = { email in
-            rec.requestedEmails.append(email)
-            throw APIError(code: "RATE_LIMITED", message: "Too many attempts", status: 429)
+    @Test("password login wrong credentials → lastError, stays signedOut")
+    func passwordLoginWrong() async {
+        let mock = makeMock()
+        mock.passwordLoginHandler = { _, _ in
+            throw APIError(code: "AUTH_INVALID_CREDENTIALS", message: "Incorrect email or password", status: 401)
         }
-        let vm = AuthViewModel(api: api, auth: makeStore())
-
-        await vm.requestMagicLink(email: "maya@example.com")
-
-        #expect(vm.linkSentCount == 0)
-        if case .error = vm.state {} else { Issue.record("expected .error, got \(vm.state)") }
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.signInWithPassword(email: "maya@example.com", password: "wrong")
+        #expect(vm.state == .signedOut)
+        #expect(vm.lastError != nil)
+        #expect(store.session == nil)
     }
 
-    @Test("an invalid email never reaches the network and never bumps linkSentCount")
-    func linkSentCountUnchangedOnInvalidEmail() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
+    // MARK: 6-digit code flows (sign-up / reset / passwordless)
 
-        await vm.requestMagicLink(email: "nope")
+    @Test("startCode moves to awaitingCode with the purpose + bumps codeSentCount")
+    func startCodeSignUp() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "  Maya@Example.com ", purpose: .signUp)
+        #expect(mock.otpRequestedEmails == ["maya@example.com"])  // normalized
+        #expect(vm.state == .awaitingCode(email: "maya@example.com", purpose: .signUp))
+        #expect(vm.pendingEmail == "maya@example.com")
+        #expect(vm.codeSentCount == 1)
+    }
 
-        #expect(vm.linkSentCount == 0)
+    @Test("startCode with an invalid email errors without calling the API")
+    func startCodeInvalidEmail() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "nope", purpose: .signUp)
+        #expect(mock.otpRequestedEmails.isEmpty)
+        #expect(vm.lastError != nil)
+    }
+
+    @Test("verifyCode for sign-up → settingPassword (+ session saved, skip allowed)")
+    func verifyCodeSignUp() async {
+        let mock = makeMock()
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.verifyCode("123456")
+        #expect(mock.otpVerifiedCodes.map(\.code) == ["123456"])
+        #expect(vm.state == .settingPassword)
+        #expect(store.session != nil)
+        #expect(vm.canSkipPasswordSetup == true)
+    }
+
+    @Test("verifyCode for reset → settingPassword, skip NOT allowed")
+    func verifyCodeReset() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .reset)
+        await vm.verifyCode("123456")
+        #expect(vm.state == .settingPassword)
+        #expect(vm.canSkipPasswordSetup == false)
+    }
+
+    @Test("verifyCode for passwordless login → signedIn (no password step)")
+    func verifyCodeLogin() async {
+        let mock = makeMock()
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.startCode(email: "maya@example.com", purpose: .codeLogin)
+        await vm.verifyCode("123456")
+        #expect(vm.state == .signedIn)
+        #expect(store.session != nil)
+    }
+
+    @Test("verifyCode for new-device MFA → signedIn")
+    func verifyCodeMfa() async {
+        let mock = makeMock()
+        mock.passwordLoginHandler = { _, _ in .mfaRequired }
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.signInWithPassword(email: "maya@example.com", password: "supersecret1")
+        await vm.verifyCode("123456")
+        #expect(vm.state == .signedIn)
+        #expect(store.session != nil)
+    }
+
+    @Test("verifyCode failure → back to awaitingCode + lastError, no session")
+    func verifyCodeWrong() async {
+        let mock = makeMock()
+        mock.otpVerifyHandler = { _, _ in
+            throw APIError(code: "VALIDATION_FAILED", message: "Incorrect code", status: 400)
+        }
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.verifyCode("000000")
+        #expect(vm.lastError != nil)
+        if case .awaitingCode = vm.state {} else { Issue.record("expected awaitingCode, got \(vm.state)") }
+        #expect(store.session == nil)
+    }
+
+    @Test("verifyCode with no pending email is a no-op")
+    func verifyCodeNoPending() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.verifyCode("123456")
+        #expect(mock.otpVerifiedCodes.isEmpty)
+    }
+
+    @Test("resendCode re-requests the same email + purpose and bumps the count")
+    func resendCode() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.resendCode()
+        #expect(mock.otpRequestedEmails == ["maya@example.com", "maya@example.com"])
+        #expect(vm.codeSentCount == 2)
+    }
+
+    // MARK: Set / skip password
+
+    @Test("setPassword success → signedIn + calls passwordSet")
+    func setPasswordSuccess() async {
+        let mock = makeMock()
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.verifyCode("123456")   // → settingPassword
+        let ok = await vm.setPassword("supersecret1")
+        #expect(ok == true)
+        #expect(vm.state == .signedIn)
+        #expect(mock.passwordSetCalls == ["supersecret1"])
+    }
+
+    @Test("setPassword too short → false, stays on settingPassword, no API call")
+    func setPasswordTooShort() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.verifyCode("123456")
+        let ok = await vm.setPassword("short")
+        #expect(ok == false)
+        #expect(vm.state == .settingPassword)
+        #expect(mock.passwordSetCalls.isEmpty)
+        #expect(vm.lastError != nil)
+    }
+
+    @Test("skipPasswordSetup → signedIn")
+    func skipPassword() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        await vm.verifyCode("123456")
+        vm.skipPasswordSetup()
+        #expect(vm.state == .signedIn)
+    }
+
+    // MARK: Misc
+
+    @Test("cancelFlow returns to signedOut + clears pending")
+    func cancelFlow() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)
+        vm.cancelFlow()
+        #expect(vm.state == .signedOut)
+        #expect(vm.pendingEmail == nil)
     }
 
     @Test("signOut clears the session and returns to signedOut")
     func signOut() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
+        let mock = makeMock()
         let store = makeStore()
-        let vm = AuthViewModel(api: api, auth: store)
-        await vm.verifyMagicLink(token: "good-token")
+        let vm = AuthViewModel(api: mock, auth: store)
+        await vm.signInWithPassword(email: "maya@example.com", password: "supersecret1")
         #expect(store.session != nil)
-
         await vm.signOut()
-
         #expect(store.session == nil)
         #expect(vm.state == .signedOut)
-        #expect(rec.signedOut == true)
     }
 
     @Test("a restored session starts the VM in signedIn")
     func restoredSessionStartsSignedIn() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
         let store = makeStore()
         store.save(SessionResponse(accessToken: "a", refreshToken: "r", expiresIn: 900,
                                    user: SessionUser(id: "u1", email: nil, displayName: nil)))
-        let vm = AuthViewModel(api: api, auth: store)
+        let vm = AuthViewModel(api: makeMock(), auth: store)
         #expect(vm.state == .signedIn)
     }
 
-    @Test func devSignInWithTokenReachesSignedInAndSavesSession() async {
-        let mock = MockAPIClient()
+    @Test("handleDeepLink is a no-op (magic link removed)")
+    func deepLinkNoOp() async throws {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        let url = try #require(URL(string: "https://snapceipt.cc/auth/verify?token=deep-tok"))
+        await vm.handleDeepLink(url)
+        #expect(vm.state == .signedOut)
+    }
+
+    @Test func devSignInWithTokenReachesSignedIn() async {
+        let mock = makeMock()
         mock.magicLinkRequestDevHandler = { _ in "dev-tok" }
         mock.magicLinkVerifyHandler = { token in
             #expect(token == "dev-tok")
             return SessionResponse(accessToken: "a", refreshToken: "r", expiresIn: 900,
                                    user: SessionUser(id: "u-dev", email: "dev@snapceipt.cc", displayName: "Dev"))
         }
-        let auth = AuthStore(keychain: Keychain(service: "t.\(UUID())"))
-        let vm = AuthViewModel(api: mock, auth: auth)
+        let store = makeStore()
+        let vm = AuthViewModel(api: mock, auth: store)
         await vm.devSignIn()
         #expect(vm.state == .signedIn)
-        #expect(auth.session?.userId == "u-dev")
+        #expect(store.session?.userId == "u-dev")
     }
 
-    @Test func devSignInWithNoTokenGoesToErrorAndStaysSignedOutScreen() async {
-        let mock = MockAPIClient()
+    @Test func devSignInWithNoTokenStaysSignedOut() async {
+        let mock = makeMock()
         mock.magicLinkRequestDevHandler = { _ in nil }   // backend not in dev mode
-        let vm = AuthViewModel(api: mock, auth: AuthStore(keychain: Keychain(service: "t.\(UUID())")))
+        let vm = AuthViewModel(api: mock, auth: makeStore())
         await vm.devSignIn()
-        if case .error = vm.state {} else { Issue.record("expected .error, got \(vm.state)") }
-        #expect(vm.pendingEmail == nil)   // RootView keeps showing SignInView
-    }
-
-    @Test("requestOTP moves to awaitingOTP and calls the API once")
-    func requestOTPMovesToAwaiting() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        await vm.requestOTP(email: "  Maya@Example.com ")
-        #expect(api.otpRequestedEmails == ["maya@example.com"])
-        #expect(vm.state == .awaitingOTP(email: "maya@example.com"))
-        #expect(vm.pendingEmail == "maya@example.com")
-    }
-
-    @Test("requestOTP with an invalid email errors without calling the API")
-    func requestOTPInvalidEmail() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        await vm.requestOTP(email: "nope")
-        #expect(api.otpRequestedEmails.isEmpty)
-        if case .error = vm.state {} else { Issue.record("expected .error") }
-    }
-
-    @Test("verifyOTP success → signedIn and persists the session")
-    func verifyOTPSuccess() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let store = makeStore()
-        let vm = AuthViewModel(api: api, auth: store)
-        await vm.requestOTP(email: "maya@example.com")
-        await vm.verifyOTP(code: "123456")
-        #expect(api.otpVerifiedCodes.map(\.code) == ["123456"])
-        #expect(vm.state == .signedIn)
-        #expect(store.session != nil)
-    }
-
-    @Test("verifyOTP with no pending email is a no-op")
-    func verifyOTPNoPending() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        let vm = AuthViewModel(api: api, auth: makeStore())
-        await vm.verifyOTP(code: "123456")
-        #expect(api.otpVerifiedCodes.isEmpty)
-    }
-
-    @Test("verifyOTP 400 → error state, no session saved")
-    func verifyOTPWrongCode() async {
-        let rec = Recorder()
-        let api = makeMock(rec: rec)
-        api.otpVerifyHandler = { _, _ in
-            throw APIError(code: "VALIDATION_FAILED", message: "Incorrect code", status: 400)
-        }
-        let store = makeStore()
-        let vm = AuthViewModel(api: api, auth: store)
-        await vm.requestOTP(email: "maya@example.com")
-        await vm.verifyOTP(code: "000000")
-        if case .error = vm.state {} else { Issue.record("expected .error") }
-        #expect(store.session == nil)
+        #expect(vm.state == .signedOut)
+        #expect(vm.lastError != nil)
     }
 }
