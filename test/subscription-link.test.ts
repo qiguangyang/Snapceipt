@@ -65,6 +65,21 @@ describe("POST /me/subscription (verified purchase link)", () => {
     expect(row?.subscription_expires_at).toBe(9_999_999_999_000);
   });
 
+  it("ACCEPTS a Sandbox-environment transaction (TestFlight/sandbox testers get Pro)", async () => {
+    // There is deliberately no environment gate: a sandbox JWS is still Apple-signed (the verified
+    // x5c chain proves authenticity), and testers must be able to unlock Pro.
+    const { bearer, userId } = await seedUser("free");
+    const signedTransaction = await makeSignedTransaction({
+      bundleId: BUNDLE_ID,
+      productId: "app.snapceipt.pro.monthly",
+      originalTransactionId: "1000001234",
+      environment: "Sandbox",
+    });
+    const res = await post(bearer, { signedTransaction });
+    expect(res.status).toBe(200);
+    expect((await planOf(userId))?.plan).toBe("pro");
+  });
+
   it("rejects a TAMPERED transaction (401) and does NOT flip the plan", async () => {
     const { bearer, userId } = await seedUser("free");
     const good = await makeSignedTransaction({
