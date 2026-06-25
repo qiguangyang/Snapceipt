@@ -88,6 +88,12 @@ final class InvoiceEditorViewModel {
     var statusValue: String { status }
     var displayNumber: String { number ?? "Draft" }
 
+    /// True when the client has an email — drives whether the primary action emails the
+    /// invoice (Send) or falls back to generating a shareable PDF (Save PDF).
+    var canEmail: Bool {
+        !(clientEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Derived A/R badge over the invoice's non-deleted payments (spec §4.1/§4.4).
     var badge: InvoiceBadge {
         let paid = AccountsReceivable.amountPaidCents(loadedPaymentAmounts())
