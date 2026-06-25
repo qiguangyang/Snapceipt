@@ -26,8 +26,11 @@ final class CategoriesViewModel {
 
     func reload() {
         let pid = profileId
+        // Income is a transaction TYPE (amount direction), not a deductible expense category,
+        // so it is excluded from the Categories & rules management list (a deductible % for
+        // income is meaningless). It still classifies income transactions internally.
         let d = FetchDescriptor<Category>(
-            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil },
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil && $0.isIncome == false },
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.label)])
         categories = (try? context.fetch(d)) ?? []
     }

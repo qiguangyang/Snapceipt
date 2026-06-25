@@ -131,7 +131,8 @@ struct BudgetEditorView: View {
 
     private var categoryPicker: some View {
         Menu {
-            ForEach(CategoryKey.allCases, id: \.self) { key in
+            // Income is a transaction type, not a budgetable expense category.
+            ForEach(CategoryKey.allCases.filter { $0 != .income }, id: \.self) { key in
                 Button(CATS[key]?.label ?? key.rawValue) { catKey = key.rawValue }
             }
         } label: {

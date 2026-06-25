@@ -106,7 +106,8 @@ struct AddManualView: View {
                     VStack(spacing: 16) {
                         typeToggle
                         amountDisplay
-                        categoryChips
+                        // Income is a type, not a category — only expenses pick a category.
+                        if !isIncome { categoryChips }
                         fieldsCard
                         itemsCard
                     }
