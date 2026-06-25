@@ -15,6 +15,11 @@ struct ProfileSwitcherHeader: View {
 
     private var profile: Profile? { store.activeProfile }
 
+    /// True for ~2s right after a sync completes successfully (`.syncing → .idle`) — drives the
+    /// green "synced" flash ring, which then clears.
+    @State private var showSuccess = false
+    @State private var successTask: Task<Void, Never>?
+
     var body: some View {
         Button(action: onTapSwitch) {
             HStack(spacing: 12) {
@@ -39,6 +44,22 @@ struct ProfileSwitcherHeader: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(AccessibilityID.profileSwitcher)
+        .onChange(of: syncStatus) { old, new in
+            switch new {
+            case .idle:
+                guard old == .syncing else { return }   // sync just succeeded → green flash, 2s
+                showSuccess = true
+                successTask?.cancel()
+                successTask = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    if !Task.isCancelled { showSuccess = false }
+                }
+            case .syncing, .offline, .error:
+                successTask?.cancel()
+                showSuccess = false
+            }
+        }
+        .onDisappear { successTask?.cancel() }
     }
 
     private var avatar: some View {
@@ -53,24 +74,26 @@ struct ProfileSwitcherHeader: View {
                                startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 15, style: .continuous)
             )
-            // Sync ring: green while syncing, red when the server is unreachable, none when idle.
-            // Drawn OUTSIDE the avatar with a small cream gap (`.padding(-4)`) so it stays legible
-            // on any profile accent — incl. a green-accented avatar where an edge ring would blend.
+            // Sync ring: WHITE while syncing, GREEN for ~2s on success (then clears), RED when the
+            // server is unreachable, none when idle. Drawn ON the avatar's edge (not outside) so the
+            // colours sit on the coloured avatar at high contrast — white especially would vanish
+            // against the cream background.
             .overlay(
-                RoundedRectangle(cornerRadius: 19, style: .continuous)
-                    .strokeBorder(syncRingColor ?? .clear, lineWidth: syncRingColor == nil ? 0 : 2.5)
-                    .padding(-4)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(ringColor ?? .clear, lineWidth: ringColor == nil ? 0 : 1.25)
             )
             .shadow(color: base.opacity(0.45), radius: 7, x: 0, y: 6)
             .animation(.easeInOut(duration: 0.3), value: syncStatus)
+            .animation(.easeInOut(duration: 0.35), value: showSuccess)
     }
 
-    /// Avatar ring colour for the current sync state, or nil for no ring (idle/connected).
-    private var syncRingColor: Color? {
+    /// Avatar ring colour: white while syncing, green during the post-success flash, red when the
+    /// server is unreachable, nil (no ring) when idle/connected.
+    private var ringColor: Color? {
         switch syncStatus {
-        case .syncing:          return Color(hex: hex("#2EAD5A"))  // green — sync running
-        case .offline, .error:  return Palette.alert               // red — can't reach the server
-        case .idle:             return nil                         // connected / idle — no ring
+        case .syncing:          return .white
+        case .offline, .error:  return Palette.alert
+        case .idle:             return showSuccess ? Color(hex: hex("#2EAD5A")) : nil
         }
     }
 
