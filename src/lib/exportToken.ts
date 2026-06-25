@@ -101,3 +101,49 @@ export async function verifyQuoteLinkToken(
   }
   return { quoteId: qid, userId: uid, version: typeof v === "number" ? v : 0 };
 }
+
+/**
+ * Signed token for the PUBLIC GET /i/:token HTML tax-invoice page. Carries `iid` (invoice id)
+ * + `uid` (owning user id) so the route can load + tenant-scope the invoice without an access
+ * token. Long-lived (30 days) — a client may open the link days later. Signed HS256 with the
+ * same JWT_SIGNING_KEY but a DISTINCT issuer/audience from the access, download, AND quote-link
+ * tokens, so no token can be replayed across surfaces.
+ */
+export const INVOICE_LINK_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+const INVOICE_LINK_ISSUER = "snapceipt-invoice";
+const INVOICE_LINK_AUDIENCE = "snapceipt-invoice-link";
+
+/** Sign an invoice-link token (iid + uid). `ttlSeconds` defaults to 30 days; a negative value
+ *  lets tests mint an already-expired token. */
+export async function signInvoiceLinkToken(
+  signingKey: string,
+  invoiceId: string,
+  userId: string,
+  ttlSeconds: number = INVOICE_LINK_TTL_SECONDS,
+): Promise<string> {
+  return new SignJWT({ iid: invoiceId, uid: userId })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setIssuer(INVOICE_LINK_ISSUER)
+    .setAudience(INVOICE_LINK_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${ttlSeconds}s`)
+    .sign(keyBytes(signingKey));
+}
+
+/** Verify an invoice-link token. Throws on any failure — the route maps a throw to 403. */
+export async function verifyInvoiceLinkToken(
+  signingKey: string,
+  token: string,
+): Promise<{ invoiceId: string; userId: string }> {
+  const { payload } = await jwtVerify(token, keyBytes(signingKey), {
+    issuer: INVOICE_LINK_ISSUER,
+    audience: INVOICE_LINK_AUDIENCE,
+    algorithms: ["HS256"],
+  });
+  const iid = (payload as { iid?: unknown }).iid;
+  const uid = (payload as { uid?: unknown }).uid;
+  if (typeof iid !== "string" || iid.length === 0 || typeof uid !== "string" || uid.length === 0) {
+    throw new Error("invoice-link token missing iid/uid claim");
+  }
+  return { invoiceId: iid, userId: uid };
+}

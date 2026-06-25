@@ -29,8 +29,8 @@ function utcDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-const APP_URL = "https://snapceipt.cc";
-const API_ORIGIN = "https://api.snapceipt.cc";
+export const APP_URL = "https://snapceipt.cc";
+export const API_ORIGIN = "https://api.snapceipt.cc";
 
 interface QuoteRenderRow {
   id: string;
@@ -60,7 +60,7 @@ interface ProfileRow {
 }
 
 /** R2 object → data-URI (base64), or null when no key / object missing. */
-async function logoDataUri(env: Env, key: string | null): Promise<string | null> {
+export async function logoDataUri(env: Env, key: string | null): Promise<string | null> {
   if (!key) return null;
   const obj = await env.RECEIPTS.get(key);
   if (!obj) return null;

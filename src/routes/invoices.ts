@@ -1,12 +1,16 @@
 import { Hono, type Context } from "hono";
-import type { AppEnv } from "../env";
+import type { AppEnv, Env } from "../env";
 import { ApiError } from "../lib/errors";
 import { nowMs } from "../lib/time";
 import { recomputeTotals, type QuoteLineItemAmounts } from "../lib/quoteTotals";
 import { assignInvoiceNumber } from "../lib/invoiceCounter";
 import { buildInvoicePdf, type InvoiceLineItemRow, type InvoiceSender } from "../lib/pdfInvoice";
 import { amountPaidCents } from "../lib/invoiceTotals";
-import { signDownloadToken, verifyDownloadToken, DOWNLOAD_TTL_SECONDS } from "../lib/exportToken";
+import {
+  signDownloadToken, verifyDownloadToken, DOWNLOAD_TTL_SECONDS, signInvoiceLinkToken,
+} from "../lib/exportToken";
+import { type InvoiceHtmlData } from "../lib/invoiceHtml";
+import { logoDataUri, APP_URL, API_ORIGIN } from "./quotes";
 import * as emailModule from "../lib/email";
 import { uuidv7 } from "../lib/ids";
 
@@ -96,6 +100,86 @@ async function invoiceAmountPaidCents(
     `SELECT amount_cents FROM payments WHERE invoice_id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(invoiceId, userId).all<{ amount_cents: number }>();
   return amountPaidCents(results.map((p) => ({ amountCents: p.amount_cents })));
+}
+
+/** Assemble the InvoiceHtmlData for the hosted /i/:token page + the rich invoice email.
+ *  Loads the FULL business identity (vs loadInvoiceForPdf's name/abn) so the page + email
+ *  match the quote design. Recomputes totals at the snapshotted gst_rate_bp; returns null
+ *  when the invoice/profile is missing or it has no line items (caller maps null → 404). */
+export async function loadInvoiceForRender(
+  env: Env,
+  invoiceId: string,
+  userId: string,
+): Promise<InvoiceHtmlData | null> {
+  const invoice = await env.DB.prepare(
+    `SELECT id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive,
+            gst_rate_bp, issue_date, due_date, status, created_at
+       FROM invoices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(invoiceId, userId).first<{
+    id: string; profile_id: string; number: string | null;
+    client_name: string | null; client_email: string | null;
+    gst_enabled: number; gst_inclusive: number; gst_rate_bp: number | null;
+    issue_date: string | null; due_date: string | null; status: string; created_at: number;
+  }>();
+  if (!invoice) return null;
+
+  const { results: lineItems } = await env.DB.prepare(
+    `SELECT description, quantity, unit_price_cents
+       FROM invoice_line_items
+      WHERE invoice_id = ? AND user_id = ? AND deleted_at IS NULL
+      ORDER BY sort_order ASC, id ASC`,
+  ).bind(invoiceId, userId).all<InvoiceLineRow>();
+  if (lineItems.length === 0) return null;
+
+  const profile = await env.DB.prepare(
+    `SELECT name, abn, business_email, phone, website, address, bank_details, logo_r2_key
+       FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(invoice.profile_id, userId).first<{
+    name: string; abn: string | null; business_email: string | null; phone: string | null;
+    website: string | null; address: string | null; bank_details: string | null; logo_r2_key: string | null;
+  }>();
+  if (!profile) return null;
+
+  const gstEnabled = invoice.gst_enabled === 1;
+  const gstInclusive = invoice.gst_inclusive === 1;
+  const totals = recomputeTotals(
+    lineItems.map((li): QuoteLineItemAmounts => ({ quantity: li.quantity, unitPriceCents: li.unit_price_cents })),
+    gstEnabled,
+    gstInclusive,
+    invoice.gst_rate_bp,
+  );
+  const paid = await invoiceAmountPaidCents(env.DB, invoiceId, userId);
+
+  return {
+    number: invoice.number,
+    issueDate: invoice.issue_date ?? utcDate(invoice.created_at),
+    dueDate: invoice.due_date,
+    clientName: invoice.client_name,
+    clientEmail: invoice.client_email,
+    gstEnabled,
+    gstInclusive,
+    gstRateBp: invoice.gst_rate_bp,
+    subtotalCents: totals.subtotalCents,
+    gstCents: totals.gstCents,
+    totalCents: totals.totalCents,
+    amountPaidCents: paid,
+    business: {
+      name: profile.name,
+      abn: profile.abn,
+      businessEmail: profile.business_email,
+      phone: profile.phone,
+      website: profile.website,
+      address: profile.address,
+      bankDetails: profile.bank_details,
+    },
+    lineItems: lineItems.map((li) => ({
+      description: li.description,
+      quantity: li.quantity,
+      unitPriceCents: li.unit_price_cents,
+    })),
+    logoDataUri: await logoDataUri(env, profile.logo_r2_key),
+    appUrl: APP_URL,
+  };
 }
 
 invoicesRoutes.post("/:id/issue", async (c) => {
@@ -256,11 +340,25 @@ invoicesRoutes.post("/:id/send", async (c) => {
   // Ensure a current PDF -> R2 + persist key/totals (no status change, no number mint).
   const built = await rebuildInvoicePdf(c, invoiceId, userId);
 
+  // Rich render data for the email body (business header, line items, totals, due date) +
+  // the hosted invoice page — mirrors the quote email design.
+  const render = await loadInvoiceForRender(c.env, invoiceId, userId);
+  if (!render) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
+  // The email logo uses an <img src> at the R2 image URL (email clients block data-URIs),
+  // so fetch the raw key (loadInvoiceForRender only carries the inlined data-URI).
+  const logoRow = await c.env.DB.prepare(
+    `SELECT logo_r2_key FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(invoice.profile_id, userId).first<{ logo_r2_key: string | null }>();
+
   const origin = new URL(c.req.url).origin;
   const token = await signDownloadToken(c.env.JWT_SIGNING_KEY, built.key);
   const pdfUrl = `${origin}/invoices/dl/${token}`;
   const now = nowMs();
   const expiresAt = now + DOWNLOAD_TTL_SECONDS * 1000;
+
+  // Mint the public hosted invoice link (https://api.snapceipt.cc/i/<token>).
+  const linkToken = await signInvoiceLinkToken(c.env.JWT_SIGNING_KEY, invoiceId, userId);
+  const hostedUrl = `${API_ORIGIN}/i/${linkToken}`;
 
   // email_outbox row + gated send (mirrors the quote send exactly).
   const outboxId = uuidv7();
@@ -272,13 +370,33 @@ invoicesRoutes.post("/:id/send", async (c) => {
   let emailed = false;
   const trader = await c.env.DB.prepare(`SELECT email FROM users WHERE id = ?`)
     .bind(userId).first<{ email: string | null }>();
+  const businessContact =
+    [render.business.businessEmail, render.business.phone].filter((v): v is string => !!v).join(" · ") || null;
   try {
     await emailModule.sendInvoiceEmail(c.env, {
       to: built.clientEmail!,
-      replyTo: trader?.email ?? "noreply@snapceipt.cc",
+      // Reply-To = the business email so the client's reply lands in the business inbox.
+      replyTo: render.business.businessEmail ?? trader?.email ?? "noreply@snapceipt.cc",
       invoiceNumber: built.number ?? "",
       clientName: built.clientName,
       totalCents: built.totalCents,
+      url: hostedUrl,
+      business: {
+        name: render.business.name,
+        logoR2Key: logoRow?.logo_r2_key ?? null,
+        abn: render.business.abn,
+        contact: businessContact,
+      },
+      lineItems: render.lineItems.map((li) => ({
+        description: li.description,
+        quantity: li.quantity,
+        amountCents: li.quantity * li.unitPriceCents,
+      })),
+      subtotalCents: render.subtotalCents,
+      gstCents: render.gstCents,
+      gstEnabled: render.gstEnabled,
+      dueDate: render.dueDate,
+      appUrl: APP_URL,
       pdf: built.pdf,
     });
     await c.env.DB.prepare(`UPDATE email_outbox SET status='sent', sent_at=? WHERE id=?`)

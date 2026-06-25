@@ -179,6 +179,34 @@ struct InvoiceEditorViewModelTests {
         #expect(v.emailed == false)
     }
 
+    @Test("generatePdf calls invoicePdf once, sets pdfUrl, returns the url")
+    func generatePdfSucceeds() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        mock.invoicePdfHandler = { _ in InvoicePdfResponse(pdfUrl: "/invoices/dl/fresh", expiresAt: 1) }
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        let url = await v.generatePdf(api: mock)
+        #expect(url == "/invoices/dl/fresh")
+        #expect(v.pdfUrl == "/invoices/dl/fresh")
+        #expect(mock.invoicePdfCalls.count == 1)
+        #expect(v.errorMessage == nil)
+    }
+
+    @Test("generatePdf failure surfaces errorMessage + returns nil")
+    func generatePdfFails() async throws {
+        let (ctx, sync) = try makeFixture()
+        let mock = MockAPIClient()
+        mock.invoicePdfHandler = { _ in throw APIError(code: "X", message: "boom", status: 500) }
+        let v = vm(ctx, sync); v.load(id: nil)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        v.addLine(); v.lineItems[0].unitPriceCents = 50_00
+        let url = await v.generatePdf(api: mock)
+        #expect(url == nil)
+        #expect(v.errorMessage != nil)
+    }
+
     @Test("fresh invoice uses the profile GST rate (15%) for totals + snapshots it on save")
     func freshInvoiceUsesProfileRate() throws {
         let (ctx, sync) = try makeFixture()
