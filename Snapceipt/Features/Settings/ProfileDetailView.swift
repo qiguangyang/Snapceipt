@@ -71,9 +71,8 @@ struct ProfileDetailView: View {
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
                     .keyboardDismissButton() // hide-keyboard accessory for name / ABN fields
-                    .onChange(of: focusedField) { old, _ in
-                        guard let p = profile else { return }
-                        switch old { case .name: commitName(p); case .abn: commitAbn(p); case nil: break }
+                    .onChange(of: focusedField) { _, _ in
+                        if let p = profile { commitName(p); commitAbn(p) }   // any focus change saves both
                     }
                 } else {
                     Spacer()
@@ -90,6 +89,7 @@ struct ProfileDetailView: View {
                 didLoad = true
             }
         }
+        .onDisappear { if let p = profile { commitName(p); commitAbn(p) } }   // catch swipe-to-dismiss
     }
 
     // MARK: - Hero
