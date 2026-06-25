@@ -51,8 +51,8 @@ async function seedQuote(userId: string, opts: { clientEmail?: string | null; gs
   const quoteId = uuidv7();
   const now = nowMs();
   await env.DB.prepare(
-    `INSERT INTO profiles (id,user_id,name,type,abn,gst_registered,accent_1,accent_2,accent_3,created_at,updated_at)
-     VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'#0E7C72','#DCF0ED','#0A5950',?,?)`,
+    `INSERT INTO profiles (id,user_id,name,type,abn,gst_registered,business_email,accent_1,accent_2,accent_3,created_at,updated_at)
+     VALUES (?,?,'Acme Pty Ltd','business','12 345 678 901',1,'hello@acme.example','#0E7C72','#DCF0ED','#0A5950',?,?)`,
   ).bind(profileId, userId, now, now).run();
   await env.DB.prepare(
     `INSERT INTO quotes (id,user_id,profile_id,client_name,client_email,gst_enabled,gst_inclusive,gst_rate_bp,status,valid_until,created_at,updated_at)
@@ -106,12 +106,12 @@ describe("POST /quotes/:id/send", () => {
     expect(row.gst_cents).toBe(10500);
     expect(row.total_cents).toBe(115500);
 
-    // sendQuoteEmail got the URL + the trader's reply-to (no pdf field anymore), plus the
-    // business identity, line items, and totals for the rich email body.
+    // sendQuoteEmail got the URL + the business-email reply-to (so client replies reach the
+    // business inbox), plus the business identity, line items, and totals for the rich email body.
     expect(spy).toHaveBeenCalledTimes(1);
     const arg = spy.mock.calls[0]![1] as emailModule.QuoteEmail;
     expect(arg.to).toBe("jane@example.com");
-    expect(arg.replyTo).toBe(email);
+    expect(arg.replyTo).toBe("hello@acme.example");   // profile.business_email, not the account email
     expect(arg.quoteNumber).toBe("SN-0001");
     expect(arg.url).toContain("/q/");
     expect((arg as any).pdf).toBeUndefined();
