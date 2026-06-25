@@ -31,6 +31,8 @@ export interface QuoteHtmlData {
   clientEmail: string | null;
   /** Freeform multiline client address; rendered in the To block only when non-empty. */
   clientAddress: string | null;
+  /** Client mobile phone; rendered in the To block only when non-empty. */
+  clientMobile: string | null;
   gstEnabled: boolean;
   gstInclusive: boolean;
   /** Basis points; null ⇒ label "GST (10%)". */
@@ -109,6 +111,7 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
   const toLines: string[] = [];
   if (data.clientAddress) toLines.push(`<div class="muted">${escMultiline(data.clientAddress)}</div>`);
   if (data.clientEmail) toLines.push(`<div class="muted">${esc(data.clientEmail)}</div>`);
+  if (data.clientMobile) toLines.push(`<div class="muted">${esc(data.clientMobile)}</div>`);
 
   // Right-hand meta rows.
   const metaRows: string[] = [];
