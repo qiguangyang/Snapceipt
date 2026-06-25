@@ -343,7 +343,8 @@ struct ShellView: View {
                 QuoteListView(context: profiles.context, sync: sync, userId: profiles.userId,
                               profileId: profiles.activeProfileId,
                               onClose: { router.dismissOverlay() },
-                              onEdit: { router.openQuote($0) })
+                              onEdit: { router.openQuote($0) },
+                              onRefresh: { await sync.sync() })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }

@@ -25,28 +25,43 @@ struct ClientPickerSheet: View {
         VStack(spacing: 0) {
             SheetHeader(title: "Bill to", onClose: onClose)
             if let vm {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                // Native List so the client rows get the SAME swipe-to-delete as the quotes list
+                // (a custom gesture earlier bled a red affordance around the cards). Search +
+                // New-client live in their own section above the swipeable clients section.
+                let clients = vm.filtered(search: search)
+                List {
+                    Section {
                         searchField
                         newClientButton
                         if showNew { newClientForm(vm) }
-                        let clients = vm.filtered(search: search)
-                        if !clients.isEmpty {
-                            Text("CLIENTS").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
-                                .padding(.top, 8)
-                            VStack(spacing: 10) {
-                                ForEach(clients) { client in
-                                    SwipeToDelete(onDelete: { withAnimation { vm.delete(client) } }) {
-                                        Button { onPick(client.name, client.email, client.address) } label: { row(client) }
-                                            .buttonStyle(.plain)
-                                            .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                    }
+                    .listRowBackground(Palette.cream)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
+
+                    if !clients.isEmpty {
+                        Section {
+                            ForEach(clients) { client in
+                                Button { onPick(client.name, client.email, client.address) } label: { row(client) }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
+                                    .listRowBackground(Palette.cream)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
+                                    .swipeActions(allowsFullSwipe: false) {
+                                        Button(role: .destructive) { vm.delete(client) } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .accessibilityIdentifier(AccessibilityID.swipeDeleteButton)
                                     }
-                                }
                             }
+                        } header: {
+                            Text("CLIENTS").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
                         }
                     }
-                    .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 40)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             } else { Color.clear }
         }
         .frame(maxHeight: .infinity, alignment: .top)
