@@ -37,6 +37,7 @@ struct AddProfileView: View {
                     preview
                     typePicker
                     detailsGroup
+                    businessDetailsGroup
                     accentPicker
                     infoNote
                 }
@@ -202,6 +203,52 @@ struct AddProfileView: View {
                         }
                         Rectangle().fill(Palette.line2).frame(height: 1)
                         gstRow
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var businessDetailsGroup: some View {
+        if vm.type == .business {
+            VStack(alignment: .leading, spacing: 10) {
+                groupLabel("Business details (optional)")
+                Card {
+                    VStack(alignment: .leading, spacing: 14) {
+                        apField(label: "Business email") {
+                            TextField("you@business.com", text: $vm.businessEmail)
+                                .font(.ui(16, .regular)).foregroundStyle(Palette.ink)
+                                .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .accessibilityIdentifier(AccessibilityID.addProfileBusinessEmail)
+                        }
+                        Rectangle().fill(Palette.line2).frame(height: 1)
+                        apField(label: "Phone") {
+                            TextField("0400 000 000", text: $vm.phone)
+                                .font(.ui(16, .regular)).foregroundStyle(Palette.ink)
+                                .keyboardType(.phonePad)
+                                .accessibilityIdentifier(AccessibilityID.addProfileBusinessPhone)
+                        }
+                        Rectangle().fill(Palette.line2).frame(height: 1)
+                        apField(label: "Website") {
+                            TextField("yourbusiness.com", text: $vm.website)
+                                .font(.ui(16, .regular)).foregroundStyle(Palette.ink)
+                                .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .accessibilityIdentifier(AccessibilityID.addProfileBusinessWebsite)
+                        }
+                        Rectangle().fill(Palette.line2).frame(height: 1)
+                        apField(label: "Address") {
+                            TextField("Street, suburb, state", text: $vm.address, axis: .vertical)
+                                .lineLimit(2...4)
+                                .font(.ui(16, .regular)).foregroundStyle(Palette.ink)
+                                .accessibilityIdentifier(AccessibilityID.addProfileBusinessAddress)
+                        }
+                        Rectangle().fill(Palette.line2).frame(height: 1)
+                        apField(label: "Bank / payment details") {
+                            TextField("BSB + account, PayID, or international", text: $vm.bankDetails, axis: .vertical)
+                                .lineLimit(2...4)
+                                .font(.ui(16, .regular)).foregroundStyle(Palette.ink)
+                                .accessibilityIdentifier(AccessibilityID.addProfileBankDetails)
+                        }
                     }
                 }
             }

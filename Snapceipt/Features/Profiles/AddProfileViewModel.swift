@@ -27,6 +27,13 @@ final class AddProfileViewModel {
     var name: String = ""
     var abn: String = ""
     var gstRegistered: Bool = false
+    /// Business-only contact + payment details (all optional), captured at creation and shown on
+    /// quotes/invoices. Editable later in Tax & GST settings.
+    var businessEmail: String = ""
+    var phone: String = ""
+    var website: String = ""
+    var address: String = ""
+    var bankDetails: String = ""
     var swatch: AccentSwatch = defaultSwatch(for: .personal) {
         didSet {
             // Only a manual change marks the swatch user-picked; the type-driven
@@ -102,6 +109,13 @@ final class AddProfileViewModel {
             updatedAt: now
         )
 
+        if isBusiness {
+            p.businessEmail = businessEmail.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            p.phone = phone.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            p.website = website.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            p.addressText = address.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            p.bankDetails = bankDetails.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
         store.add(p)            // persists + enqueues sync + activates
         createdProfile = p
         didCreate = true
