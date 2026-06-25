@@ -68,8 +68,8 @@ struct TaxSettingsView: View {
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
                     .keyboardDismissButton() // dismiss button for ABN + WFH-rate fields
-                    .onChange(of: focusedField) { old, _ in
-                        if let old { commitField(old, vm) }   // on-blur: save the field that lost focus
+                    .onChange(of: focusedField) { _, _ in
+                        commitAll(vm)   // any focus change (field→field, or →nil on keyboard dismiss) saves ALL
                     }
                 } else { Color.clear }
             }
@@ -91,6 +91,7 @@ struct TaxSettingsView: View {
                 vm = model
             }
         }
+        .onDisappear { if let vm { commitAll(vm) } }   // swipe-to-dismiss never calls onClose — save here
     }
 
     // MARK: - Stat pills (Deductible YTD / GST on purchases)
