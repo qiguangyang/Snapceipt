@@ -154,6 +154,27 @@ struct MeResponse: Decodable {
     let devices: [DeviceDTO]
 }
 
+// MARK: - Password auth (email + password, with a 6-digit code as MFA on new devices)
+
+struct PasswordLoginBody: Encodable { let email: String; let password: String }
+struct PasswordSetBody: Encodable { let password: String }
+
+/// POST /auth/password/login returns EITHER a full session OR { mfaRequired: true } when the
+/// device hasn't been verified before — all fields are optional so one type decodes both.
+struct PasswordLoginResponse: Decodable {
+    let accessToken: String?
+    let refreshToken: String?
+    let expiresIn: Int?
+    let user: SessionUser?
+    let mfaRequired: Bool?
+}
+
+/// The two outcomes of a password login: a session, or a new-device code challenge.
+enum PasswordLoginResult {
+    case session(SessionResponse)
+    case mfaRequired
+}
+
 /// GET /auth/me -> { user: { …, plan }, … }. A narrow decode that keeps only the
 /// plan so EntitlementStore can sync the backend's cross-device truth without
 /// changing the existing SessionUser shape.

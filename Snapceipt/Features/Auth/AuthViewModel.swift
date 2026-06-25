@@ -143,25 +143,29 @@ final class AppleSignInCoordinator: NSObject,
 @MainActor
 @Observable
 final class AuthViewModel {
-    /// First-run / sign-in state machine.
+    /// What a 6-digit code is being used for — drives the post-verify step.
+    enum CodePurpose: Equatable { case signUp, reset, codeLogin, mfa }
+
+    /// Sign-in state machine. Errors surface via `lastError` on whichever screen is up, so the
+    /// state itself only picks the SCREEN (signedOut/working → SignInView, awaitingCode/verifying
+    /// → code entry, settingPassword → SetPasswordView, signedIn → shell).
     enum AuthState: Equatable {
         case signedOut
-        case requestingLink
-        case awaitingLink(email: String)
-        case awaitingOTP(email: String)
-        case verifying
+        case working                                          // a login/code request in flight
+        case awaitingCode(email: String, purpose: CodePurpose) // code-entry screen
+        case verifying                                        // code verify in flight
+        case settingPassword                                  // signed in; prompting for a password
         case signedIn
-        case error(String)
     }
 
     private(set) var state: AuthState = .signedOut
-    /// The email a magic link was last sent to (drives resend + the wait screen).
+    /// The email the current flow is for (drives the code screen + resend).
     private(set) var pendingEmail: String?
-    /// Monotonic count of magic links successfully sent. Lives on the VM (not the
-    /// wait view's `@State`) so the "Link sent" confirmation survives the
-    /// `.requestingLink → .awaitingLink` view recreation RootView performs, and so a
-    /// fresh send supersedes the prior confirmation timer via `.task(id:)`.
-    private(set) var linkSentCount = 0
+    private(set) var pendingPurpose: CodePurpose?
+    /// Bumped on every successful code (re)send so the code screen can confirm "code sent".
+    private(set) var codeSentCount = 0
+    /// Last error message, shown by the active screen (cleared when a flow advances).
+    private(set) var lastError: String?
 
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let auth: AuthStore
@@ -184,7 +188,8 @@ final class AuthViewModel {
     // MARK: Sign in with Apple
 
     func signInWithApple() async {
-        state = .verifying
+        lastError = nil
+        state = .working
         let rawNonce = AppleNonce.make()
         let hashedNonce = AppleNonce.sha256(rawNonce)
         do {
@@ -202,122 +207,149 @@ final class AuthViewModel {
         } catch is AuthError {
             state = .signedOut  // user cancelled / no token — silently return to sign-in
         } catch let e as APIError {
-            state = .error(Self.message(for: e))
+            lastError = Self.message(for: e); state = .signedOut
         } catch {
             let ns = error as NSError
             if ns.code == ASAuthorizationError.canceled.rawValue {
                 state = .signedOut
             } else {
-                // Surface the underlying error (domain/code/description) so a failing Apple
-                // sign-in can be diagnosed instead of hiding behind a generic message.
-                state = .error("Apple sign-in failed: \(ns.domain) \(ns.code) — \(ns.localizedDescription)")
+                lastError = "Apple sign-in failed: \(ns.domain) \(ns.code) — \(ns.localizedDescription)"
+                state = .signedOut
             }
         }
     }
 
-    // MARK: Magic link
+    // MARK: Password login (email + password; new device → 6-digit MFA)
 
-    func requestMagicLink(email: String) async {
+    func signInWithPassword(email: String, password: String) async {
         let normalized = Self.normalize(email)
-        guard Self.isValidEmail(normalized) else {
-            state = .error("Enter a valid email address.")
-            return
-        }
-        state = .requestingLink
+        guard Self.isValidEmail(normalized) else { lastError = "Enter a valid email address."; return }
+        guard !password.isEmpty else { lastError = "Enter your password."; return }
+        lastError = nil
+        state = .working
         pendingEmail = normalized
         do {
-            try await api.magicLinkRequest(email: normalized)
-            state = .awaitingLink(email: normalized)
-            linkSentCount += 1   // success only → the wait screen confirms "Link sent"
+            switch try await api.passwordLogin(email: normalized, password: password) {
+            case .session(let s):
+                auth.save(s); state = .signedIn
+            case .mfaRequired:
+                // New device → the backend emailed a code; verify it to trust the device + sign in.
+                pendingPurpose = .mfa
+                codeSentCount += 1
+                state = .awaitingCode(email: normalized, purpose: .mfa)
+            }
         } catch let e as APIError {
-            state = .error(Self.message(for: e))
+            lastError = Self.message(for: e); state = .signedOut
         } catch {
-            state = .error("Couldn't send the link. Check your connection and try again.")
+            lastError = "Couldn't sign in. Check your connection and try again."; state = .signedOut
         }
     }
 
-    func resendMagicLink() async {
-        guard let email = pendingEmail else { return }
-        await requestMagicLink(email: email)
-    }
+    // MARK: 6-digit code flows (sign-up / reset / passwordless login)
 
-    func verifyMagicLink(token: String) async {
-        state = .verifying
-        do {
-            let session = try await api.magicLinkVerify(token: token)
-            auth.save(session)
-            state = .signedIn
-        } catch let e as APIError {
-            state = .error(Self.message(for: e))
-        } catch {
-            state = .error("This link is invalid or has expired. Request a new one.")
-        }
-    }
-
-    // MARK: OTP (cross-device sign-in code fallback)
-
-    func requestOTP(email: String) async {
+    /// Request a 6-digit code and move to the code-entry screen. `purpose` drives the post-verify
+    /// step (sign-up/reset → set a password; codeLogin → straight in).
+    func startCode(email: String, purpose: CodePurpose) async {
         let normalized = Self.normalize(email)
-        guard Self.isValidEmail(normalized) else {
-            state = .error("Enter a valid email address.")
-            return
-        }
-        state = .requestingLink
+        guard Self.isValidEmail(normalized) else { lastError = "Enter a valid email address."; return }
+        lastError = nil
+        state = .working
         pendingEmail = normalized
+        pendingPurpose = purpose
         do {
             try await api.otpRequest(email: normalized)
-            state = .awaitingOTP(email: normalized)
-            linkSentCount += 1
+            codeSentCount += 1
+            state = .awaitingCode(email: normalized, purpose: purpose)
         } catch let e as APIError {
-            state = .error(Self.message(for: e))
+            lastError = Self.message(for: e); state = .signedOut
         } catch {
-            state = .error("Couldn't send the code. Check your connection and try again.")
+            lastError = "Couldn't send the code. Check your connection and try again."; state = .signedOut
         }
     }
 
-    func verifyOTP(code: String) async {
+    /// Re-send the current code (from the code screen).
+    func resendCode() async {
+        guard let email = pendingEmail, let purpose = pendingPurpose else { return }
+        await startCode(email: email, purpose: purpose)
+    }
+
+    /// Verify the 6-digit code. Always signs the user in; sign-up/reset then prompt for a password.
+    func verifyCode(_ code: String) async {
         guard let email = pendingEmail else { return }
+        let purpose = pendingPurpose
+        lastError = nil
         state = .verifying
         do {
             let session = try await api.otpVerify(email: email, code: code)
             auth.save(session)
-            state = .signedIn
+            state = (purpose == .signUp || purpose == .reset) ? .settingPassword : .signedIn
         } catch let e as APIError {
-            state = .error(Self.message(for: e))
+            lastError = Self.message(for: e)
+            state = .awaitingCode(email: email, purpose: purpose ?? .codeLogin)
         } catch {
-            state = .error("That code is invalid or has expired. Request a new one.")
+            lastError = "That code is invalid or has expired. Request a new one."
+            state = .awaitingCode(email: email, purpose: purpose ?? .codeLogin)
         }
     }
+
+    // MARK: Set / skip password (after a sign-up or reset code; the user is already signed in)
+
+    /// Set the password (min 8). Returns false (with `lastError` set) so the screen stays put.
+    @discardableResult
+    func setPassword(_ password: String) async -> Bool {
+        guard password.count >= 8 else { lastError = "Use at least 8 characters."; return false }
+        lastError = nil
+        do {
+            try await api.passwordSet(password: password)
+            state = .signedIn
+            return true
+        } catch let e as APIError {
+            lastError = Self.message(for: e); return false
+        } catch {
+            lastError = "Couldn't save your password. Try again."; return false
+        }
+    }
+
+    /// Sign-up only: continue without setting a password (code login still works).
+    func skipPasswordSetup() { lastError = nil; state = .signedIn }
+
+    /// Whether the set-password screen may be skipped (sign-up only; a reset must set a new one).
+    var canSkipPasswordSetup: Bool { pendingPurpose == .signUp }
+
+    /// The current code purpose (defaults to passwordless login) — drives the code screen copy.
+    var codePurpose: CodePurpose { pendingPurpose ?? .codeLogin }
+
+    /// Abandon the current code/password flow and return to the sign-in screen.
+    func cancelFlow() { lastError = nil; pendingEmail = nil; pendingPurpose = nil; state = .signedOut }
 
     // MARK: Dev sign-in
 
     #if DEBUG
-    /// One-tap dev sign-in: fetch the backend's dev token (E2E_TEST_MODE) for the fixed
-    /// dev account and verify it → real session. Errors clearly if the backend isn't in dev mode.
+    /// One-tap dev sign-in via the backend's dev token (E2E_TEST_MODE). Errors clearly if the
+    /// backend isn't in dev mode. (Uses the magic-link dev endpoint, which is still present.)
     func devSignIn() async {
         pendingEmail = nil
-        state = .verifying
+        lastError = nil
+        state = .working
         do {
             guard let token = try await api.magicLinkRequestDev(email: DevAccount.email) else {
-                state = .error("Dev sign-in needs the backend running in dev mode (E2E_TEST_MODE).")
+                lastError = "Dev sign-in needs the backend running in dev mode (E2E_TEST_MODE)."
+                state = .signedOut
                 return
             }
-            await verifyMagicLink(token: token)   // existing path → saves session, sets .signedIn
+            let session = try await api.magicLinkVerify(token: token)
+            auth.save(session)
+            state = .signedIn
         } catch {
-            state = .error("Dev sign-in failed: \(error.localizedDescription)")
+            lastError = "Dev sign-in failed: \(error.localizedDescription)"; state = .signedOut
         }
     }
     #endif
 
     // MARK: Deep link
 
-    func handleDeepLink(_ url: URL) async {
-        // Ignore magic-link taps while already signed in: a stray, forwarded, or stale
-        // link shouldn't silently tear down and replace the active session.
-        guard state != .signedIn else { return }
-        guard let token = MagicLinkParser.token(from: url) else { return }
-        await verifyMagicLink(token: token)
-    }
+    /// Legacy magic-link deep links are no longer used (code + password replaced them); ignore.
+    func handleDeepLink(_ url: URL) async { _ = url }
 
     // MARK: Sign out
 

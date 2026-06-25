@@ -30,26 +30,23 @@ final class ScreenshotTourUITests: UITestCase {
         app.launch()
         require(app.buttons[AccessibilityID.signInDev], "signin.dev")
         shoot(app, "signin-collapsed")
-        // Expand the email row + capture the MagicLinkWaitView (§5 area 1).
-        // "Continue with email" expands an email field; the COLLAPSED button carries
-        // AccessibilityID.signInEmail (SignInView.swift:77) but the expanded TextField
-        // has NO a11y id, so it is found by its placeholder (SignInView.swift:116).
-        // The send control is an arrow icon with no text, but the field's
-        // .onSubmit { send() } fires on the keyboard "go" key, so submitting via
-        // "\n" requests the magic link. The stub's magicLinkRequest succeeds →
-        // MagicLinkWaitView shows "Check your email" (verified MagicLinkWaitView.swift:24).
-        app.buttons["Continue with email"].firstMatch.tap()   // no a11y id — literal text
-        let emailField = app.textFields["you@example.com"]    // no a11y id — placeholder text
+        // Capture the email + password form, then the 6-digit code screen (§5 area 1).
+        // The email field carries AccessibilityID.signInEmail; "Create an account"
+        // (signInCreate) requests a sign-up code → CodeEntryView ("Confirm your email").
+        let emailField = app.textFields[AccessibilityID.signInEmail]
         if emailField.waitForExistence(timeout: 4) {
             emailField.tap(); emailField.typeText("dev@snapceipt.cc")
             shoot(app, "signin-email-keyboard")          // keyboard-up form shot
-            emailField.typeText("\n")                    // submitLabel(.go) → send()
-            if app.staticTexts["Check your email"].waitForExistence(timeout: 4) {
-                shoot(app, "magiclink-wait")
+        }
+        let createBtn = app.buttons[AccessibilityID.signInCreate]
+        if createBtn.waitForExistence(timeout: 2), createBtn.isHittable {
+            createBtn.tap()                              // request a sign-up code
+            if app.staticTexts["Confirm your email"].waitForExistence(timeout: 4) {
+                shoot(app, "code-entry")
             }
         }
         // Relaunch signed-out to reach Onboarding via dev sign-in deterministically
-        // (MagicLinkWait has no forward path in the stub).
+        // (the code screen has no forward path in the stub).
         app.terminate()
         app.launchArguments += ["-uiTestStub", "-uiTestReset"]
         app.launch()
