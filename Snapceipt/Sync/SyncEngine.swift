@@ -78,6 +78,25 @@ final class SyncEngine {
     /// an upsert; the snapshot still carries the id for a delete) and mark it pending.
     func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
         let payload = registry.encodePayload(entityType: entityType, entity: entity)
+        // Dedupe consecutive PENDING upserts for the same entity into ONE row (refresh the payload
+        // to the latest state, keep the original baseRev). Otherwise N rapid edits enqueue N upserts
+        // all on the same baseRev — the first applies (server rev → R+1) and every later one
+        // CONFLICTS (stale baseRev), and the conflict path overwrites local from the server,
+        // reverting the later edits (the business-profile phone/website/address revert bug).
+        if op == "upsert" {
+            let eid = entity.id
+            let etype = entityType.rawValue
+            var existingDescriptor = FetchDescriptor<OutboxMutation>(predicate: #Predicate {
+                $0.entityId == eid && $0.entityType == etype && $0.op == "upsert" && $0.status == "pending"
+            })
+            existingDescriptor.fetchLimit = 1
+            if let existing = (try? context.fetch(existingDescriptor))?.first {
+                existing.payloadJSON = payload
+                existing.createdAt = Epoch.nowMs()
+                try? context.save()
+                return
+            }
+        }
         let mutation = OutboxMutation(
             mutationId: ID.uuidv7(),
             entityType: entityType.rawValue,

@@ -58,6 +58,23 @@ private func makeTxn(userId: String = "u1") -> Transaction {
 @Suite(.serialized)
 struct SyncEngineTests {
 
+    @Test("enqueue dedupes consecutive pending upserts for the same entity into one row")
+    func enqueueDedupesPendingUpserts() throws {
+        let (engine, context, _, _, _) = try makeEngine()
+        let txn = makeTxn()
+        txn.merchant = "First";  engine.enqueue(op: "upsert", entityType: .transaction, entity: txn)
+        txn.merchant = "Second"; engine.enqueue(op: "upsert", entityType: .transaction, entity: txn)
+        txn.merchant = "Third";  engine.enqueue(op: "upsert", entityType: .transaction, entity: txn)
+
+        let pending = try context.fetch(FetchDescriptor<OutboxMutation>(
+            predicate: #Predicate { $0.op == "upsert" && $0.status == "pending" }))
+        // Without dedup, three rapid edits would queue three upserts on the same baseRev — the
+        // 2nd/3rd would CONFLICT on push and overwrite local, reverting the later edits.
+        #expect(pending.count == 1, "consecutive upserts should collapse to one pending mutation")
+        #expect(pending.first?.payloadJSON.contains("Third") == true, "the row must carry the latest state")
+        #expect(pending.first?.payloadJSON.contains("First") == false)
+    }
+
     @Test func enqueueCreatesPendingOutboxRowWithPayload() throws {
         let (engine, context, _, _, _) = try makeEngine()
         let txn = makeTxn()
