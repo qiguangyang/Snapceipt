@@ -10,6 +10,9 @@ struct QuoteListView: View {
     let profileId: String
     let onClose: () -> Void
     let onEdit: (String?) -> Void   // nil = new quote
+    /// Pull the latest from the server (a full SyncEngine.sync()) so a client's web "Accept"
+    /// reflects here. Used by pull-to-refresh and on appear.
+    var onRefresh: () async -> Void = {}
 
     @Environment(\.accent) private var accent
     @Environment(EntitlementStore.self) private var entitlement
@@ -60,6 +63,7 @@ struct QuoteListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        .refreshable { await onRefresh(); vm.reload() }
                     }
                 } else { Color.clear }
             }
@@ -73,7 +77,9 @@ struct QuoteListView: View {
         .transition(.opacity)
         .task {
             vm = QuoteListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
-            if !entitlement.isPro { showPaywall = true }
+            if !entitlement.isPro { showPaywall = true; return }
+            await onRefresh()      // pull a client's web "Accept" before the list settles
+            vm?.reload()
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }
