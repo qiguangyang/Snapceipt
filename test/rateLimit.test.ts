@@ -87,6 +87,46 @@ describe("rateLimit middleware", () => {
     }
   });
 
+  it("EXEMPTS /auth/password/login from the per-email send cap (failed logins don't burn it)", async () => {
+    // 12 password-login attempts for the SAME email, each from a distinct IP. password/login is
+    // exempt from the 8/email/hr SEND cap, so none are 429 — they 401 on bad credentials. If it
+    // counted toward the email cap, the 9th would be RATE_LIMITED.
+    const email = "pwloginexempt@example.com";
+    for (let i = 0; i < 12; i++) {
+      const res = await SELF.fetch("https://api.test/auth/password/login", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": `198.51.100.${i + 1}` },
+        body: JSON.stringify({ email, password: "whatever12" }),
+      });
+      expect(res.status).not.toBe(429);
+      expect(res.status).toBe(401); // AUTH_INVALID_CREDENTIALS — bad creds, NOT rate-limited
+    }
+  });
+
+  it("repeated failed password logins do NOT block a later code request (the reported bug)", async () => {
+    // The exact user scenario: tap "Sign in" (password) several times with no/wrong password from
+    // one device, then "Email me a code". Pre-fix the password/login attempts burned the
+    // 8/email/hr send cap and the otp/request 429'd; post-fix password/login is exempt, so the
+    // code request sends.
+    vi.spyOn(emailModule, "sendSignInCode").mockResolvedValue(undefined);
+    const email = "fumbler@example.com";
+    const ip = "203.0.113.99";
+    for (let i = 0; i < 10; i++) {
+      const login = await SELF.fetch("https://api.test/auth/password/login", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+        body: JSON.stringify({ email, password: "nope12345" }),
+      });
+      expect(login.status).toBe(401);
+    }
+    const code = await SELF.fetch("https://api.test/auth/otp/request", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({ email }),
+    });
+    expect(code.status).toBe(202); // code sent — NOT 429
+  });
+
   it("does not leak across route classes: /health stays unlimited + public", async () => {
     // /health is public + unlimited; this asserts the limiter does not leak
     // across route classes (a public route is never rate-limited).

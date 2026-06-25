@@ -125,13 +125,15 @@ export function rateLimit(kind: RateLimitKind): MiddlewareHandler<AppEnv> {
       const ipReset = await consume(kv, RATE_LIMIT_TIERS.authIp, ip, now);
       if (ipReset !== null) reject(ipReset);
 
-      // Per-email cap on the SEND/credential ops only (otp/request, magic-link/request,
-      // password/login). The *verify* endpoints are EXEMPT: each has its own per-code 5-attempt
-      // cap, and counting verify here blocked legit first logins — a code login is already
-      // request + verify = 2 against the cap before any resend. The per-IP ceiling still covers
-      // verify against abuse.
-      const isVerify = new URL(c.req.url).pathname.endsWith("/verify");
-      if (!isVerify) {
+      // Per-email cap applies ONLY to the explicit SEND endpoints (.../request — otp/request,
+      // magic-link/request), which always email a code/link. EXEMPT:
+      //  - verify endpoints: own per-code 5-attempt cap; counting them blocked legit first logins
+      //    (a code login is already request + verify = 2 against the cap before any resend).
+      //  - password/login: a wrong/no-password retry must NOT burn the send budget (it only emails
+      //    on a correct-password new-device login, which the per-IP ceiling already covers).
+      // The per-IP ceiling (20/hr) still covers verify + password/login against abuse.
+      const isSend = new URL(c.req.url).pathname.endsWith("/request");
+      if (isSend) {
         let email: string | undefined;
         try {
           const cloned = c.req.raw.clone();
