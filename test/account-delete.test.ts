@@ -15,6 +15,7 @@ const PURGE_ORDER = [
   "mileage_trips", "vehicle_years",
   "vehicles",
   "categories",
+  "payments", "invoice_line_items", "invoices",
   "quotes",
   "clients", "tax_settings", "loyalty_cards", "wfh_logs",
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
@@ -29,7 +30,7 @@ const PURGE_ORDER = [
 // real parent/child FKs (profile→txn→line_item, profile→txn→receipt_image,
 // quote→quote_line_item, vehicle→vehicle_year, etc.) so the purge has to honor
 // the FK-safe delete order to succeed.
-async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: string; exportKey: string; quoteR2Key: string }> {
+async function seedRichUser(): Promise<{ userId: string; profileId: string; bearer: string; r2Key: string; exportKey: string; quoteR2Key: string }> {
   const userId = uuidv7();
   const deviceId = uuidv7();
   const profileId = uuidv7();
@@ -40,6 +41,9 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   const quoteId = uuidv7();
   const exportId = uuidv7(); // R2 export key only — no D1 exports table backs this
   const qliId = uuidv7();
+  const invoiceId = uuidv7();
+  const invoiceLineId = uuidv7();
+  const paymentId = uuidv7();
   const vehicleId = uuidv7();
   const vehicleYearId = uuidv7();
   const ruleId = uuidv7();
@@ -80,6 +84,14 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   await env.DB.prepare(`INSERT INTO clients (id, user_id, profile_id, name, email, created_at, updated_at) VALUES (?, ?, ?, 'Acme', 'acme@e.com', ?, ?)`).bind(clientId, userId, profileId, t, t).run();
   await env.DB.prepare(`INSERT INTO quote_counters (user_id, next_seq) VALUES (?, 2)`).bind(userId).run();
 
+  // Invoice subsystem — the graph that used to break DELETE /account: invoices FK to
+  // profiles + quotes + users; payments/line items FK to invoices; invoice_counters FK to
+  // profiles (keyed by profile_id, no user_id).
+  await env.DB.prepare(`INSERT INTO invoices (id, user_id, profile_id, quote_id, number, subtotal_cents, gst_cents, total_cents, currency, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'INV-0001', 1000, 100, 1100, 'AUD', 'issued', ?, ?)`).bind(invoiceId, userId, profileId, quoteId, t, t).run();
+  await env.DB.prepare(`INSERT INTO invoice_line_items (id, user_id, invoice_id, description, quantity, unit_price_cents, created_at, updated_at) VALUES (?, ?, ?, 'Consulting', 1, 1000, ?, ?)`).bind(invoiceLineId, userId, invoiceId, t, t).run();
+  await env.DB.prepare(`INSERT INTO payments (id, user_id, invoice_id, amount_cents, paid_on, created_at, updated_at) VALUES (?, ?, ?, 1100, '2026-06-10', ?, ?)`).bind(paymentId, userId, invoiceId, t, t).run();
+  await env.DB.prepare(`INSERT INTO invoice_counters (profile_id, next_seq) VALUES (?, 2)`).bind(profileId).run();
+
   await env.DB.prepare(`INSERT INTO tax_settings (id, user_id, profile_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`).bind(taxId, userId, profileId, t, t).run();
   await env.DB.prepare(`INSERT INTO loyalty_cards (id, user_id, profile_id, brand, number, color_1, color_2, created_at, updated_at) VALUES (?, ?, ?, 'Coles', '123', '#1', '#2', ?, ?)`).bind(loyaltyId, userId, profileId, t, t).run();
 
@@ -105,12 +117,14 @@ async function seedRichUser(): Promise<{ userId: string; bearer: string; r2Key: 
   await env.RECEIPTS.put(exportKey, new TextEncoder().encode("export-pdf"));
   await env.RECEIPTS.put(quoteR2Key, new TextEncoder().encode("quote-pdf"));
   const { accessToken } = await issueSession(env.DB, { userId, deviceId, signingKey: env.JWT_SIGNING_KEY });
-  return { userId, bearer: `Bearer ${accessToken}`, r2Key, exportKey, quoteR2Key };
+  return { userId, profileId, bearer: `Bearer ${accessToken}`, r2Key, exportKey, quoteR2Key };
 }
 
 beforeEach(async () => {
   // Clear in FK-safe (child→parent) order so a populated graph from a prior run
-  // never blocks the next run.
+  // never blocks the next run. invoice_counters is profile_id-scoped (no user_id) and
+  // FKs to profiles, so clear it before the loop deletes profiles.
+  await env.DB.exec(`DELETE FROM invoice_counters`);
   for (const table of PURGE_ORDER) {
     await env.DB.exec(`DELETE FROM ${table}`);
   }
@@ -127,12 +141,15 @@ async function countForUser(table: string, userId: string): Promise<number> {
 
 describe("DELETE /account", () => {
   it("purges all D1 rows across every user-scoped table + R2 objects", async () => {
-    const { userId, bearer, r2Key, exportKey, quoteR2Key } = await seedRichUser();
+    const { userId, profileId, bearer, r2Key, exportKey, quoteR2Key } = await seedRichUser();
 
     // Sanity: the seed actually populated the graph (a few representative tables).
-    for (const table of ["transactions", "line_items", "receipt_images", "quotes", "quote_line_items", "vehicle_years", "profiles", "users"]) {
+    for (const table of ["transactions", "line_items", "receipt_images", "quotes", "quote_line_items", "invoices", "payments", "vehicle_years", "profiles", "users"]) {
       expect(await countForUser(table, userId)).toBeGreaterThan(0);
     }
+    expect(
+      (await env.DB.prepare("SELECT COUNT(*) c FROM invoice_counters WHERE profile_id = ?").bind(profileId).first<{ c: number }>())!.c,
+    ).toBe(1);
 
     const res = await SELF.fetch("https://x/account", { method: "DELETE", headers: { authorization: bearer } });
     expect(res.status).toBe(200);
@@ -141,6 +158,10 @@ describe("DELETE /account", () => {
     for (const table of PURGE_ORDER) {
       expect(await countForUser(table, userId)).toBe(0);
     }
+    // invoice_counters is profile_id-scoped — verify it's purged too.
+    expect(
+      (await env.DB.prepare("SELECT COUNT(*) c FROM invoice_counters WHERE profile_id = ?").bind(profileId).first<{ c: number }>())!.c,
+    ).toBe(0);
 
     expect(await env.RECEIPTS.get(r2Key)).toBeNull();       // u/${userId}/x.jpg
     expect(await env.RECEIPTS.get(exportKey)).toBeNull();    // ${userId}/exports/<id>.pdf
