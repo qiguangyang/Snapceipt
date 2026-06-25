@@ -236,7 +236,9 @@ quotesRoutes.post("/:id/send", async (c) => {
   try {
     await emailModule.sendQuoteEmail(c.env, {
       to: quote.client_email,
-      replyTo: trader?.email ?? "noreply@snapceipt.cc",
+      // Reply-To = the business email so a client's reply lands in the business inbox (with the
+      // original quote + /q/ link quoted in the thread). Falls back to the trader's account email.
+      replyTo: profile?.business_email ?? trader?.email ?? "noreply@snapceipt.cc",
       quoteNumber: number,
       clientName: quote.client_name,
       totalCents: totals.totalCents,
