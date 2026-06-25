@@ -19,7 +19,7 @@ export const accountRoutes = new Hono<AppEnv>();
 const EMAIL_CODE_TTL_SECONDS = 600;
 
 /** Every user-scoped table, child→parent so the FK-enforced batch never violates a constraint. */
-const PURGE_ORDER = [
+export const PURGE_ORDER = [
   "line_items", "quote_line_items", "receipt_images",
   "transactions",
   "smart_rules", "budgets",
@@ -39,6 +39,11 @@ const PURGE_ORDER = [
   "crash_reports",
   "users",
 ] as const;
+
+// User data purged per-user but keyed by profile_id (no user_id column), so it can't ride
+// the uniform `WHERE user_id = ?` map and needs a profile subquery. These run first in the
+// batch (nothing references them; they must go before the profiles they point at).
+export const PROFILE_SCOPED_PURGE_TABLES = ["invoice_counters"] as const;
 
 function normalizeEmail(e: string): string {
   return e.trim().toLowerCase();
@@ -148,9 +153,10 @@ accountRoutes.delete("/account", async (c) => {
   //    profile-scoped delete. It runs first: nothing references it, and it must be gone
   //    before the profiles it points at are deleted.
   await c.env.DB.batch([
-    c.env.DB
-      .prepare("DELETE FROM invoice_counters WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = ?)")
-      .bind(userId),
+    ...PROFILE_SCOPED_PURGE_TABLES.map((t) =>
+      c.env.DB
+        .prepare(`DELETE FROM ${t} WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = ?)`)
+        .bind(userId)),
     ...PURGE_ORDER.map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
   ]);
 
