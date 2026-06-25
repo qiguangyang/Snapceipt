@@ -58,6 +58,19 @@ struct EmailInViewModelTests {
         #expect(api.profileInboxCalls == ["p1"])
     }
 
+    @Test("loadAddress 403 sets proRequired (server says not Pro), not a generic errorMessage")
+    func loadAddressForbidden() async throws {
+        let (ctx, sync, api) = try fixture()
+        api.profileInboxHandler = { _ in throw APIError(code: "FORBIDDEN", message: "Pro required", status: 403) }
+        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
+
+        await vm.loadAddress()
+
+        #expect(vm.proRequired == true)
+        #expect(vm.errorMessage == nil)   // not the dead-button error path; the view shows upgrade
+        #expect(vm.address == nil)
+    }
+
     @Test("rotate failure surfaces an errorMessage")
     func rotateFailure() async throws {
         let (ctx, sync, api) = try fixture()
