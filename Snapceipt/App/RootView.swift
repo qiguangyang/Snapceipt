@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
+import UIKit   // UIImage for the share-extension drain; beginBackgroundTask for -bgDelay (DEBUG)
 #if DEBUG
-import UIKit   // beginBackgroundTask for the -bgDelay simulate mode (DEBUG-only dev tooling)
 import Combine // .onReceive(publisher) for the Darwin-notification simulate trigger
 #endif
 
@@ -485,6 +485,7 @@ struct ShellView: View {
             backfillGstDefaultsForActive()
             await sync.sync()
             await reconcilePendingExtractions()
+            await drainSharedReceipts()
             #if DEBUG
             await runSimulateEmailInIfFlagged()
             registerSimDarwinObserver()
@@ -498,7 +499,7 @@ struct ShellView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await sync.sync(); await reconcilePendingExtractions() }
+                Task { await sync.sync(); await reconcilePendingExtractions(); await drainSharedReceipts() }
             }
         }
         // When the network path returns (offline → online), re-sync immediately rather than
@@ -525,6 +526,23 @@ struct ShellView: View {
     /// reactively via @Query when the reconciler saves.
     private func reconcilePendingExtractions() async {
         await PendingExtractionReconciler(api: captureAPI, context: profiles.context, sync: sync).reconcile()
+    }
+
+    /// Import receipts shared from other apps via the Share Extension. The extension dropped each
+    /// as a JPEG (+ optional PDF text) in the App Group inbox; run each through the SAME pipeline a
+    /// Files/Photos import uses — `CaptureViewModel.ingestImport` (OCR or PDF text → extract) then
+    /// `save()` — filing it under the ACTIVE profile, then delete the handoff file. A receipt saved
+    /// "pending" (offline / low-confidence) is upgraded later by `reconcilePendingExtractions`.
+    private func drainSharedReceipts() async {
+        for item in ShareInbox.pending() {
+            defer { ShareInbox.delete(item) }
+            guard let image = UIImage(data: item.jpeg) else { continue }
+            let vm = CaptureFactory.makeViewModel(
+                api: captureAPI, sync: sync, profiles: profiles,
+                context: profiles.context, userId: profiles.userId, reachability: reachability)
+            await vm.ingestImport(image: image, text: item.text)
+            vm.save()   // toProfileId defaults to the active profile
+        }
     }
 
     #if DEBUG

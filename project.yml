@@ -37,6 +37,11 @@ targets:
           - "Info.plist"
           - "Snapceipt.entitlements"
           - "Snapceipt.Release.entitlements"
+      # Shared App Group bridge — compiled into both the app and the Share Extension.
+      - path: SnapceiptShareExtension/ShareExtensionStore.swift
+    dependencies:
+      # Embeds the Share Extension into the app bundle's PlugIns.
+      - target: SnapceiptShareExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
@@ -58,6 +63,26 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "match AppStore app.snapceipt.Snapceipt"
+  # Share Extension: makes Snapceipt a target in other apps' share sheets for image/PDF receipts.
+  # No UI — it writes the shared file into the App Group inbox; the app imports it on next open.
+  SnapceiptShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SnapceiptShareExtension
+        excludes:
+          - "Info.plist"
+          - "SnapceiptShareExtension.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt.ShareExtension
+        INFOPLIST_FILE: SnapceiptShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SnapceiptShareExtension/SnapceiptShareExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
   SnapceiptTests:
     type: bundle.unit-test
     platform: iOS
@@ -95,6 +120,7 @@ schemes:
     build:
       targets:
         Snapceipt: all
+        SnapceiptShareExtension: all
         SnapceiptTests: [test]
         SnapceiptUITests: [test]
     run:
