@@ -194,17 +194,11 @@ struct ShellView: View {
                                value: profiles.activeProfileId)
             }
 
-            // --- Floating sync status pill (top-center, hidden when idle) ---
-            // Top-center is empty on all four tab headers; top-trailing covered
-            // the Home alerts bell / Reports export pill. Hit-test-inert so it
-            // can never swallow taps meant for the header underneath.
-            VStack {
-                SyncStatusView(status: sync.status)
-                    .padding(.top, 6)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .allowsHitTesting(false)
+            // Sync status now rings the Home profile avatar (ProfileSwitcherHeader) instead of a
+            // floating pill — green while syncing, red when unreachable, none when idle. This
+            // zero-footprint probe keeps the raw state token readable by XCUITest on every tab.
+            SyncStatusView(status: sync.status)
+                .allowsHitTesting(false)
 
             // --- Bottom fade scrim (design's gradient behind the tab bar) ---
             // Scrolling content fades to cream under/around the floating bar, and the
@@ -662,6 +656,7 @@ struct ShellView: View {
                 HStack(spacing: 8) {
                     ProfileSwitcherHeader(
                         store: profiles,
+                        syncStatus: sync.status,
                         onTapSwitch: { router.go(.overlay(.profilePicker)) }
                     )
                     Spacer(minLength: 8)
