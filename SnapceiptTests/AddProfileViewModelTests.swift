@@ -40,6 +40,39 @@ struct AddProfileViewModelTests {
         #expect(vm.isValid == true)
     }
 
+    @Test("create() persists the business contact + bank details entered at creation")
+    func createPersistsBusinessDetails() throws {
+        let (context, store, _) = try makeFixture()
+        let vm = AddProfileViewModel(store: store, context: context, userId: "u1")
+        vm.type = .business
+        vm.name = "Lumen Studio"
+        vm.businessEmail = "hi@lumen.example"
+        vm.phone = "0400 111 222"
+        vm.website = "lumen.example"
+        vm.address = "9 Studio Rd\nMelbourne VIC 3000"
+        vm.bankDetails = "BSB 000-000 Acct 12345678"
+
+        _ = try #require(vm.create())
+        let p = try #require(try context.fetch(FetchDescriptor<Profile>()).first)
+        #expect(p.businessEmail == "hi@lumen.example")
+        #expect(p.phone == "0400 111 222")
+        #expect(p.website == "lumen.example")
+        #expect(p.addressText == "9 Studio Rd\nMelbourne VIC 3000")
+        #expect(p.bankDetails == "BSB 000-000 Acct 12345678")
+    }
+
+    @Test("create() ignores business details for a Personal profile")
+    func personalProfileHasNoBusinessDetails() throws {
+        let (context, store, _) = try makeFixture()
+        let vm = AddProfileViewModel(store: store, context: context, userId: "u1")
+        vm.type = .personal
+        vm.name = "Home"
+        vm.businessEmail = "ignored@example.com"
+        _ = try #require(vm.create())
+        let p = try #require(try context.fetch(FetchDescriptor<Profile>()).first)
+        #expect(p.businessEmail == nil)
+    }
+
     @Test("create() persists a Business profile with ABN + GST + chosen palette")
     func createPersists() throws {
         let (context, store, _) = try makeFixture()

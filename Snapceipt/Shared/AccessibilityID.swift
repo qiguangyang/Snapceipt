@@ -25,6 +25,11 @@ enum AccessibilityID {
     static let tabSnap = "tabbar.snap"
     static let addProfileName = "addprofile.name"
     static let addProfileCreate = "addprofile.create"
+    static let addProfileBusinessEmail = "addprofile.business.email"
+    static let addProfileBusinessPhone = "addprofile.business.phone"
+    static let addProfileBusinessWebsite = "addprofile.business.website"
+    static let addProfileBusinessAddress = "addprofile.business.address"
+    static let addProfileBankDetails = "addprofile.bank.details"
 
     // Capture flow
     static let captureClose = "capture.close"
