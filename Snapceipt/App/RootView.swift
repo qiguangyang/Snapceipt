@@ -211,6 +211,14 @@ struct ShellView: View {
                 // edge; the remaining margin above the home indicator keeps it clear of
                 // the gesture zone.
                 .padding(.bottom, -8)
+                // PIN the bar to the true bottom, immune to the keyboard safe-area inset.
+                // A bare `.ignoresSafeArea(.keyboard)` does NOT pin a ZStack-bottom-aligned
+                // child — the ZStack still aligns it to the keyboard-shrunk bottom. Worse,
+                // SwiftUI's keyboard inset can get STUCK non-zero after some dismissals, so the
+                // bar floats up and stays up until relaunch (the reported bug). Wrapping it in a
+                // full-height frame (the same pattern the scrim above uses) makes the bar's
+                // position depend ONLY on the container safe area, never the keyboard.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .ignoresSafeArea(.keyboard, edges: .bottom)
                 // Hide the floating bar while the keyboard is up — a bottom-aligned floating
                 // bar otherwise rides the keyboard up and floats over it (you don't switch
