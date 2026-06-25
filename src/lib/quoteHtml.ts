@@ -142,7 +142,7 @@ export function renderQuoteHtml(data: QuoteHtmlData): string {
       ? `Valid until ${esc(data.validUntil)}. Accepted quotes convert to a tax invoice.`
       : `Accepted quotes convert to a tax invoice.`
   );
-  if (b.bankDetails) termsLines.push(`Payment details: ${escMultiline(b.bankDetails)}`);
+  if (b.bankDetails) termsLines.push(`Payment details:<br>${escMultiline(b.bankDetails)}`);
   const termsHtml = termsLines.map((l) => `<p class="terms-line">${l}</p>`).join("");
 
   // Action area (spec §2/§3): a "Save as PDF" button (window.print) always; an "Accept

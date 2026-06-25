@@ -81,9 +81,9 @@ describe("renderQuoteHtml", () => {
     expect(renderQuoteHtml(data())).toContain("data:image/png;base64,AAAA");
   });
 
-  it("renders the payment-details block when bankDetails is set", () => {
+  it("renders the payment-details block (label on its own line) when bankDetails is set", () => {
     const html = renderQuoteHtml(data());
-    expect(html).toContain("Payment details");
+    expect(html).toContain("Payment details:<br>"); // line break after the label
     expect(html).toContain("BSB 062-000");
   });
 

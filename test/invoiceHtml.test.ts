@@ -57,6 +57,7 @@ describe("renderInvoiceHtml", () => {
 
   it("renders the payment/bank details (multiline -> <br>) and a due note", () => {
     const html = renderInvoiceHtml(data());
+    expect(html).toContain("Payment details:<br>"); // line break after the label
     expect(html).toContain("BSB 062-000<br>Acc 1234 5678");
     expect(html).toContain("Payment due by 2026-07-04");
   });

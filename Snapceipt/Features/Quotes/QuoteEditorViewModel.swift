@@ -142,7 +142,7 @@ final class QuoteEditorViewModel {
             number = nil
             status = QuoteStatus.draft.rawValue
             sentAt = nil
-            validUntil = nil
+            validUntil = Self.validUntilPlus28()   // new quotes are valid for 28 days
             pdfR2Key = nil
             invoiceId = nil
             gstRateBp = nil
@@ -375,15 +375,21 @@ final class QuoteEditorViewModel {
         return invoice.id
     }
 
-    /// "YYYY-MM-DD" 14 days from today (UTC), matching the convert default (spec §4.2).
-    static func dueDatePlus14() -> String {
+    /// "YYYY-MM-DD" `days` from today (UTC). Falls back to today on a parse failure.
+    static func dateString(daysFromNow days: Int) -> String {
         let today = ExportDateFormatter.shared.string(from: Date())
         guard let d = ExportDateFormatter.shared.date(from: today),
-              let plus = Calendar(identifier: .gregorian).date(byAdding: .day, value: 14, to: d) else {
+              let plus = Calendar(identifier: .gregorian).date(byAdding: .day, value: days, to: d) else {
             return today
         }
         return ExportDateFormatter.shared.string(from: plus)
     }
+
+    /// "YYYY-MM-DD" 14 days from today (UTC) — the invoice convert/due default (spec §4.2).
+    static func dueDatePlus14() -> String { dateString(daysFromNow: 14) }
+
+    /// "YYYY-MM-DD" 28 days from today (UTC) — the default quote validity.
+    static func validUntilPlus28() -> String { dateString(daysFromNow: 28) }
 
     private func fetchQuote(_ id: String) -> Quote? {
         var d = FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id })
