@@ -151,9 +151,13 @@ final class ProfileScopingUITests: UITestCase {
         XCTAssertTrue(switcher.waitForExistence(timeout: 10), "Switcher missing after add")
         switcher.tap()
         XCTAssertTrue(app.staticTexts["Switch profile"].waitForExistence(timeout: 5), "Picker did not open")
-        let newRow = app.staticTexts["Second Biz"]
-        XCTAssertTrue(newRow.waitForExistence(timeout: 5), "New profile not listed in the switcher")
-        newRow.firstMatch.tap()
+        // "Second Biz" also appears in the Home header behind the open sheet, so tap the visible
+        // (hittable) picker row, not the obscured header label.
+        let candidates = app.staticTexts.matching(identifier: "Second Biz")
+        XCTAssertTrue(candidates.firstMatch.waitForExistence(timeout: 5), "New profile not listed in the switcher")
+        let pickerRow = (0..<candidates.count).map { candidates.element(boundBy: $0) }.first { $0.isHittable }
+        XCTAssertNotNil(pickerRow, "New profile row not tappable in the switcher")
+        pickerRow?.tap()
         // Re-skin proof: the per-profile switcher card (id = profileSwitcherCardPrefix +
         // profileId) renders on the Profile tab; confirming the new profile's card is
         // present + marked Active proves the active profile changed and the shell
