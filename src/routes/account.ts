@@ -26,6 +26,10 @@ const PURGE_ORDER = [
   "mileage_trips", "vehicle_years",
   "vehicles",
   "categories",
+  // Invoice subsystem (invoices → profiles/quotes/users; payments + line items → invoices).
+  // Children first, and all before quotes/profiles/users. Missing these caused account
+  // deletion to fail with an FK violation (500) for any user who had created an invoice.
+  "payments", "invoice_line_items", "invoices",
   "quotes", // references profiles
   "clients", "tax_settings", "loyalty_cards", "wfh_logs",
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
@@ -140,9 +144,15 @@ accountRoutes.delete("/account", async (c) => {
   }
 
   // 1. Hard-delete every user-scoped row atomically (one transaction, FK-safe order).
-  await c.env.DB.batch(
-    PURGE_ORDER.map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
-  );
+  //    invoice_counters is keyed by profile_id (no user_id column), so it gets its own
+  //    profile-scoped delete. It runs first: nothing references it, and it must be gone
+  //    before the profiles it points at are deleted.
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare("DELETE FROM invoice_counters WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = ?)")
+      .bind(userId),
+    ...PURGE_ORDER.map((t) => c.env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(userId)),
+  ]);
 
   // 2. Purge the user's R2 objects across EVERY prefix the app writes to.
   //   u/${userId}/...        — receipt images (images.ts) + inbound attachments (inbound.ts)
