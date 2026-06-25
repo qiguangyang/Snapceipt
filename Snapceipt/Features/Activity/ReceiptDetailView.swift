@@ -119,7 +119,14 @@ struct ReceiptDetailView: View {
 
     private func detailsCard(_ row: ReceiptRow, _ txn: Transaction) -> some View {
         var items: [(String, String, Color)] = []
-        items.append(("Category", row.category.flatMap { CATS[$0]?.label } ?? txn.catKey.capitalized, Palette.ink))
+        // Income is a transaction TYPE (amount direction), not a category — present it as such.
+        // The green "+amount" already signals income; a "Category: Income" row read as a
+        // confusing expense category (e.g. an invoice "categorised as income").
+        if row.isIncome {
+            items.append(("Type", "Income", Palette.income))
+        } else {
+            items.append(("Category", row.category.flatMap { CATS[$0]?.label } ?? txn.catKey.capitalized, Palette.ink))
+        }
         items.append(("Date", Self.longDate(txn.txnDate), Palette.ink))
         if let pm = txn.paymentMethod, !pm.isEmpty { items.append(("Payment", pm.capitalized, Palette.ink)) }
         if let gst = txn.gstCents {
@@ -127,7 +134,7 @@ struct ReceiptDetailView: View {
                           : (Decimal(gst) / 100).formatted(.currency(code: txn.currency)), Palette.ink))
         }
         if let tax = txn.taxLabel, !tax.isEmpty { items.append(("Tax note", tax, Palette.ink)) }
-        if let pct = txn.deductiblePct { items.append(("Deductible", "\(pct)%", Palette.income)) }
+        if !row.isIncome, let pct = txn.deductiblePct { items.append(("Deductible", "\(pct)%", Palette.income)) }
         if let note = txn.note, !note.isEmpty { items.append(("Note", note, Palette.ink)) }
 
         return VStack(spacing: 0) {

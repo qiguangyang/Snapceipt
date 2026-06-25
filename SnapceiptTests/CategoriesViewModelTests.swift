@@ -11,12 +11,15 @@ struct CategoriesViewModelTests {
         return (ModelContext(c), MockSyncEngine())
     }
 
-    @Test("seeds built-in categories once and lists them")
+    @Test("seeds built-in categories once and lists the 8 expense categories (income excluded)")
     func seeds() throws {
         let (ctx, sync) = try fixture()
         let vm = CategoriesViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
         let firstCount = vm.categories.count
-        #expect(firstCount >= 9) // the built-in taxonomy (custom excluded)
+        // Income is a transaction TYPE, not a managed expense category, so it is excluded from
+        // this list (the 8 expense categories remain; "custom" is not seeded).
+        #expect(firstCount == 8)
+        #expect(!vm.categories.contains { $0.isIncome })
         // re-init: idempotent, no duplicates
         let vm2 = CategoriesViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
         #expect(vm2.categories.count == firstCount)
