@@ -207,6 +207,17 @@ struct InvoiceEditorViewModelTests {
         #expect(v.errorMessage != nil)
     }
 
+    @Test("canEmail reflects whether the client has a usable email (drives Send vs Save PDF)")
+    func canEmailReflectsClient() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync); v.load(id: nil)
+        #expect(v.canEmail == false)                 // no client yet
+        v.setClient(name: "Acme", email: "   ")      // whitespace-only ⇒ still false
+        #expect(v.canEmail == false)
+        v.setClient(name: "Acme", email: "a@acme.com")
+        #expect(v.canEmail == true)
+    }
+
     @Test("fresh invoice uses the profile GST rate (15%) for totals + snapshots it on save")
     func freshInvoiceUsesProfileRate() throws {
         let (ctx, sync) = try makeFixture()

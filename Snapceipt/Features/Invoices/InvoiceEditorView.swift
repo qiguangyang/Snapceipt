@@ -336,14 +336,24 @@ struct InvoiceEditorView: View {
                     Button { showRecordPayment = true } label: { iconButton("plus") }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier(AccessibilityID.invoiceEditorRecordPayment)
-                    primaryButton(title: vm.isSending ? "Sending…" : "Send invoice", icon: "share",
-                                  busy: vm.isSending, enabled: !vm.isSending,
-                                  a11y: AccessibilityID.invoiceEditorSend) {
+                    // With a client email the primary action EMAILS the invoice; without one
+                    // there's nobody to email, so it falls back to GENERATING a shareable PDF.
+                    primaryButton(
+                        title: vm.canEmail
+                            ? (vm.isSending ? "Sending…" : "Send invoice")
+                            : (vm.isGeneratingPdf ? "Saving…" : "Save PDF"),
+                        icon: "share",
+                        busy: vm.canEmail ? vm.isSending : vm.isGeneratingPdf,
+                        enabled: !(vm.canEmail ? vm.isSending : vm.isGeneratingPdf),
+                        a11y: AccessibilityID.invoiceEditorSend
+                    ) {
                         Task {
-                            // Route through the VM so a backend failure (e.g. 400 "no
-                            // client email") surfaces via vm.errorMessage instead of
-                            // being swallowed.
-                            if await vm.send(api: api), let url = vm.pdfUrl { openURL(url) }
+                            // Routed through the VM so failures surface via vm.errorMessage.
+                            if vm.canEmail {
+                                if await vm.send(api: api), let url = vm.pdfUrl { openURL(url) }
+                            } else if let url = await vm.generatePdf(api: api) {
+                                openURL(url)
+                            }
                         }
                     }
                 }
