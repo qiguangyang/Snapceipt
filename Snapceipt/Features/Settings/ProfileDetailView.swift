@@ -18,6 +18,10 @@ struct ProfileDetailView: View {
     // Local edit mirrors (committed to ProfilesStore.update on change / commit).
     @State private var nameText = ""
     @State private var abnText = ""
+    /// Commit name/ABN when focus LEAVES the field (and on close), not only on Return — otherwise
+    /// editing then tapping away/closing without pressing Return silently dropped the edit.
+    @FocusState private var focusedField: PField?
+    private enum PField { case name, abn }
     @State private var didLoad = false
     @State private var showDeleteConfirm = false
     @State private var deleteBlockedNote: String?
@@ -55,7 +59,7 @@ struct ProfileDetailView: View {
         ZStack {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                SheetHeader(title: "Profile", onClose: onClose)
+                SheetHeader(title: "Profile", onClose: { if let p = profile { commitName(p); commitAbn(p) }; onClose() })
                 if let p = profile {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
@@ -67,6 +71,10 @@ struct ProfileDetailView: View {
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
                     .keyboardDismissButton() // hide-keyboard accessory for name / ABN fields
+                    .onChange(of: focusedField) { old, _ in
+                        guard let p = profile else { return }
+                        switch old { case .name: commitName(p); case .abn: commitAbn(p); case nil: break }
+                    }
                 } else {
                     Spacer()
                 }
@@ -158,6 +166,7 @@ struct ProfileDetailView: View {
                         .textInputAutocapitalization(.words)
                         .padding(12)
                         .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                        .focused($focusedField, equals: .name)
                         .onSubmit { commitName(p) }
                         .accessibilityIdentifier(AccessibilityID.profileDetailNameField)
                 }
@@ -176,6 +185,7 @@ struct ProfileDetailView: View {
                             .keyboardType(.numbersAndPunctuation)
                             .padding(12)
                             .background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
+                            .focused($focusedField, equals: .abn)
                             .onSubmit { commitAbn(p) }
                     }
                     divider

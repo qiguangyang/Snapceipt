@@ -27,6 +27,12 @@ struct TaxSettingsView: View {
     @State private var addressTextField = ""
     @State private var bankDetailsText = ""
     @State private var logoItem: PhotosPickerItem?
+    /// Tracks the focused text field so each commits to the VM when focus LEAVES it (on-blur)
+    /// rather than on every keystroke (which re-renders the field mid-typing). A "Save" button
+    /// commits everything explicitly with a confirmation toast.
+    @FocusState private var focusedField: TaxField?
+    private enum TaxField: Hashable { case abn, wfh, businessEmail, phone, website, address, bankDetails }
+    @Environment(ToastCenter.self) private var toasts
 
     /// Pin the calendar's locale to en-AU so `monthSymbols` resolves to full English
     /// month names ("July"), not the generic ISO placeholders ("M07") the runtime
@@ -45,7 +51,7 @@ struct TaxSettingsView: View {
         ZStack {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                SheetHeader(title: "Tax & GST settings", onClose: onClose)
+                SheetHeader(title: "Tax & GST settings", onClose: { if let vm { commitAll(vm) }; onClose() })
                 if let vm {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
@@ -57,10 +63,14 @@ struct TaxSettingsView: View {
                             }
                             financialYear(vm)
                             deductionDefaults(vm)
+                            saveButton(vm)
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
                     .keyboardDismissButton() // dismiss button for ABN + WFH-rate fields
+                    .onChange(of: focusedField) { old, _ in
+                        if let old { commitField(old, vm) }   // on-blur: save the field that lost focus
+                    }
                 } else { Color.clear }
             }
         }
@@ -140,7 +150,7 @@ struct TaxSettingsView: View {
                     TextField("00 000 000 000", text: $abnText)
                         .font(.ui(16, .regular))
                         .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                        .onChange(of: abnText) { _, v in vm.setAbn(v) }
+                        .focused($focusedField, equals: .abn)
                         .accessibilityIdentifier(AccessibilityID.taxAbnField)
                     if ABNValidator.looksInvalid(abnText) {
                         Text("This ABN doesn't look right — check the digits.")
@@ -204,15 +214,15 @@ struct TaxSettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 labeledField("Business email", placeholder: "you@business.com",
                              text: $businessEmailText, id: AccessibilityID.taxBusinessEmailField,
-                             keyboard: .emailAddress) { vm.setBusinessEmail($0) }
+                             keyboard: .emailAddress, field: .businessEmail)
                 divider
                 labeledField("Phone", placeholder: "0400 000 000",
                              text: $phoneText, id: AccessibilityID.taxBusinessPhoneField,
-                             keyboard: .phonePad) { vm.setPhone($0) }
+                             keyboard: .phonePad, field: .phone)
                 divider
                 labeledField("Website", placeholder: "yourbusiness.com",
                              text: $websiteText, id: AccessibilityID.taxBusinessWebsiteField,
-                             keyboard: .URL) { vm.setWebsite($0) }
+                             keyboard: .URL, field: .website)
                 divider
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Address").font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
@@ -220,7 +230,7 @@ struct TaxSettingsView: View {
                         .lineLimit(2...4)
                         .font(.ui(16, .regular))
                         .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                        .onChange(of: addressTextField) { _, v in vm.setAddressText(v) }
+                        .focused($focusedField, equals: .address)
                         .accessibilityIdentifier(AccessibilityID.taxBusinessAddressField)
                 }
                 divider
@@ -282,7 +292,7 @@ struct TaxSettingsView: View {
                     .lineLimit(3...6)
                     .font(.ui(16, .regular))
                     .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: bankDetailsText) { _, v in vm.setBankDetails(v) }
+                    .focused($focusedField, equals: .bankDetails)
                     .accessibilityIdentifier(AccessibilityID.taxBankDetailsField)
             }
         }
@@ -292,21 +302,52 @@ struct TaxSettingsView: View {
     @ViewBuilder private func labeledField(_ title: String, placeholder: String,
                                            text: Binding<String>, id: String,
                                            keyboard: UIKeyboardType,
-                                           onCommit: @escaping (String) -> Void) -> some View {
+                                           field: TaxField) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.ui(11.5, .bold)).tracking(0.4).foregroundStyle(Palette.ink3)
             TextField(placeholder, text: text)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(.never)
-                // Disable autocorrect: these fields aren't prose, and on the .emailAddress
-                // keyboard the autocorrect "marked text" composition got truncated to the
-                // first character when the per-keystroke save re-rendered the field.
-                .autocorrectionDisabled()
+                .autocorrectionDisabled()  // these fields aren't prose
                 .font(.ui(16, .regular))
                 .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                .onChange(of: text.wrappedValue) { _, v in onCommit(v) }
+                .focused($focusedField, equals: field)  // commits on blur (see onChange(focusedField))
                 .accessibilityIdentifier(id)
         }
+    }
+
+    /// Commit a single text field's @State mirror to the VM (called when it loses focus).
+    private func commitField(_ field: TaxField, _ vm: TaxSettingsViewModel) {
+        switch field {
+        case .abn: vm.setAbn(abnText)
+        case .wfh: vm.setWfhRate(Int(wfhText) ?? 0)
+        case .businessEmail: vm.setBusinessEmail(businessEmailText)
+        case .phone: vm.setPhone(phoneText)
+        case .website: vm.setWebsite(websiteText)
+        case .address: vm.setAddressText(addressTextField)
+        case .bankDetails: vm.setBankDetails(bankDetailsText)
+        }
+    }
+
+    /// Commit every text field — the explicit Save button + on-close, so nothing is lost.
+    private func commitAll(_ vm: TaxSettingsViewModel) {
+        for f in [TaxField.abn, .wfh, .businessEmail, .phone, .website, .address, .bankDetails] {
+            commitField(f, vm)
+        }
+    }
+
+    @ViewBuilder private func saveButton(_ vm: TaxSettingsViewModel) -> some View {
+        Button {
+            focusedField = nil          // blur (also commits the active field) then save all
+            commitAll(vm)
+            toasts.show("Saved", kind: .success)
+        } label: {
+            Text("Save").font(.ui(15.5, .semibold)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(accent.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
     }
 
     // MARK: - Financial year
@@ -370,7 +411,7 @@ struct TaxSettingsView: View {
                     TextField("70", text: $wfhText).keyboardType(.numberPad)
                         .font(.ui(16, .regular))
                         .padding(12).background(Palette.paper2, in: RoundedRectangle(cornerRadius: 12))
-                        .onChange(of: wfhText) { _, v in vm.setWfhRate(Int(v) ?? 0) }
+                        .focused($focusedField, equals: .wfh)
                 }
                 divider
                 HStack {
