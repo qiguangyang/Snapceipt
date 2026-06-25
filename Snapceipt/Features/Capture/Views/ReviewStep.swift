@@ -34,7 +34,29 @@ struct ReviewStep: View {
     /// Confirms before the close button throws away the scanned image + extraction + edits.
     @State private var confirmingDiscard = false
 
-    private var categoryKeys: [String] { CategoryKey.allCases.map(\.rawValue) }
+    // Income is a transaction TYPE, set via the Income/Expense toggle — the category picker
+    // is expense-only.
+    private var categoryKeys: [String] { CategoryKey.allCases.filter { $0 != .income }.map(\.rawValue) }
+    private var draftIsIncome: Bool { draft.categoryKey == CategoryKey.income.rawValue }
+    /// Income/Expense selection backed by `draft.categoryKey`: income ⇒ the internal income
+    /// marker; expense ⇒ a real expense category (defaults to office when switching off income).
+    private var typeSelection: Binding<String> {
+        Binding(
+            get: { draft.categoryKey == CategoryKey.income.rawValue ? "income" : "expense" },
+            set: { newValue in
+                if newValue == "income" {
+                    draft.categoryKey = CategoryKey.income.rawValue
+                } else if draft.categoryKey == CategoryKey.income.rawValue {
+                    draft.categoryKey = CategoryKey.office.rawValue
+                }
+            })
+    }
+    private var typeToggle: some View {
+        Segmented(
+            options: [SegmentOption(id: "expense", label: "Expense"),
+                      SegmentOption(id: "income", label: "Income")],
+            selection: typeSelection)
+    }
     private func label(_ key: String) -> String {
         guard let ck = CategoryKey(rawValue: key) else { return key.capitalized }
         return CATS[ck]?.label ?? key.capitalized
@@ -58,6 +80,7 @@ struct ReviewStep: View {
             ScrollView {
                 VStack(spacing: 16) {
                     totalCard
+                    typeToggle
                     // Upgrade nudge takes priority when capped + free; otherwise
                     // the standard AI banner (which may still say "Review needed").
                     if vm.smartScanCapped && !entitlement.isPro {
@@ -287,13 +310,15 @@ struct ReviewStep: View {
                     .onAppear { if Self.isoDate.date(from: draft.date) == nil {
                         draft.date = Self.isoDate.string(from: Date()) } }
             }
-            field("Category") {
-                Picker("Category", selection: $draft.categoryKey) {
-                    ForEach(categoryKeys, id: \.self) { Text(label($0)).tag($0) }
+            if !draftIsIncome {
+                field("Category") {
+                    Picker("Category", selection: $draft.categoryKey) {
+                        ForEach(categoryKeys, id: \.self) { Text(label($0)).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent.base)   // active accent, not the iOS system-blue menu tint
+                    .accessibilityIdentifier(AccessibilityID.captureReviewCategory)
                 }
-                .pickerStyle(.menu)
-                .tint(accent.base)   // active accent, not the iOS system-blue menu tint
-                .accessibilityIdentifier(AccessibilityID.captureReviewCategory)
             }
             field("Payment") {
                 TextField("Payment method", text: Binding(
