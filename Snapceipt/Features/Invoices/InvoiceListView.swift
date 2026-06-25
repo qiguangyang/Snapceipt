@@ -54,6 +54,8 @@ struct InvoiceListView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        // Reserve room so the last row clears the floating "New invoice" CTA.
+                        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                     }
                 } else { Color.clear }
             }

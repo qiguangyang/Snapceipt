@@ -29,14 +29,18 @@ struct ProfilePickerSheet: View {
             .padding(.horizontal, 18)
             .padding(.top, 18)
 
-            VStack(spacing: 8) {
-                ForEach(store.profiles, id: \.id) { p in
-                    profileRow(p)
+            // Scroll the list so every profile is reachable when there are many — the sheet's
+            // height is bounded by its detent, and a plain VStack clipped the overflow.
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(store.profiles, id: \.id) { p in
+                        profileRow(p)
+                    }
+                    addRow
                 }
-                addRow
+                .padding(.horizontal, 18)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 24)
         }
     }
 

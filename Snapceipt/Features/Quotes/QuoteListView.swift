@@ -64,6 +64,8 @@ struct QuoteListView: View {
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
                         .refreshable { await onRefresh(); vm.reload() }
+                        // Reserve room so the last row clears the floating "New quote" CTA.
+                        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                     }
                 } else { Color.clear }
             }
