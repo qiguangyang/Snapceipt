@@ -6,6 +6,9 @@ import SwiftData
 struct SheetHeader: View {
     let title: String
     let onClose: () -> Void
+    /// Optional top-right action (e.g. a Save button). When nil, a 40pt spacer keeps the
+    /// title centered against the back button.
+    var trailing: AnyView? = nil
     var body: some View {
         HStack(spacing: 8) {
             Button(action: onClose) {
@@ -19,8 +22,11 @@ struct SheetHeader: View {
             .accessibilityIdentifier(AccessibilityID.logbookClose)
             Text(title).font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
-            // Spacer matching the back button's width so the title stays centered.
-            Color.clear.frame(width: 40, height: 40)
+            if let trailing {
+                trailing.frame(minWidth: 40, minHeight: 40, alignment: .trailing)
+            } else {
+                Color.clear.frame(width: 40, height: 40)   // keeps the title centered
+            }
         }
         .padding(.top, 12).padding(.horizontal, 18).padding(.bottom, 12)
     }

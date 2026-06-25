@@ -51,7 +51,9 @@ struct TaxSettingsView: View {
         ZStack {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
-                SheetHeader(title: "Tax & GST settings", onClose: { if let vm { commitAll(vm) }; onClose() })
+                SheetHeader(title: "Tax & GST settings",
+                            onClose: { if let vm { commitAll(vm) }; onClose() },
+                            trailing: AnyView(headerSaveButton))
                 if let vm {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
@@ -63,7 +65,6 @@ struct TaxSettingsView: View {
                             }
                             financialYear(vm)
                             deductionDefaults(vm)
-                            saveButton(vm)
                         }
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 60)
                     }
@@ -337,18 +338,37 @@ struct TaxSettingsView: View {
         }
     }
 
-    @ViewBuilder private func saveButton(_ vm: TaxSettingsViewModel) -> some View {
-        Button {
-            focusedField = nil          // blur (also commits the active field) then save all
-            commitAll(vm)
-            toasts.show("Saved", kind: .success)
-        } label: {
-            Text("Save").font(.ui(15.5, .semibold)).foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(accent.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    /// Top-right Save: accent when there are unsaved edits, grayed + disabled when everything is
+    /// already saved. (Fields also auto-save on blur/close; this is the explicit commit + the
+    /// saved/unsaved indicator the design asked for.)
+    @ViewBuilder private var headerSaveButton: some View {
+        if let vm {
+            let dirty = hasUnsavedChanges(vm)
+            Button {
+                focusedField = nil      // blur (commits the active field) then save all
+                commitAll(vm)
+                toasts.show("Saved", kind: .success)
+            } label: {
+                Text("Save").font(.ui(15, .bold))
+                    .foregroundStyle(dirty ? accent.base : Palette.ink3)
+            }
+            .buttonStyle(.plain)
+            .disabled(!dirty)
+            .accessibilityIdentifier(AccessibilityID.taxSave)
+        } else {
+            Color.clear.frame(width: 40, height: 40)
         }
-        .buttonStyle(.plain)
-        .padding(.top, 4)
+    }
+
+    /// True when any text field's local edit differs from the value committed to the VM.
+    private func hasUnsavedChanges(_ vm: TaxSettingsViewModel) -> Bool {
+        abnText != vm.abn
+        || businessEmailText != vm.businessEmail
+        || phoneText != vm.phone
+        || websiteText != vm.website
+        || addressTextField != vm.addressText
+        || bankDetailsText != vm.bankDetails
+        || wfhText != String(vm.wfhRateCentsPerHour)
     }
 
     // MARK: - Financial year
