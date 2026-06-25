@@ -17,6 +17,11 @@ final class EmailInViewModel {
     private(set) var inbox: [Transaction] = []
     private(set) var address: InboxAddressResponse?
     private(set) var isLoadingAddress = false
+    /// True when the SERVER returned 403 for the Pro-gated inbox endpoint — i.e. this account is
+    /// not Pro server-side even though the local entitlement (e.g. a sandbox/unsynced purchase)
+    /// made the UI think it was. The view shows the upgrade/restore card instead of a dead address
+    /// card. Distinct from `errorMessage` (a transient/network failure that should offer Retry).
+    private(set) var proRequired = false
     var errorMessage: String?
 
     init(context: ModelContext, sync: any SyncEnqueuing, api: any APIClient, userId: String, profileId: String) {
@@ -44,9 +49,14 @@ final class EmailInViewModel {
     func loadAddress() async {
         isLoadingAddress = true
         errorMessage = nil
+        proRequired = false
         defer { isLoadingAddress = false }
         do {
             address = try await api.profileInbox(profileId: profileId)
+        } catch let e as APIError where e.code == "FORBIDDEN" {
+            // Server doesn't consider this account Pro (the local entitlement never synced, e.g. a
+            // sandbox purchase). Show the upgrade/restore card, not a broken address card.
+            proRequired = true
         } catch {
             errorMessage = "Couldn't load your inbox address."
         }

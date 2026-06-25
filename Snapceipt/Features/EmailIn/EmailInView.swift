@@ -33,7 +33,10 @@ struct EmailInView: View {
             LbHeader(title: "Email-in receipts", onClose: onClose, onAdd: {}, showsAdd: false)
             ScrollView {
                 VStack(spacing: 14) {
-                    if entitlement.isPro {
+                    // `proRequired` (server 403) overrides the local entitlement: the server is the
+                    // source of truth for this Pro-gated feature, so a not-Pro-server account sees
+                    // the upgrade/restore card rather than an address card that 403s.
+                    if entitlement.isPro && !vm.proRequired {
                         addressCard
                         if vm.inbox.isEmpty {
                             emptyState
@@ -88,21 +91,18 @@ struct EmailInView: View {
                         }
                     }
                 }
-                HStack(spacing: 10) {
-                    actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
-                        guard entitlement.isPro else { showPaywall = true; return }
-                        if let a = vm.address?.address {
-                            UIPasteboard.general.string = a
+                // Copy / Share / Rotate act on the address — only show them once it has loaded, so
+                // the error state isn't a row of dead buttons.
+                if let addr = vm.address?.address {
+                    HStack(spacing: 10) {
+                        actionChip("Copy", "doc.on.doc", id: AccessibilityID.emailInCopy) {
+                            UIPasteboard.general.string = addr
                             toasts.show("Address copied", kind: .success)
                         }
-                    }
-                    actionChip("Share", "square.and.arrow.up", id: nil) {
-                        guard entitlement.isPro else { showPaywall = true; return }
-                        shareItem = vm.address?.address
-                    }
-                    actionChip("Rotate", "arrow.triangle.2.circlepath", id: AccessibilityID.emailInRotate) {
-                        guard entitlement.isPro else { showPaywall = true; return }
-                        Task { await vm.rotate() }
+                        actionChip("Share", "square.and.arrow.up", id: nil) { shareItem = addr }
+                        actionChip("Rotate", "arrow.triangle.2.circlepath", id: AccessibilityID.emailInRotate) {
+                            Task { await vm.rotate() }
+                        }
                     }
                 }
             }
