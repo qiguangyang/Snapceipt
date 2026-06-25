@@ -58,8 +58,16 @@ struct EmailInView: View {
         .accessibilityIdentifier(AccessibilityID.emailInScreen)
         .task {
             await vm.loadAddressIfPro(isPro: entitlement.isPro)
-            // Pull fresh data on open so a server-created receipt appears without a push.
-            if entitlement.isPro { await onRefresh() } else { showPaywall = true }
+            // Pull fresh data on open so a server-created receipt appears without a push. Free users
+            // see the in-page upgrade card (no auto-popped paywall) — they tap it to subscribe.
+            if entitlement.isPro { await onRefresh() }
+        }
+        // Subscribing via the in-page upgrade card flips isPro → load the address + pull the inbox
+        // so the page updates in place without re-opening.
+        .onChange(of: entitlement.isPro) { wasPro, isPro in
+            if isPro && !wasPro {
+                Task { await vm.loadAddress(); await onRefresh() }
+            }
         }
         // A push-triggered sync just pulled a new email-in receipt — re-fetch the inbox so it
         // appears while the screen is open (the list is a manual fetch, not a @Query).

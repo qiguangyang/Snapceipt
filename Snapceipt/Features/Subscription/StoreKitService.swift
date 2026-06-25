@@ -65,6 +65,12 @@ final class StoreKitService {
     var products: [Product] { productsState.products }
     /// The set of currently-entitled product ids derived from Transaction.currentEntitlements.
     private(set) var entitledProductIDs: Set<String> = []
+    /// The signed JWS of the current entitling transaction (from `currentEntitlements`), so the app
+    /// shell can RE-SEND it to the backend at launch when the server plan is behind the local one
+    /// (e.g. a purchase whose `recordPurchase` failed, or an entitlement predating this install).
+    /// `onVerifiedTransaction` only fires on NEW purchases/updates, so without this the backend
+    /// never learns about an existing entitlement.
+    private(set) var currentEntitlementJWS: String?
 
     /// Called whenever entitlement changes (purchase, restore, expiry, refund) so
     /// the EntitlementStore can sync to the backend. Injected by the app shell.
@@ -161,12 +167,15 @@ final class StoreKitService {
     /// Recompute entitledProductIDs from Transaction.currentEntitlements and notify.
     func refreshEntitlements() async {
         var ids: Set<String> = []
+        var jws: String?
         for await result in SKTransaction.currentEntitlements {
             if case .verified(let txn) = result, Self.isProProduct(txn.productID) {
                 ids.insert(txn.productID)
+                jws = result.jwsRepresentation   // the entitling transaction's signed JWS
             }
         }
         entitledProductIDs = ids
+        currentEntitlementJWS = jws
         onEntitlementChange?(!ids.isEmpty)
     }
 

@@ -77,6 +77,8 @@ export async function makeSignedTransaction(opts: {
   expiresDate?: number;
   /** epoch ms; present on a refunded/revoked transaction. */
   revocationDate?: number;
+  /** "Sandbox" | "Production" — the StoreKit environment claim. */
+  environment?: string;
   chain?: TestChain;
 }): Promise<string> {
   const chain = opts.chain ?? testChain();
@@ -86,6 +88,7 @@ export async function makeSignedTransaction(opts: {
     originalTransactionId: opts.originalTransactionId,
     expiresDate: opts.expiresDate ?? 9_999_999_999_000,
     ...(opts.revocationDate !== undefined ? { revocationDate: opts.revocationDate } : {}),
+    ...(opts.environment !== undefined ? { environment: opts.environment } : {}),
     transactionId: opts.originalTransactionId,
   });
 }

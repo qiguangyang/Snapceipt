@@ -118,11 +118,17 @@ struct SnapceiptApp: App {
         let storekit = StoreKitService()
         storekit.onEntitlementChange = { entitled in entitlement.setLocalEntitled(entitled) }
         storekit.onVerifiedTransaction = { signedTransaction in
-            // POST the signed StoreKit transaction JWS to the backend, which verifies
-            // Apple's signature/cert chain and derives the entitlement from the
-            // verified payload (fire-and-forget; errors are benign — the verified
-            // ASSN webhook is authoritative for lifecycle events).
-            Task { try? await api.recordPurchase(signedTransaction: signedTransaction) }
+            // POST the signed StoreKit transaction JWS to the backend, which verifies Apple's
+            // signature/cert chain and derives the entitlement from the verified payload. Retries
+            // transient failures; on a persistent failure we surface it (the local entitlement
+            // already unlocked the UI, but the server — which gates Pro features like email-in —
+            // would otherwise silently stay free, as it did before this).
+            Task {
+                if !(await recordPurchaseWithRetry(api: api, jws: signedTransaction)) {
+                    toasts.show("Couldn't confirm your purchase with the server — we'll retry automatically.",
+                                kind: .error)
+                }
+            }
         }
         self.api = api
         _storekit = State(initialValue: storekit)
@@ -183,6 +189,15 @@ struct SnapceiptApp: App {
                     await storekit.refreshEntitlements()
                     if let plan = try? await api.mePlan() {
                         entitlement.applyServerPlan(plan)
+                        // Reconcile a local-only entitlement: StoreKit says Pro but the server
+                        // doesn't (a purchase whose recordPurchase failed, or one predating this
+                        // install). Re-send the entitling JWS so the backend — which gates Pro
+                        // features like email-in — catches up.
+                        if entitlement.localEntitled, plan != "pro",
+                           let jws = storekit.currentEntitlementJWS,
+                           await recordPurchaseWithRetry(api: api, jws: jws) {
+                            entitlement.applyServerPlan("pro")
+                        }
                     }
                 }
         }

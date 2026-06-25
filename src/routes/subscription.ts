@@ -42,6 +42,10 @@ interface VerifiedTransaction {
   expiresDate?: number;
   /** revocationDate (epoch ms) is present iff the transaction was refunded/revoked. */
   revocationDate?: number;
+  /** "Sandbox" | "Production". We INTENTIONALLY accept both (there is deliberately no environment
+   *  gate below): TestFlight + sandbox testers must be able to unlock Pro, and a sandbox JWS is
+   *  still Apple-signed — the verified x5c chain proves authenticity, so it can't be forged. */
+  environment?: string;
 }
 
 subscriptionRoutes.post("/", validate("json", purchaseBody), async (c) => {
