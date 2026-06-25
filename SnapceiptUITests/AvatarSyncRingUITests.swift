@@ -15,14 +15,18 @@ final class AvatarSyncRingUITests: UITestCase {
                                 timeout: timeout) == .completed
     }
 
-    @MainActor func test_syncRing_green_while_syncing() {
+    @MainActor func test_syncRing_white_while_syncing() {
+        // Stall the push so the sync stays in-flight → WHITE ring.
         app.launchArguments += ["-uiTestStub", "-uiTestSeed", "-uiTestActiveType", "personal", "-uiTestPushStall"]
         app.launch()
         require(app.descendants(matching: .any)[AccessibilityID.profileSwitcher], "avatar")
-        if waitValue("syncing", 12) { shoot(app, "sync-ring-green") }   // best-effort
-        // The stall releases → idle → no ring (also proves the banner is gone).
-        if waitValue("idle", 25) { shoot(app, "sync-ring-idle-no-banner") }
+        XCTAssertTrue(waitValue("syncing", 12), "did not reach syncing")
+        shoot(app, "sync-ring-white-syncing")
     }
+
+    // NOTE: the GREEN success flash (.syncing → .idle, ~2s) isn't UITest-captured: the stub sync
+    // resolves too fast to register the transition reliably. It's exercised live with real network
+    // latency and verified by the ring-colour logic (ProfileSwitcherHeader.ringColor).
 
     @MainActor func test_syncRing_red_when_unreachable() {
         // The seeded push is rejected (422) → SyncEngine status = .error → red avatar ring.
