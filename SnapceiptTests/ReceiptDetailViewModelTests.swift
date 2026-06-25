@@ -38,6 +38,31 @@ struct ReceiptDetailViewModelTests {
         #expect(vm.image == nil)
     }
 
+    @Test("linkedInvoice resolves the invoice that produced an invoice-income transaction")
+    func linkedInvoiceResolves() throws {
+        let ctx = try makeContext()
+        ctx.insert(Invoice(id: "inv1", userId: "u1", profileId: "p1", number: "INV-0001",
+                           totalCents: 22220, status: "issued"))
+        let txn = Transaction(id: "txn-inv", userId: "u1", profileId: "p1",
+                              merchant: "Yang Wang", catKey: CategoryKey.income.rawValue,
+                              amountCents: 22220, txnDate: "2026-06-25", mode: "business",
+                              note: "Invoice INV-0001", source: "invoice")
+        ctx.insert(txn); try ctx.save()
+        let vm = ReceiptDetailViewModel(context: ctx, transactionId: "txn-inv")
+        #expect(vm.linkedInvoice(for: txn)?.id == "inv1")
+    }
+
+    @Test("linkedInvoice returns nil for a non-invoice (receipt) transaction")
+    func linkedInvoiceNilForReceipt() throws {
+        let ctx = try makeContext()
+        let txn = Transaction(id: "txn-r", userId: "u1", profileId: "p1",
+                              merchant: "Cafe", catKey: "meals", amountCents: -1250,
+                              txnDate: "2026-06-20")   // source defaults to "manual"
+        ctx.insert(txn); try ctx.save()
+        let vm = ReceiptDetailViewModel(context: ctx, transactionId: "txn-r")
+        #expect(vm.linkedInvoice(for: txn) == nil)
+    }
+
     @Test("no local file -> fetches the receipt image from R2")
     func fetchesFromR2() async throws {
         let ctx = try makeContext()

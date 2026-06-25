@@ -32,9 +32,14 @@ final class ReceiptDetailViewModel {
             predicate: #Predicate { $0.transactionId == tid })))?.first
         image = localImage(pr: pr)
         // The local JPEG is reclaimed after the R2 upload (ReceiptUploadQueue), so for an
-        // already-uploaded receipt the only copy is on the server — fetch it back.
+        // already-uploaded receipt the only copy is on the server — fetch it back. An
+        // invoice-income transaction has no receipt photo, so show the invoice PDF instead.
         if image == nil, api != nil {
-            Task { await fetchRemoteImage() }
+            if t?.source == "invoice" {
+                Task { await fetchInvoicePdfImage() }
+            } else {
+                Task { await fetchRemoteImage() }
+            }
         }
         lineItems = (try? context.fetch(FetchDescriptor<LineItem>(
             predicate: #Predicate { $0.transactionId == tid && $0.deletedAt == nil },
@@ -81,5 +86,39 @@ final class ReceiptDetailViewModel {
             // Match the capture-time protection class (NSFileProtectionComplete) for the re-cached file.
             try? bytes.write(to: url, options: [.atomic, .completeFileProtection])
         }
+    }
+
+    /// For an invoice-income transaction: resolve the linked invoice, fetch its PDF, and render
+    /// the first page so the transaction page shows the invoice inline (mirrors how email-in
+    /// PDF receipts render). Best-effort — a failure leaves `image` nil.
+    func fetchInvoicePdfImage() async {
+        guard let api, let txn, let invoice = linkedInvoice(for: txn) else { return }
+        isLoadingImage = true
+        defer { isLoadingImage = false }
+        // POST /invoices/:id/pdf (re)builds the PDF and returns a short-lived signed download URL.
+        guard let resp = try? await api.invoicePdf(invoice.id) else { return }
+        let urlStr = resp.pdfUrl.hasPrefix("http") ? resp.pdfUrl : "https://api.snapceipt.cc\(resp.pdfUrl)"
+        guard let url = URL(string: urlStr),
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              let img = PDFImageRenderer.firstPage(data) else { return }
+        image = img
+        // Cache the rendered first page (same path as receipts) so re-opens are instant + offline.
+        if let cacheUrl = Self.localImageURL(for: transactionId),
+           let bytes = img.jpegData(compressionQuality: 0.9) {
+            try? FileManager.default.createDirectory(
+                at: cacheUrl.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? bytes.write(to: cacheUrl, options: [.atomic, .completeFileProtection])
+        }
+    }
+
+    /// Resolve the Invoice that produced an invoice-income transaction. The income txn is tagged
+    /// with note = "Invoice <number>" (or "Invoice <id>" when unnumbered) on the same profile.
+    func linkedInvoice(for txn: Transaction) -> Invoice? {
+        guard txn.source == "invoice", let note = txn.note, note.hasPrefix("Invoice ") else { return nil }
+        let key = String(note.dropFirst("Invoice ".count))
+        let pid = txn.profileId
+        let all = (try? context.fetch(FetchDescriptor<Invoice>(
+            predicate: #Predicate { $0.deletedAt == nil }))) ?? []
+        return all.first { $0.profileId == pid && ($0.number == key || $0.id == key) }
     }
 }
