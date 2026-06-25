@@ -29,14 +29,14 @@ describe("rateLimit middleware", () => {
         body: JSON.stringify({ email }),
       });
 
-    // 10 distinct emails from one IP are allowed (each email is under its own 3/hr cap).
-    for (let i = 0; i < 10; i++) {
+    // 20 distinct emails from one IP are allowed (each email is under its own 8/hr cap).
+    for (let i = 0; i < 20; i++) {
       const ok = await send(`u${i}@example.com`);
       expect(ok.status).toBe(202);
     }
 
-    // 11th request from the same IP trips the 10/IP/hr ceiling.
-    const blocked = await send("u11@example.com");
+    // 21st request from the same IP trips the 20/IP/hr ceiling.
+    const blocked = await send("u21@example.com");
     expect(blocked.status).toBe(429);
     const retryAfter = blocked.headers.get("Retry-After");
     expect(retryAfter).not.toBeNull();
@@ -46,11 +46,11 @@ describe("rateLimit middleware", () => {
     expect(typeof body.error.requestId).toBe("string");
   });
 
-  it("enforces the per-email cap (3/hr) independently of the IP cap", async () => {
+  it("enforces the per-email cap (8/hr) on SENDS independently of the IP cap", async () => {
     vi.spyOn(emailModule, "sendMagicLinkEmail").mockResolvedValue(undefined);
 
-    // Each request uses a DISTINCT IP so the 10/IP/hr ceiling never trips; the
-    // only limit in play is the 3/email/hr cap on a single repeated address.
+    // Each request uses a DISTINCT IP so the 20/IP/hr ceiling never trips; the
+    // only limit in play is the 8/email/hr cap on a single repeated address.
     const email = "repeat@example.com";
     const send = (n: number) =>
       SELF.fetch("https://api.test/auth/magic-link/request", {
@@ -59,7 +59,7 @@ describe("rateLimit middleware", () => {
         body: JSON.stringify({ email }),
       });
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 8; i++) {
       const ok = await send(i);
       expect(ok.status).toBe(202);
     }
@@ -69,6 +69,22 @@ describe("rateLimit middleware", () => {
     expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
     const body = (await blocked.json()) as { error: { code: string } };
     expect(body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("EXEMPTS /auth/otp/verify from the per-email cap (it has its own per-code attempt cap)", async () => {
+    // 12 verify attempts for the SAME email, each from a distinct IP (so the per-IP cap never
+    // trips). Verify is exempt from the 8/email/hr cap, so none are 429 — they 401 on the missing
+    // code. If verify still counted toward the email cap, the 9th would be RATE_LIMITED (the bug).
+    const email = "verifyexempt@example.com";
+    for (let i = 0; i < 12; i++) {
+      const res = await SELF.fetch("https://api.test/auth/otp/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": `198.51.100.${i + 1}` },
+        body: JSON.stringify({ email, code: "000000" }),
+      });
+      expect(res.status).not.toBe(429);
+      expect(res.status).toBe(401); // AUTH_INVALID_TOKEN — no pending code, but NOT rate-limited
+    }
   });
 
   it("does not leak across route classes: /health stays unlimited + public", async () => {

@@ -34,10 +34,12 @@ export type RateLimitTier = {
 
 /** Route-class tiers (SPINE §4 RATE LIMITING). */
 export const RATE_LIMIT_TIERS = {
-  /** magic-link/apple/refresh per-IP ceiling. */
-  authIp: { name: "auth-ip", limit: 10, windowMs: HOUR_MS, dimension: "ip" },
-  /** magic-link per-email cap (keyed by the request body's email). */
-  authEmail: { name: "auth-email", limit: 3, windowMs: HOUR_MS, dimension: "ip" },
+  /** auth per-IP ceiling (covers request + verify + refresh + apple). 20/hr leaves headroom
+   *  now that a code login is request+verify (2 calls) and resends are common. */
+  authIp: { name: "auth-ip", limit: 20, windowMs: HOUR_MS, dimension: "ip" },
+  /** per-email cap on the SEND/credential ops (keyed by the request body's email). 8/hr allows
+   *  sign-up + a few resends + a second device. Verify endpoints are EXEMPT (own per-code cap). */
+  authEmail: { name: "auth-email", limit: 8, windowMs: HOUR_MS, dimension: "ip" },
   /** hot sync path. */
   sync: { name: "sync", limit: 600, windowMs: HOUR_MS, dimension: "user" },
   /** receipt extraction — calls an external API; keep it tight. */
@@ -123,28 +125,35 @@ export function rateLimit(kind: RateLimitKind): MiddlewareHandler<AppEnv> {
       const ipReset = await consume(kv, RATE_LIMIT_TIERS.authIp, ip, now);
       if (ipReset !== null) reject(ipReset);
 
-      // Per-email cap, only when the body carries an email (request/verify shapes).
-      let email: string | undefined;
-      try {
-        const cloned = c.req.raw.clone();
-        const ct = cloned.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) {
-          const parsed = (await cloned.json()) as { email?: unknown };
-          if (typeof parsed.email === "string" && parsed.email.length > 0) {
-            email = parsed.email.trim().toLowerCase();
+      // Per-email cap on the SEND/credential ops only (otp/request, magic-link/request,
+      // password/login). The *verify* endpoints are EXEMPT: each has its own per-code 5-attempt
+      // cap, and counting verify here blocked legit first logins — a code login is already
+      // request + verify = 2 against the cap before any resend. The per-IP ceiling still covers
+      // verify against abuse.
+      const isVerify = new URL(c.req.url).pathname.endsWith("/verify");
+      if (!isVerify) {
+        let email: string | undefined;
+        try {
+          const cloned = c.req.raw.clone();
+          const ct = cloned.headers.get("content-type") ?? "";
+          if (ct.includes("application/json")) {
+            const parsed = (await cloned.json()) as { email?: unknown };
+            if (typeof parsed.email === "string" && parsed.email.length > 0) {
+              email = parsed.email.trim().toLowerCase();
+            }
           }
+        } catch {
+          // Non-JSON / unparseable body: the IP cap above still applies.
         }
-      } catch {
-        // Non-JSON / unparseable body: the IP cap above still applies.
-      }
-      if (email) {
-        const emailReset = await consume(
-          kv,
-          RATE_LIMIT_TIERS.authEmail,
-          `email:${email}`,
-          now,
-        );
-        if (emailReset !== null) reject(emailReset);
+        if (email) {
+          const emailReset = await consume(
+            kv,
+            RATE_LIMIT_TIERS.authEmail,
+            `email:${email}`,
+            now,
+          );
+          if (emailReset !== null) reject(emailReset);
+        }
       }
       return next();
     }

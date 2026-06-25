@@ -46,19 +46,21 @@ struct RootView: View {
     /// the gate's UserDefaults read isn't reactive and the shell never appears.
     @AppStorage(OnboardingGate.key) private var onboardingComplete = false
 
+    /// Whether a sync has run since this sign-in. Gates the "no profile → onboard" decision behind
+    /// an initial server pull so a returning user's wiped-on-logout profile is restored first.
+    /// Reset on every sign-in/out (userId change) so each login re-pulls.
+    @State private var didInitialSync = false
+
     var body: some View {
         Group {
             switch authVM.state {
             case .signedIn:
-                // Gate the shell behind onboarding AND the CURRENT user owning a profile:
-                // a first-run user, a new account on a device with another account's data,
-                // or one whose profiles were all deleted, is guided to create one first.
-                if !onboardingComplete || !currentUserHasProfile {
-                    OnboardingView(onFinished: {
-                        // No-op: OnboardingGate.markComplete() (set on the notifications step)
-                        // flips needsOnboarding to false, re-rendering this view into the shell.
-                    })
-                } else {
+                // Gate the shell behind onboarding AND the CURRENT user owning a profile. A
+                // returning user's local store is wiped on logout, so BEFORE concluding "no
+                // profile → onboard" we pull from the server (their profile lives there); only a
+                // pull that still finds no profile is a genuine first-run / empty account. Without
+                // this, logout→login asked the user to re-create a profile they already had.
+                if onboardingComplete && currentUserHasProfile {
                     // Gate the authed shell behind the biometric lock (spec §6): lock on
                     // cold launch and on background→active; the LockScreen covers the shell
                     // until `appLock.unlock()` clears `isLocked`. Under -uiTestStub the
@@ -83,6 +85,24 @@ struct RootView: View {
                         // Require an unlock when returning from background.
                         if phase == .background { appLock.lockIfEnabled() }
                     }
+                } else if !currentUserHasProfile && !didInitialSync {
+                    // No local profile yet + we haven't synced since this login. Pull first: a
+                    // returning user (logged out → wiped → logged back in) has their profile on
+                    // the server and it must be restored, not re-onboarded (which would duplicate
+                    // it). A genuine new user pulls nothing and falls through to OnboardingView
+                    // once the sync completes. Right after a login the network is up (auth needs
+                    // it), so this pull reliably runs.
+                    AuthSyncingView()
+                        .task {
+                            profiles.rescope(to: auth.session?.userId ?? "")
+                            await sync.sync()
+                            didInitialSync = true
+                        }
+                } else {
+                    OnboardingView(onFinished: {
+                        // No-op: OnboardingGate.markComplete() (set on the notifications step)
+                        // flips needsOnboarding to false, re-rendering this view into the shell.
+                    })
                 }
             case .settingPassword:
                 // Signed in via a sign-up / reset code — set a password before the shell.
@@ -114,6 +134,11 @@ struct RootView: View {
         // session by design).
         .onChange(of: auth.session == nil) { _, isCleared in
             if isCleared { authVM.handleSessionInvalidated() }
+        }
+        // Re-arm the post-login initial pull on every sign-in/out so a returning user re-syncs
+        // (their profile is restored from the server before the onboarding gate concludes).
+        .onChange(of: auth.session?.userId) { _, _ in
+            didInitialSync = false
         }
     }
 }
@@ -1019,6 +1044,22 @@ struct ShellView: View {
         #else
         return nil
         #endif
+    }
+}
+
+/// Brief branded loading screen shown after sign-in while the initial server pull runs, so a
+/// returning user's wiped-on-logout profile is restored before the onboarding gate concludes
+/// (RootView's `.signedIn` branch). A genuine new user passes through it quickly to onboarding.
+struct AuthSyncingView: View {
+    var body: some View {
+        VStack(spacing: 22) {
+            AuthBrandHeader()
+            ProgressView().tint(Palette.ink2)
+            Text("Restoring your account…")
+                .font(.ui(14)).foregroundStyle(Palette.ink2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Palette.cream.ignoresSafeArea())
     }
 }
 
