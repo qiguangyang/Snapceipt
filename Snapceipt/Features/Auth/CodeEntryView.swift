@@ -9,8 +9,13 @@ struct CodeEntryView: View {
     @Environment(\.accent) private var accent
     @State private var code = ""
     @State private var justSent = false
+    @State private var resending = false
 
     private var isVerifying: Bool { vm.state == .verifying }
+    private var resendLabel: String {
+        if resending { return "Sending…" }
+        return justSent ? "Code sent ✓" : "Resend code"
+    }
 
     private var title: String {
         switch vm.codePurpose {
@@ -69,12 +74,16 @@ struct CodeEntryView: View {
             }
 
             HStack(spacing: 18) {
-                Button(justSent ? "Code sent ✓" : "Resend code") { Task { await vm.resendCode() } }
-                    .font(.ui(14, .semibold))
-                    .foregroundStyle(justSent ? Palette.ink3 : accent.base)
-                    .disabled(justSent || isVerifying)
+                Button(resendLabel) {
+                    resending = true
+                    Task { await vm.resendCode(); resending = false }
+                }
+                .font(.ui(14, .semibold))
+                .foregroundStyle((justSent || resending) ? Palette.ink3 : accent.base)
+                .disabled(resending || justSent || isVerifying)
                 Button("Use a different email") { vm.cancelFlow() }
                     .font(.ui(14, .semibold)).foregroundStyle(Palette.ink2)
+                    .disabled(resending)
             }
             .padding(.top, 4)
 

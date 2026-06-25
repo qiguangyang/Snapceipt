@@ -1,27 +1,21 @@
 import SwiftUI
 import AuthenticationServices
 
-/// Signed-out entry screen: email + password sign-in, plus Sign in with Apple and the
-/// 6-digit-code paths (create account / forgot password / passwordless). A password login
-/// from a NEW device is challenged with a code on the next screen (2FA). Errors surface
-/// inline via `vm.lastError`.
+/// Signed-out landing: Sign in with Apple, "Sign in with Email" (→ dedicated email login page),
+/// and "Create an account" (→ dedicated sign-up page). All email / password / code entry lives on
+/// the pushed sub-pages; this NavigationStack roots them. Apple + dev errors surface inline via
+/// `vm.lastError` (cleared when popping back to the landing).
 struct SignInView: View {
     @Environment(AuthViewModel.self) private var vm
     @Environment(\.accent) private var accent
-
-    @State private var email = ""
-    @State private var password = ""
-    @FocusState private var focus: Field?
-    private enum Field { case email, password }
-
-    private var isBusy: Bool { vm.state == .working }
+    @State private var path: [AuthRoute] = []
 
     var body: some View {
-        ScrollView {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                brand
-                    .padding(.top, 52)
-                    .padding(.bottom, 30)
+                Spacer(minLength: 0)
+                AuthBrandHeader()
+                Spacer(minLength: 0)
 
                 VStack(spacing: 12) {
                     SignInWithAppleButton(.signIn) { request in
@@ -37,57 +31,23 @@ struct SignInView: View {
                                 .accessibilityIdentifier(AccessibilityID.signInApple)
                         )
 
-                    dividerOr
-
-                    TextField("you@example.com", text: $email)
-                        .font(.ui(16))
-                        .keyboardType(.emailAddress)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.next)
-                        .focused($focus, equals: .email)
-                        .onSubmit { focus = .password }
-                        .modifier(FieldChrome())
-                        .accessibilityIdentifier(AccessibilityID.signInEmail)
-
-                    SecureField("Password", text: $password)
-                        .font(.ui(16))
-                        .textContentType(.password)
-                        .submitLabel(.go)
-                        .focused($focus, equals: .password)
-                        .onSubmit { signIn() }
-                        .modifier(FieldChrome())
-                        .accessibilityIdentifier(AccessibilityID.signInPassword)
-
-                    Button(action: signIn) {
-                        Group {
-                            if isBusy { ProgressView().tint(.white) } else { Text("Sign in") }
-                        }
-                        .font(.ui(16, .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    Button { path.append(.emailLogin) } label: {
+                        Label("Sign in with Email", systemImage: "envelope.fill")
+                            .font(.ui(16, .semibold))
+                            .foregroundStyle(Palette.ink)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(Palette.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.line, lineWidth: 1))
                     }
-                    .disabled(isBusy)
-                    .accessibilityIdentifier(AccessibilityID.signInSubmit)
+                    .accessibilityIdentifier(AccessibilityID.signInWithEmail)
 
-                    HStack {
-                        Button("Create an account") { startCode(.signUp) }
-                            .accessibilityIdentifier(AccessibilityID.signInCreate)
-                        Spacer()
-                        Button("Forgot password?") { startCode(.reset) }
-                            .accessibilityIdentifier(AccessibilityID.signInForgot)
+                    Button { path.append(.createAccount) } label: {
+                        (Text("New to Snapceipt?  ").foregroundStyle(Palette.ink3)
+                         + Text("Create an account").foregroundStyle(accent.base))
+                            .font(.ui(14, .semibold))
                     }
-                    .font(.ui(13, .semibold))
-                    .foregroundStyle(accent.base)
-                    .padding(.top, 2)
-
-                    Button("Sign in with a code instead") { startCode(.codeLogin) }
-                        .font(.ui(14, .semibold))
-                        .foregroundStyle(Palette.ink2)
-                        .accessibilityIdentifier(AccessibilityID.signInUseCode)
-                        .padding(.top, 4)
+                    .accessibilityIdentifier(AccessibilityID.signInCreate)
+                    .padding(.top, 6)
 
                     #if DEBUG
                     Button { Task { await vm.devSignIn() } } label: {
@@ -96,18 +56,13 @@ struct SignInView: View {
                             .foregroundStyle(Palette.ink3)
                     }
                     .accessibilityIdentifier(AccessibilityID.signInDev)
-                    .padding(.top, 6)
+                    .padding(.top, 4)
                     #endif
 
-                    if let err = vm.lastError {
-                        Text(err)
-                            .font(.ui(13))
-                            .foregroundStyle(Palette.alert)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 2)
-                    }
+                    AuthErrorText(message: vm.lastError).padding(.top, 2)
                 }
                 .padding(.horizontal, 22)
+                .padding(.bottom, 24)
 
                 Text("By continuing you agree to our [Terms](https://snapceipt.cc/terms) & [Privacy Policy](https://snapceipt.cc/privacy).")
                     .font(.ui(11.5))
@@ -115,62 +70,23 @@ struct SignInView: View {
                     .tint(accent.base)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 36)
-                    .padding(.top, 22)
                     .padding(.bottom, 18)
             }
-            .frame(maxWidth: .infinity)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .background(Palette.cream.ignoresSafeArea())
-        .keyboardDismissButton()   // dismiss the email/password keyboard
-    }
-
-    private var brand: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(LinearGradient(colors: [accent.base, accent.deep],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 78, height: 78)
-                    .shadow(color: accent.base.opacity(0.45), radius: 18, x: 0, y: 10)
-                Image(systemName: "doc.viewfinder")
-                    .font(.system(size: 34, weight: .semibold))
-                    .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.cream.ignoresSafeArea())
+            .navigationDestination(for: AuthRoute.self) { route in
+                switch route {
+                case .emailLogin: EmailLoginView()
+                case .createAccount: CreateAccountView()
+                case .forgotPassword: ForgotPasswordView()
+                }
             }
-            Text("Snapceipt").font(.display(30, .bold)).foregroundStyle(Palette.ink)
-            Text("Snap receipts. Sort your tax. Done.")
-                .font(.ui(15)).foregroundStyle(Palette.ink2).multilineTextAlignment(.center)
+            // Clear a stale sub-page error when popping back to the landing. (Apple / dev errors
+            // are set while already on the landing — the path doesn't change — so they still show.)
+            .onChange(of: path) { _, newPath in
+                if newPath.isEmpty { vm.clearError() }
+            }
         }
-    }
-
-    private var dividerOr: some View {
-        HStack(spacing: 10) {
-            Rectangle().fill(Palette.line).frame(height: 1)
-            Text("or").font(.ui(12)).foregroundStyle(Palette.ink3)
-            Rectangle().fill(Palette.line).frame(height: 1)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func signIn() {
-        let e = email, p = password
-        Task { await vm.signInWithPassword(email: e, password: p) }
-    }
-
-    private func startCode(_ purpose: AuthViewModel.CodePurpose) {
-        let e = email
-        Task { await vm.startCode(email: e, purpose: purpose) }
-    }
-}
-
-/// Shared text-field chrome (paper fill + rounded border) for the sign-in fields.
-private struct FieldChrome: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, 14)
-            .frame(height: 54)
-            .background(Palette.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.line, lineWidth: 1))
     }
 }
 

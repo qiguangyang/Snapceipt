@@ -5,13 +5,18 @@ import Foundation
 /// is added to both targets' sources in project.yml.)
 enum AccessibilityID {
     static let signInApple = "signin.apple"
-    static let signInEmail = "signin.email"
+    static let signInWithEmail = "signin.withemail"   // landing → opens the email login page
+    static let signInEmail = "signin.email"           // email field on the email login page
     static let signInPassword = "signin.password"
     static let signInSubmit = "signin.submit"
     static let signInForgot = "signin.forgot"
-    static let signInCreate = "signin.create"
+    static let signInCreate = "signin.create"         // landing → opens the create-account page
     static let signInUseCode = "signin.usecode"
     static let signInDev = "signin.dev"
+    static let createEmail = "create.email"
+    static let createSubmit = "create.submit"
+    static let forgotEmail = "forgot.email"
+    static let forgotSubmit = "forgot.submit"
     static let codeField = "code.field"
     static let codeSubmit = "code.submit"
     static let setPasswordField = "setpassword.field"

@@ -30,19 +30,15 @@ final class ScreenshotTourUITests: UITestCase {
         app.launch()
         require(app.buttons[AccessibilityID.signInDev], "signin.dev")
         shoot(app, "signin-collapsed")
-        // Capture the email + password form, then the 6-digit code screen (§5 area 1).
-        // The email field carries AccessibilityID.signInEmail; "Create an account"
-        // (signInCreate) requests a sign-up code → CodeEntryView ("Confirm your email").
-        let emailField = app.textFields[AccessibilityID.signInEmail]
-        if emailField.waitForExistence(timeout: 4) {
-            emailField.tap(); emailField.typeText("dev@snapceipt.cc")
-            shoot(app, "signin-email-keyboard")          // keyboard-up form shot
-        }
-        let createBtn = app.buttons[AccessibilityID.signInCreate]
-        if createBtn.waitForExistence(timeout: 2), createBtn.isHittable {
-            createBtn.tap()                              // request a sign-up code
-            if app.staticTexts["Confirm your email"].waitForExistence(timeout: 4) {
-                shoot(app, "code-entry")
+        // Landing → dedicated email login page (§5 area 1). "Sign in with Email"
+        // (signInWithEmail) pushes EmailLoginView (the email field there is signInEmail).
+        let emailBtn = app.buttons[AccessibilityID.signInWithEmail]
+        if emailBtn.waitForExistence(timeout: 4), emailBtn.isHittable {
+            emailBtn.tap()
+            let emailField = app.textFields[AccessibilityID.signInEmail]
+            if emailField.waitForExistence(timeout: 4) {
+                emailField.tap(); emailField.typeText("dev@snapceipt.cc")
+                shoot(app, "email-login")                // dedicated email-login page
             }
         }
         // Relaunch signed-out to reach Onboarding via dev sign-in deterministically
