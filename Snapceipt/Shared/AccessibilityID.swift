@@ -230,6 +230,7 @@ enum AccessibilityID {
     static let profileRowLegal = "profile.row.legal"                    // opens external Terms URL
     // Tax & GST
     static let taxScreen = "tax.screen"
+    static let taxSave = "tax.save"
     static let taxGstToggle = "tax.gst.toggle"
     static let taxAbnField = "tax.abn.field"
     static let taxFyStart = "tax.fy.start"
