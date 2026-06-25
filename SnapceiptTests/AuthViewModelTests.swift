@@ -179,6 +179,20 @@ struct AuthViewModelTests {
         #expect(vm.codeSentCount == 2)
     }
 
+    @Test("resendCode FAILURE stays on the code screen (.awaitingCode) + sets lastError")
+    func resendCodeFailureStaysOnCodeScreen() async {
+        let mock = makeMock()
+        let vm = AuthViewModel(api: mock, auth: makeStore())
+        await vm.startCode(email: "maya@example.com", purpose: .signUp)   // → .awaitingCode
+        mock.otpRequestHandler = { _ in
+            throw APIError(code: "RATE_LIMITED", message: "Too many attempts", status: 429)
+        }
+        await vm.resendCode()
+        #expect(vm.lastError != nil)
+        if case .awaitingCode = vm.state {} else { Issue.record("expected awaitingCode, got \(vm.state)") }
+        #expect(vm.codeSentCount == 1)   // not bumped on failure
+    }
+
     // MARK: Set / skip password
 
     @Test("setPassword success → signedIn + calls passwordSet")

@@ -267,10 +267,21 @@ final class AuthViewModel {
         }
     }
 
-    /// Re-send the current code (from the code screen).
+    /// Re-send the current code WITHOUT leaving the code screen. Delegating to `startCode` would
+    /// flip to `.working`/`.signedOut` (which RootView routes to SignInView, unmounting
+    /// CodeEntryView and stranding a failed resend's error on the landing), so resend keeps
+    /// `state == .awaitingCode` and only touches `lastError` / `codeSentCount`.
     func resendCode() async {
-        guard let email = pendingEmail, let purpose = pendingPurpose else { return }
-        await startCode(email: email, purpose: purpose)
+        guard let email = pendingEmail else { return }
+        lastError = nil
+        do {
+            try await api.otpRequest(email: email)
+            codeSentCount += 1
+        } catch let e as APIError {
+            lastError = Self.message(for: e)
+        } catch {
+            lastError = "Couldn't resend the code. Check your connection and try again."
+        }
     }
 
     /// Verify the 6-digit code. Always signs the user in; sign-up/reset then prompt for a password.
@@ -321,6 +332,10 @@ final class AuthViewModel {
 
     /// Abandon the current code/password flow and return to the sign-in screen.
     func cancelFlow() { lastError = nil; pendingEmail = nil; pendingPurpose = nil; state = .signedOut }
+
+    /// Clear the inline error — called when an auth sub-page appears so a stale error from a
+    /// previous screen doesn't bleed onto a fresh one.
+    func clearError() { lastError = nil }
 
     // MARK: Dev sign-in
 

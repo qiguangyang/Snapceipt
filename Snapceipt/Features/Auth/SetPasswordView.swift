@@ -30,7 +30,7 @@ struct SetPasswordView: View {
                 .submitLabel(.next)
                 .focused($focus, equals: .password)
                 .onSubmit { focus = .confirm }
-                .modifier(PwField())
+                .authField()
                 .accessibilityIdentifier(AccessibilityID.setPasswordField)
 
             SecureField("Confirm password", text: $confirm)
@@ -38,7 +38,7 @@ struct SetPasswordView: View {
                 .submitLabel(.go)
                 .focused($focus, equals: .confirm)
                 .onSubmit { if canSubmit { submit() } }
-                .modifier(PwField())
+                .authField()
 
             if let err = vm.lastError {
                 Text(err).font(.ui(13)).foregroundStyle(Palette.alert)
@@ -82,18 +82,6 @@ struct SetPasswordView: View {
             _ = await vm.setPassword(pw)
             busy = false
         }
-    }
-}
-
-/// Paper-filled rounded field chrome for the password fields.
-private struct PwField: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .font(.ui(16))
-            .padding(.horizontal, 14)
-            .frame(height: 54)
-            .background(Palette.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Palette.line, lineWidth: 1))
     }
 }
 
