@@ -125,6 +125,7 @@ struct ReceiptDetailView: View {
         if row.isIncome {
             items.append(("Type", "Income", Palette.income))
         } else {
+            items.append(("Type", "Expense", Palette.ink))
             items.append(("Category", row.category.flatMap { CATS[$0]?.label } ?? txn.catKey.capitalized, Palette.ink))
         }
         items.append(("Date", Self.longDate(txn.txnDate), Palette.ink))
