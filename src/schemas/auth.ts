@@ -52,3 +52,18 @@ export const refreshBody = z.object({
 });
 
 export type RefreshBody = z.infer<typeof refreshBody>;
+
+/** POST /auth/password/set — set/change the signed-in user's password (min 8 chars). */
+export const passwordSetBody = z.object({
+  password: z.string().min(8).max(128),
+});
+
+export type PasswordSetBody = z.infer<typeof passwordSetBody>;
+
+/** POST /auth/password/login — email + password. A new (untrusted) device gets an MFA code. */
+export const passwordLoginBody = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(1).max(128),
+});
+
+export type PasswordLoginBody = z.infer<typeof passwordLoginBody>;

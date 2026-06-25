@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { ZodSchema } from "zod";
 import type { ValidationTargets } from "hono";
@@ -17,6 +17,7 @@ import {
 import { sendMagicLinkEmail, sendSignInCode } from "../lib/email";
 import { verifyAppleIdentityToken } from "../lib/apple";
 import { requireAuth } from "../middleware/auth";
+import { hashPassword, verifyPassword } from "../lib/password";
 import {
   appleBody,
   magicLinkRequestBody,
@@ -24,6 +25,8 @@ import {
   otpRequestBody,
   otpVerifyBody,
   refreshBody,
+  passwordSetBody,
+  passwordLoginBody,
 } from "../schemas/auth";
 
 /**
@@ -261,10 +264,11 @@ authRoutes.post(
  * enumeration). Under E2E_TEST_MODE the code is echoed as devCode. The per-email
  * + per-IP "auth" rate-limit tier already covers this path.
  */
-authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
-  const { email } = c.req.valid("json");
-  const normalized = normalizeEmail(email);
-
+/** Mint a 6-digit code, store ONLY its sha256 in KV under `oc:<sha256(email)>` (600s TTL,
+ *  {codeHash, email, attempts, expiresAtMs}), and email it (background send; E2E does a
+ *  best-effort sync send). Returns the plaintext code so an E2E caller can echo it. Shared by
+ *  /otp/request and the new-device MFA path of /password/login. */
+async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<string> {
   const code = sixDigitCode();
   const codeHash = await sha256Hex(code);
   const emailHash = await sha256Hex(normalized);
@@ -274,23 +278,27 @@ authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
     JSON.stringify({ codeHash, email: normalized, attempts: 0, expiresAtMs }),
     { expirationTtl: OTP_TTL_SECONDS },
   );
-
-  const e2e = c.env.E2E_TEST_MODE === "1";
-  if (e2e) {
+  if (c.env.E2E_TEST_MODE === "1") {
     try {
       await sendSignInCode(c.env, { to: normalized, code });
     } catch {
       // E2E-only: ignore the missing/failing local SendEmail binding.
     }
-    return c.json({ devCode: code }, 202);
+  } else {
+    // Background send (waitUntil) so a slow/failing provider can't block the request.
+    c.executionCtx.waitUntil(
+      sendSignInCode(c.env, { to: normalized, code }).catch((err) => {
+        console.error("otp email send failed", err);
+      }),
+    );
   }
-  // Background send (waitUntil) so a slow/failing email provider can't block or time out
-  // the request; the client gets 202 regardless. Failures are logged for diagnosis.
-  c.executionCtx.waitUntil(
-    sendSignInCode(c.env, { to: normalized, code }).catch((err) => {
-      console.error("otp email send failed", err);
-    }),
-  );
+  return code;
+}
+
+authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
+  const { email } = c.req.valid("json");
+  const code = await sendOtpCode(c, normalizeEmail(email));
+  if (c.env.E2E_TEST_MODE === "1") return c.json({ devCode: code }, 202);
   return c.body(null, 202);
 });
 
@@ -371,15 +379,104 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
     .bind(uuidv7(), user.id, userEmail, now)
     .run();
 
+  // A correct 6-digit code TRUSTS this device, so a later password login here skips the MFA
+  // challenge (and sign-up / passwordless code-login / new-device MFA all flow through here).
   const deviceHeader = c.req.header("X-Device-Id");
   const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
   await c.env.DB.prepare(
-    `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
-     VALUES (?, ?, 'ios', ?, ?, ?)
+    `INSERT INTO devices (id, user_id, platform, trusted_at, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        user_id = excluded.user_id,
+       trusted_at = excluded.trusted_at,
        last_seen_at = excluded.last_seen_at,
        updated_at = excluded.updated_at`,
+  )
+    .bind(deviceId, user.id, now, now, now, now)
+    .run();
+
+  const session = await issueSession(c.env.DB, {
+    userId: user.id,
+    deviceId,
+    signingKey: c.env.JWT_SIGNING_KEY,
+  });
+
+  return c.json({
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    expiresIn: 900,
+    user: { id: user.id, email: user.email, displayName: user.display_name },
+  });
+});
+
+/**
+ * POST /auth/password/set (authenticated)
+ * Set or change the signed-in user's password (min 8 chars). Used by sign-up (right after the
+ * 6-digit code verifies the new account), the optional prompt for existing users, and password
+ * changes. Trusts the device the password is set from (the user is already authenticated on it),
+ * so a later password login there isn't re-challenged with a code.
+ */
+authRoutes.post("/password/set", requireAuth(), validate("json", passwordSetBody), async (c) => {
+  const userId = c.var.userId;
+  const { password } = c.req.valid("json");
+  const now = nowMs();
+  const hash = await hashPassword(password);
+  await c.env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+    .bind(hash, now, userId)
+    .run();
+  const deviceId = c.req.header("X-Device-Id");
+  if (deviceId && deviceId.length > 0) {
+    await c.env.DB.prepare(
+      "UPDATE devices SET trusted_at = COALESCE(trusted_at, ?), updated_at = ? WHERE id = ? AND user_id = ?",
+    )
+      .bind(now, now, deviceId, userId)
+      .run();
+  }
+  return c.json({ ok: true });
+});
+
+/**
+ * POST /auth/password/login (public)
+ * Email + password. A missing account, missing password, or wrong password all return the same
+ * 401 AUTH_INVALID_CREDENTIALS (no account enumeration). On a correct password:
+ *  - TRUSTED device (verified before via a code) → issue a session.
+ *  - NEW/untrusted device → email a 6-digit code and return { mfaRequired: true } with NO
+ *    session; the client verifies it via /otp/verify, which trusts the device + issues the
+ *    session (second factor on new devices, by default).
+ */
+authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c) => {
+  const { email, password } = c.req.valid("json");
+  const normalized = normalizeEmail(email);
+
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, display_name, password_hash FROM users WHERE email = ? AND deleted_at IS NULL",
+  )
+    .bind(normalized)
+    .first<{ id: string; email: string | null; display_name: string | null; password_hash: string | null }>();
+
+  if (!user || !user.password_hash || !(await verifyPassword(password, user.password_hash))) {
+    throw new ApiError("AUTH_INVALID_CREDENTIALS", "Incorrect email or password");
+  }
+
+  const now = nowMs();
+  const deviceHeader = c.req.header("X-Device-Id");
+  const deviceId = deviceHeader && deviceHeader.length > 0 ? deviceHeader : uuidv7();
+
+  const device = await c.env.DB.prepare("SELECT trusted_at FROM devices WHERE id = ? AND user_id = ?")
+    .bind(deviceId, user.id)
+    .first<{ trusted_at: number | null }>();
+
+  if (!device?.trusted_at) {
+    const code = await sendOtpCode(c, normalized);
+    const body: { mfaRequired: true; devCode?: string } = { mfaRequired: true };
+    if (c.env.E2E_TEST_MODE === "1") body.devCode = code;
+    return c.json(body);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO devices (id, user_id, platform, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, 'ios', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at, updated_at = excluded.updated_at`,
   )
     .bind(deviceId, user.id, now, now, now)
     .run();
@@ -389,7 +486,6 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
     deviceId,
     signingKey: c.env.JWT_SIGNING_KEY,
   });
-
   return c.json({
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
