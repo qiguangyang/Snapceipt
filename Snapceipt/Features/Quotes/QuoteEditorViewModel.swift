@@ -62,6 +62,9 @@ final class QuoteEditorViewModel {
     /// Snapshot of the picked client's freeform address (mirrors clientName/clientEmail);
     /// rendered in the bill-to preview and on the hosted quote when non-empty.
     private(set) var clientAddress: String?
+    /// Snapshot of the picked client's mobile phone (mirrors clientAddress); rendered on the
+    /// hosted quote when non-empty.
+    private(set) var clientMobile: String?
 
     private(set) var number: String?
     private(set) var status: String = QuoteStatus.draft.rawValue
@@ -114,6 +117,7 @@ final class QuoteEditorViewModel {
             clientName = q.clientName
             clientEmail = q.clientEmail
             clientAddress = q.clientAddress
+            clientMobile = q.clientMobile
             number = q.number
             status = q.status
             sentAt = q.sentAt
@@ -134,6 +138,7 @@ final class QuoteEditorViewModel {
             clientName = nil
             clientEmail = nil
             clientAddress = nil
+            clientMobile = nil
             number = nil
             status = QuoteStatus.draft.rawValue
             sentAt = nil
@@ -146,9 +151,10 @@ final class QuoteEditorViewModel {
         }
     }
 
-    func setClient(name: String, email: String?, address: String? = nil) {
+    func setClient(name: String, email: String?, mobile: String? = nil, address: String? = nil) {
         clientName = name
         clientEmail = email
+        clientMobile = mobile
         clientAddress = address
     }
 
@@ -181,6 +187,7 @@ final class QuoteEditorViewModel {
         quote.clientName = clientName
         quote.clientEmail = clientEmail
         quote.clientAddress = clientAddress
+        quote.clientMobile = clientMobile
         quote.gstEnabled = gstEnabled
         quote.gstInclusive = gstInclusive
         quote.subtotalCents = t.subtotal

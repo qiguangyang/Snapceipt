@@ -153,6 +153,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       clientName: "client_name",
       clientEmail: "client_email",
       clientAddress: "client_address",
+      clientMobile: "client_mobile",
       gstEnabled: "gst_enabled",
       gstInclusive: "gst_inclusive",
       subtotalCents: "subtotal_cents",

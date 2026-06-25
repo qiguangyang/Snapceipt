@@ -9,6 +9,7 @@ function data(overrides: Partial<QuoteHtmlData> = {}): QuoteHtmlData {
     clientName: "Jane Roe",
     clientEmail: "jane@example.com",
     clientAddress: "9 Client Rd\nMelbourne VIC 3000",
+    clientMobile: "0411 222 333",
     gstEnabled: true,
     gstInclusive: false,
     gstRateBp: 1500,
@@ -66,6 +67,14 @@ describe("renderQuoteHtml", () => {
     const html = renderQuoteHtml(data({ clientAddress: null }));
     expect(html).not.toContain("9 Client Rd");
     expect(html).not.toContain("Melbourne VIC 3000");
+  });
+
+  it("renders the client mobile in the To block when set", () => {
+    expect(renderQuoteHtml(data())).toContain("0411 222 333");
+  });
+
+  it("omits the client mobile when null", () => {
+    expect(renderQuoteHtml(data({ clientMobile: null }))).not.toContain("0411 222 333");
   });
 
   it("inlines the logo data-URI in an <img>", () => {
