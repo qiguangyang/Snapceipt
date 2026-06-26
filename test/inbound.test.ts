@@ -34,6 +34,36 @@ function mimeWithImage(messageId: string): ArrayBuffer {
   return new TextEncoder().encode(raw).buffer as ArrayBuffer;
 }
 
+// A multipart/related MIME with an INLINE (cid-referenced) image — how Gmail encodes an
+// image PASTED INTO THE BODY (Content-Disposition: inline + a Content-ID the HTML references
+// via cid:). PostalMime flags such parts `related`. `b64` controls the decoded payload size,
+// so a test can build a large "receipt photo" inline part or a tiny "logo/tracking-pixel" one.
+function mimeWithInlineImage(messageId: string, b64: string): ArrayBuffer {
+  const raw = [
+    "From: supplier@example.com",
+    "To: receipts@example.com",
+    `Message-ID: <${messageId}>`,
+    "Subject: receipt in the body",
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/related; boundary="REL"',
+    "",
+    "--REL",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    '<div>Here is my receipt:<br><img src="cid:rcpt@snap"></div>',
+    "--REL",
+    'Content-Type: image/jpeg; name="inline.jpg"',
+    "Content-Transfer-Encoding: base64",
+    "Content-ID: <rcpt@snap>",
+    'Content-Disposition: inline; filename="inline.jpg"',
+    "",
+    b64,
+    "--REL--",
+    "",
+  ].join("\r\n");
+  return new TextEncoder().encode(raw).buffer as ArrayBuffer;
+}
+
 // A MIME with NO attachments (text only).
 function mimeTextOnly(messageId: string): ArrayBuffer {
   const raw = [
@@ -139,6 +169,24 @@ describe("inboundEmailLogic", () => {
     const { address } = await seedProfileWithInbox();
     const res = await inboundEmailLogic(emailEnv(), {
       to: address, from: "x@e.com", messageId: "<m2>", raw: mimeTextOnly("m2"),
+    }, nowMs());
+    expect(res).toEqual({ status: "rejected", reason: "no_image" });
+  });
+
+  it("keeps a large inline (pasted-in-body) image — a cid-embedded receipt photo must not be dropped as a logo", async () => {
+    const { address } = await seedProfileWithInbox();
+    const bigInline = "/9j/".repeat(3500); // ~10.5 KB decoded — well above the inline-image floor
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<inline-big>", raw: mimeWithInlineImage("inline-big", bigInline),
+    }, nowMs());
+    expect(res.status).toBe("created");
+  });
+
+  it("still skips a tiny inline image (signature logo / tracking pixel) -> no_image", async () => {
+    const { address } = await seedProfileWithInbox();
+    const tinyInline = "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBD"; // ~24 bytes
+    const res = await inboundEmailLogic(emailEnv(), {
+      to: address, from: "x@e.com", messageId: "<inline-tiny>", raw: mimeWithInlineImage("inline-tiny", tinyInline),
     }, nowMs());
     expect(res).toEqual({ status: "rejected", reason: "no_image" });
   });

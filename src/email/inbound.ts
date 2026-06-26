@@ -12,6 +12,9 @@ import { capForPlan, currentPeriod, getUsage, incrementUsage } from "../lib/smar
 import { notifyEmailInBatch } from "./notify";
 
 const MAX_IMAGE_BYTES = 6_291_456; // 6 MiB — mirrors images.ts
+/** Inline (cid-embedded) images below this are treated as signature logos / tracking pixels and
+ *  skipped; a receipt photo pasted into the email body (Gmail inlines pasted images) is far larger. */
+const MIN_INLINE_IMAGE_BYTES = 10_000; // 10 KB
 /** Max receipt attachments processed from a single email (bounds Gemini spend / abuse). */
 const MAX_ATTACHMENTS = 8;
 /** Max inbound emails accepted per inbox alias per hour (coarse flood throttle). */
@@ -156,18 +159,22 @@ export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: numb
     return { status: "rejected", reason: "rate_limited" };
   }
 
-  // 3. Parse MIME; collect every receipt-like attachment (images + PDFs), skipping embedded
-  //    signature logos / tracking pixels (`related`) and tiny files, capped per email.
+  // 3. Parse MIME; collect every receipt-like attachment (images + PDFs), skipping TINY embedded
+  //    signature logos / tracking pixels and non-receipt/oversized files, capped per email. A LARGE
+  //    cid-embedded image is kept — a receipt photo pasted into the body is also cid-embedded.
   const parsed = await new PostalMime().parse(msg.raw);
   const candidates: { buf: ArrayBuffer; contentType: string }[] = [];
   for (const att of parsed.attachments ?? []) {
     const ab = toArrayBuffer(att.content as ArrayBuffer | Uint8Array | string);
-    // Skip ONLY cid-embedded parts (signature logos / tracking pixels) and non-receipt types.
-    // Do NOT skip on disposition=inline — Outlook/Hotmail mark genuinely-attached receipts inline.
+    // A cid-embedded (`related`) part is usually a signature logo / tracking pixel — but a receipt
+    // photo PASTED INTO THE BODY (e.g. Gmail inlines pasted images) is also `related`. Size is the
+    // discriminator: logos/pixels are tiny, a real photo is large — so skip only TINY embedded
+    // images, and keep large ones. Don't skip on disposition=inline alone (Outlook/Hotmail mark
+    // genuinely-attached receipts inline).
     const skip =
-      att.related ? "embedded"
-      : (!isImage(att.mimeType) && !isPdf(att.mimeType)) ? "not-receipt-type"
+      (!isImage(att.mimeType) && !isPdf(att.mimeType)) ? "not-receipt-type"
       : ab.byteLength === 0 ? "empty"
+      : (att.related && ab.byteLength < MIN_INLINE_IMAGE_BYTES) ? "embedded-tiny"
       : ab.byteLength > MAX_IMAGE_BYTES ? "too-big"
       : candidates.length >= MAX_ATTACHMENTS ? "over-cap"
       : null;
