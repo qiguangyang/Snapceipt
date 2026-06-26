@@ -87,6 +87,13 @@ export type Env = {
    * engaged when the AI binding is absent. MUST be undefined in production.
    */
   E2E_EMAIL_MODE?: string;
+  /**
+   * App Review accommodation: the email of ONE demo account that may clear new-device 2FA with
+   * the fixed code "123456" (so an App Store reviewer on a fresh device isn't blocked by the
+   * emailed code). UNSET in normal production; set ONLY during a review. Only this account is
+   * affected and the password is still required. Remove after approval.
+   */
+  REVIEW_DEMO_EMAIL?: string;
 };
 
 /**

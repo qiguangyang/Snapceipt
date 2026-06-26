@@ -324,30 +324,42 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
   const emailHash = await sha256Hex(normalized);
   const kvKey = `oc:${emailHash}`;
 
-  const raw = await c.env.KV.get(kvKey);
-  if (!raw) throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired sign-in code");
-  const pending = JSON.parse(raw) as {
-    codeHash: string;
-    email: string;
-    attempts: number;
-    expiresAtMs: number;
-  };
+  // App Review accommodation: the configured demo account accepts the fixed code "123456" so a
+  // reviewer on a fresh device clears new-device 2FA without an emailed code. Inert unless
+  // REVIEW_DEMO_EMAIL is set, and only this one account is affected (its password was already
+  // verified by /password/login; this bypasses ONLY the second factor). See env.ts.
+  const reviewEmail = c.env.REVIEW_DEMO_EMAIL?.trim()
+    ? normalizeEmail(c.env.REVIEW_DEMO_EMAIL) : null;
+  const reviewBypass = reviewEmail !== null && normalized === reviewEmail && code === "123456";
 
-  if (!constantTimeEqual(await sha256Hex(code), pending.codeHash)) {
-    const attempts = (pending.attempts ?? 0) + 1;
-    if (attempts >= OTP_MAX_ATTEMPTS) {
-      await c.env.KV.delete(kvKey);
-      throw new ApiError("AUTH_INVALID_TOKEN", "Too many attempts, request a new code");
+  let userEmail: string;
+  if (reviewBypass) {
+    userEmail = normalized;
+  } else {
+    const raw = await c.env.KV.get(kvKey);
+    if (!raw) throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired sign-in code");
+    const pending = JSON.parse(raw) as {
+      codeHash: string;
+      email: string;
+      attempts: number;
+      expiresAtMs: number;
+    };
+
+    if (!constantTimeEqual(await sha256Hex(code), pending.codeHash)) {
+      const attempts = (pending.attempts ?? 0) + 1;
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        await c.env.KV.delete(kvKey);
+        throw new ApiError("AUTH_INVALID_TOKEN", "Too many attempts, request a new code");
+      }
+      const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - nowMs()) / 1000));
+      await c.env.KV.put(kvKey, JSON.stringify({ ...pending, attempts }), { expirationTtl: ttl });
+      throw new ApiError("VALIDATION_FAILED", "Incorrect code");
     }
-    const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - nowMs()) / 1000));
-    await c.env.KV.put(kvKey, JSON.stringify({ ...pending, attempts }), { expirationTtl: ttl });
-    throw new ApiError("VALIDATION_FAILED", "Incorrect code");
+
+    // Correct: single-use delete before issuing.
+    await c.env.KV.delete(kvKey);
+    userEmail = normalizeEmail(pending.email);
   }
-
-  // Correct: single-use delete before issuing.
-  await c.env.KV.delete(kvKey);
-
-  const userEmail = normalizeEmail(pending.email);
   const now = nowMs();
 
   let user = await c.env.DB.prepare(

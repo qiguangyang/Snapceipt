@@ -206,3 +206,37 @@ describe("POST /auth/otp/verify", () => {
     expect(body.error.code).toBe("AUTH_INVALID_TOKEN");
   });
 });
+
+// REVIEW_DEMO_EMAIL = "reviewer@snapceipt.cc" is set in vitest.config.ts (the worker reads it there).
+describe("POST /auth/otp/verify — App Review demo bypass", () => {
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM sessions");
+    await env.DB.exec("DELETE FROM auth_identities");
+    await env.DB.exec("DELETE FROM devices");
+    await env.DB.exec("DELETE FROM users");
+  });
+
+  it("accepts the fixed 123456 for the demo email (no pending code); wrong code + other emails fall through", async () => {
+    // Demo email + 123456 → session issued WITHOUT any emailed/pending code (case-insensitive).
+    const ok = await SELF.fetch("https://x/auth/otp/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Device-Id": "rev-dev" },
+      body: JSON.stringify({ email: "Reviewer@Snapceipt.cc", code: "123456" }),
+    });
+    expect(ok.status).toBe(200);
+
+    // Demo email + a NON-123456 code → no bypass → normal flow → 401 (no pending).
+    const wrong = await SELF.fetch("https://x/auth/otp/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "reviewer@snapceipt.cc", code: "000000" }),
+    });
+    expect(wrong.status).toBe(401);
+
+    // A DIFFERENT email + 123456 → no bypass (email != the demo) → 401.
+    const other = await SELF.fetch("https://x/auth/otp/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "someone@else.com", code: "123456" }),
+    });
+    expect(other.status).toBe(401);
+  });
+});
