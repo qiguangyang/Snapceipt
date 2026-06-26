@@ -55,6 +55,12 @@ describe("GST reconcile + tail trim + merchant detect", () => {
     // no valid printed line the model value clamps to total/11.
     expect(reconcileGst(11.55, 117.23, "GST 88.00\nTotal 117.23", "AUD")).toBe(10.66); // 117.23/11
   });
+  it("trusts the vision AI's GST on the image path (no OCR text) — no total/11 override", () => {
+    // Cloud image scan sends no OCR text; the model read GST 11.55 off the receipt. A 1.73 surcharge
+    // pushes it above total/11 (10.66), but it's the AI's reading of the printed value — keep it,
+    // don't second-guess the model with a formula.
+    expect(reconcileGst(11.55, 117.23, "", "AUD")).toBe(11.55);
+  });
   it("clamps an impossible GST to the NZ inclusive cap (15% = total×3/23) when none is printed", () => {
     expect(reconcileGst(88, 115, "TOTAL 115.00", "NZD")).toBe(15); // 115 × 3/23 = 15.00
   });
