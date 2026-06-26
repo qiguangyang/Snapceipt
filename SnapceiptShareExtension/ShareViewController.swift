@@ -1,93 +1,147 @@
 import UIKit
+import SwiftUI
 import PDFKit
 import UniformTypeIdentifiers
 import OSLog
 
 private let shareLog = Logger(subsystem: "app.snapceipt", category: "share")
 
-/// Mirrors UIApplication's `open(_:options:completionHandler:)` (ObjC selector
-/// `openURL:options:completionHandler:`), which is compile-time-unavailable to extensions. Casting
-/// the responder-chain UIApplication to this @objc protocol dispatches the real method at runtime.
-@objc private protocol URLOpening {
-    @objc func open(_ url: URL, options: [AnyHashable: Any], completionHandler: ((Bool) -> Void)?)
-}
-
-/// Share Extension entry point. Accepts an image or PDF shared from another app, reduces it to a
-/// JPEG (rasterizing a PDF's first page and keeping its embedded text), and drops it in the App
-/// Group inbox (`ShareInbox`). The main Snapceipt app imports it through the normal
-/// capture→extract→save pipeline the next time it opens. There is no UI — it processes the
-/// attachments and dismisses immediately, so sharing feels instant.
+/// Share Extension entry point. Accepts an image or PDF shared from another app, shows a popup
+/// with the receipt, READS it on-device (OCR + Foundation Models), displays merchant/total/date,
+/// and on "Save to Snapceipt" drops the JPEG + parsed draft into the App Group inbox (`ShareInbox`)
+/// for the app to file WITHOUT re-extracting. On a non-FM device (or if extraction fails) it still
+/// shows the image and saves a JPEG-only handoff, so the app re-extracts the next time it opens.
+/// There is no host-app launch — iOS blocks a Share Extension from opening its container app; the
+/// App Group inbox is the contract, drained on the app's next launch/foreground.
 final class ShareViewController: UIViewController {
+    private let model = ShareReviewModel()
+    /// Embedded text from a shared PDF (selectable text beats re-OCRing a rendered page).
+    private var pdfText: String?
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        Task { await handleShare() }
+        embedPopup()
+        Task { await loadAndRead() }
     }
 
-    private func handleShare() async {
+    private func embedPopup() {
+        let root = ShareReviewView(
+            model: model,
+            onSave: { [weak self] in self?.save() },
+            onCancel: { [weak self] in self?.cancel() })
+        let host = UIHostingController(rootView: root)
+        addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        host.didMove(toParent: self)
+    }
+
+    // MARK: Load + read
+
+    /// Pull the shared image/PDF into memory, then run on-device extraction.
+    private func loadAndRead() async {
         let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
-        var wrote = false
+        var loadedImage: UIImage?
         for item in items {
-            for provider in item.attachments ?? [] {
-                // PDF first: a native PDF carries selectable text we can feed to extraction
-                // (far better than re-OCRing a rendered page). public.image is the catch-all.
+            for provider in item.attachments ?? [] where loadedImage == nil {
+                // PDF first: a native PDF carries selectable text that beats re-OCRing a page.
                 if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
-                    wrote = await ingestPDF(provider) || wrote
+                    loadedImage = await imageFromPDF(provider)
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                    wrote = await ingestImage(provider) || wrote
+                    loadedImage = await imageFromImage(provider)
                 }
             }
         }
-        // Open the host app so it reads the receipt RIGHT AWAY (its inbox drain runs on foreground /
-        // launch). NOTE: extensionContext.open() does NOT work for Share Extensions (Today widgets
-        // only) — we walk the responder chain to UIApplication and invoke openURL: at runtime. If
-        // that ever fails, the receipt still imports next time the app opens (the App Group inbox).
-        shareLog.info("share: wrote=\(wrote, privacy: .public)")
-        if wrote, let url = URL(string: "snapceipt://import") {
-            openHostApp(url)
-            // Let the openURL: dispatch reach the system before we tear down the extension process.
-            try? await Task.sleep(for: .milliseconds(400))
+        guard let image = loadedImage else {
+            shareLog.error("share: no image/PDF in the shared item")
+            // Nothing we can do with this share — dismiss.
+            extensionContext?.cancelRequest(withError: NSError(
+                domain: "app.snapceipt.share", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "No image or PDF to read."]))
+            return
         }
-        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        model.image = image
+        model.phase = .reading
+        let draft = await extract(image: image, pdfText: pdfText)
+        model.draft = draft
+        model.phase = .ready
+        shareLog.info("share: read done, hasDraft=\(draft != nil, privacy: .public)")
     }
 
-    /// Launch the containing app via its URL scheme. `UIApplication.shared`/`open(_:)` are unavailable
-    /// to extensions at compile time, so we find the live UIApplication on the responder chain and
-    /// `perform("openURL:")` at runtime — the standard (and only reliable) way for a Share Extension
-    /// to open its host app.
-    private func openHostApp(_ url: URL) {
-        let legacy = NSSelectorFromString("openURL:")
-        var responder: UIResponder? = self
-        var hop = 0
-        while let r = responder {
-            shareLog.info("openHostApp hop \(hop): \(String(describing: type(of: r)), privacy: .public)")
-            // Modern UIApplication.open(_:options:completionHandler:) via the @objc protocol cast.
-            if let opener = r as AnyObject as? URLOpening {
-                shareLog.info("openHostApp: open(_:options:) via \(String(describing: type(of: r)), privacy: .public)")
-                opener.open(url, options: [:], completionHandler: nil)
-                return
+    /// On-device extraction: OCR → layout rows → Foundation Models. Returns nil when FM is
+    /// unavailable (older iOS / not eligible) or extraction throws, so the caller falls back to a
+    /// JPEG-only handoff (the app re-extracts on open). A PDF's embedded text skips OCR entirely.
+    private func extract(image: UIImage, pdfText: String?) async -> ExtractedReceipt? {
+        guard let extractor = OnDeviceAI.makeExtractor() else { return nil }
+        let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
+        do {
+            let lines: [RecognizedLine]
+            if let pdfText, !pdfText.isEmpty {
+                // PDF text is already in reading order (zero-box lines).
+                lines = pdfText.split(separator: "\n", omittingEmptySubsequences: true).map {
+                    RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
+                }
+            } else {
+                lines = try await OCR.recognize(in: image)
             }
-            // Fallback to the legacy single-arg openURL: selector.
-            if r.responds(to: legacy) {
-                shareLog.info("openHostApp: legacy openURL: via \(String(describing: type(of: r)), privacy: .public)")
-                r.perform(legacy, with: url)
-                return
-            }
-            responder = r.next
-            hop += 1
+            let rawText = lines.map(\.text).joined(separator: "\n")
+            let layoutText = ReceiptRows.rows(from: lines).joined(separator: "\n")
+            return try await extractor.extract(
+                ocrText: rawText, layoutText: layoutText, capturedAt: capturedAt)
+        } catch {
+            shareLog.error("share: extraction failed: \(String(describing: error), privacy: .public)")
+            return nil
         }
-        shareLog.error("openHostApp: no opener on the responder chain after \(hop) hops")
     }
 
-    private func ingestImage(_ provider: NSItemProvider) async -> Bool {
-        guard let data = await loadData(provider, UTType.image.identifier),
-              let image = UIImage(data: data) else { return false }
-        do { try ShareInbox.write(jpeg: Self.jpeg(from: image), text: nil); return true }
-        catch { return false }
+    // MARK: Save / Cancel
+
+    private func save() {
+        guard let image = model.image else { cancel(); return }
+        model.phase = .saving
+        let jpeg = Self.jpeg(from: image)
+        do {
+            if let draft = model.draft {
+                try ShareInbox.write(jpeg: jpeg, draft: draft)
+            } else {
+                // No on-device draft — hand off the JPEG (+ any PDF text) so the app re-extracts.
+                try ShareInbox.write(jpeg: jpeg, text: pdfText)
+            }
+            shareLog.info("share: saved, hadDraft=\(self.model.draft != nil, privacy: .public)")
+        } catch {
+            shareLog.error("share: write failed: \(String(describing: error), privacy: .public)")
+            extensionContext?.cancelRequest(withError: error)
+            return
+        }
+        // Brief "Saved ✓" confirmation, then complete.
+        model.phase = .saved
+        Task {
+            try? await Task.sleep(for: .milliseconds(550))
+            extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        }
     }
 
-    private func ingestPDF(_ provider: NSItemProvider) async -> Bool {
+    private func cancel() {
+        extensionContext?.cancelRequest(withError: NSError(
+            domain: "app.snapceipt.share", code: NSUserCancelledError))
+    }
+
+    // MARK: Attachment loading
+
+    private func imageFromImage(_ provider: NSItemProvider) async -> UIImage? {
+        guard let data = await loadData(provider, UTType.image.identifier) else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func imageFromPDF(_ provider: NSItemProvider) async -> UIImage? {
         guard let data = await loadData(provider, UTType.pdf.identifier),
-              let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return false }
+              let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return nil }
         let bounds = page.bounds(for: .mediaBox)
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 2   // render at 2x so small receipt type stays legible for OCR
@@ -98,9 +152,9 @@ final class ShareViewController: UIViewController {
             ctx.cgContext.scaleBy(x: 1, y: -1)
             page.draw(with: .mediaBox, to: ctx.cgContext)
         }
-        // Embedded text — nil/empty for a scanned (image-only) PDF, which the app then OCRs.
-        do { try ShareInbox.write(jpeg: Self.jpeg(from: image), text: page.string); return true }
-        catch { return false }
+        // Embedded text — nil/empty for a scanned (image-only) PDF, which we then OCR.
+        pdfText = page.string
+        return image
     }
 
     private func loadData(_ provider: NSItemProvider, _ type: String) async -> Data? {
@@ -122,7 +176,7 @@ final class ShareViewController: UIViewController {
     }
 
     /// Downscale to a sane longest-edge and JPEG-encode for the handoff. The app re-reduces it on
-    /// save, so this only needs to be good enough for OCR + extraction (and small enough to share).
+    /// save, so this only needs to be good enough for the saved image (and small enough to share).
     static func jpeg(from image: UIImage, maxEdge: CGFloat = 2200, quality: CGFloat = 0.85) -> Data {
         let longest = max(image.size.width, image.size.height)
         guard longest > maxEdge else { return image.jpegData(compressionQuality: quality) ?? Data() }

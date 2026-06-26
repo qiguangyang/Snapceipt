@@ -45,6 +45,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
+        # Marks the app target so shared files (e.g. OnDeviceAI) can gate app-only
+        # seams like AppLaunch that the Share Extension target doesn't compile.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SNAPCEIPT_APP"
         INFOPLIST_FILE: Snapceipt/Info.plist
         CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.entitlements
         GENERATE_INFOPLIST_FILE: NO
@@ -74,6 +77,17 @@ targets:
         excludes:
           - "Info.plist"
           - "SnapceiptShareExtension.entitlements"
+      # On-device extraction (OCR + layout rows + Foundation Models) compiled into the
+      # extension so its popup reads the receipt itself — no host-app round-trip. These
+      # are PURE (Foundation/Vision/CoreGraphics/FoundationModels only); they also build
+      # in the app via its `- path: Snapceipt` tree, so they're shared, not duplicated.
+      - path: Snapceipt/Model/CategoryKey.swift
+      - path: Snapceipt/Features/Capture/ExtractedReceipt.swift
+      - path: Snapceipt/Features/Capture/Scanner/OCR.swift
+      - path: Snapceipt/Features/Capture/Scanner/ReceiptRows.swift
+      - path: Snapceipt/Features/Capture/Scanner/OnDeviceGuards.swift
+      - path: Snapceipt/Features/Capture/Scanner/OnDeviceExtracting.swift
+      - path: Snapceipt/Features/Capture/Scanner/FoundationModelExtractor.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt.ShareExtension

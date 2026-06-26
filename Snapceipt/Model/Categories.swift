@@ -1,18 +1,8 @@
 import SwiftUI
 
-/// The 9 canonical category keys (matches theme.jsx CATS + the /extract
-/// contract; there is no `other` — the extractor always picks one of these).
-enum CategoryKey: String, CaseIterable, Codable, Sendable {
-    case meals
-    case groceries
-    case fuel
-    case software
-    case office
-    case home
-    case health
-    case travel
-    case income
-}
+// `CategoryKey` lives in its own pure (Foundation-only) file `CategoryKey.swift`
+// so it can compile into the Share Extension alongside the on-device extraction
+// code. The SwiftUI-dependent display metadata below stays app-only.
 
 /// Display metadata for a category: human label, line-icon name (theme.jsx
 /// ICONS key), and the tint/soft color pair for IconCircle + chips.

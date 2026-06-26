@@ -89,7 +89,12 @@ enum OnDeviceAI {
         // resolving under XCUITest, leaving capture stuck on "Reading…". Under `-uiTestStub` force
         // the non-FM path so `isOnDeviceAIAvailable` is false (Smart Scan defaults to Cloud) and
         // capture uses the deterministic StubAPIClient cloud extract (the canned receipt).
+        // `AppLaunch` is an app-only (#if DEBUG) seam, absent from the Share Extension target —
+        // gate the reference on SNAPCEIPT_APP (defined only on the app target) so this file
+        // compiles into the extension, where there is no UI-test stub to honor.
+        #if SNAPCEIPT_APP
         if AppLaunch.current.useStub { return nil }
+        #endif
         #if canImport(FoundationModels)
         if #available(iOS 26, *) {
             switch SystemLanguageModel.default.availability {

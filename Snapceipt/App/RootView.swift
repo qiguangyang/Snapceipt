@@ -528,11 +528,14 @@ struct ShellView: View {
         await PendingExtractionReconciler(api: captureAPI, context: profiles.context, sync: sync).reconcile()
     }
 
-    /// Import receipts shared from other apps via the Share Extension. The extension dropped each
-    /// as a JPEG (+ optional PDF text) in the App Group inbox; run each through the SAME pipeline a
-    /// Files/Photos import uses — `CaptureViewModel.ingestImport` (OCR or PDF text → extract) then
-    /// `save()` — filing it under the ACTIVE profile, then delete the handoff file. A receipt saved
-    /// "pending" (offline / low-confidence) is upgraded later by `reconcilePendingExtractions`.
+    /// Import receipts shared from other apps via the Share Extension. The extension's popup READ
+    /// each receipt on-device and dropped a JPEG + a parsed `ExtractedReceipt` draft in the App
+    /// Group inbox — file that draft instantly via `CaptureViewModel.ingestSharedDraft` (no
+    /// re-extraction). For a JPEG-only fallback (no draft: a non-FM device, or extraction failed),
+    /// run the SAME pipeline a Files/Photos import uses — `ingestImport` (OCR or PDF text → extract)
+    /// then `save()`. Either way it's filed under the ACTIVE profile, then the handoff file is
+    /// deleted. A receipt saved "pending" (offline / low-confidence) is upgraded later by
+    /// `reconcilePendingExtractions`.
     private func drainSharedReceipts() async {
         let pending = ShareInbox.pending()
         guard !pending.isEmpty else { return }
@@ -546,8 +549,14 @@ struct ShellView: View {
             let vm = CaptureFactory.makeViewModel(
                 api: captureAPI, sync: sync, profiles: profiles,
                 context: profiles.context, userId: profiles.userId, reachability: reachability)
-            await vm.ingestImport(image: image, text: item.text)
-            vm.save()   // toProfileId defaults to the active profile
+            if let draft = item.draft {
+                // Already read on-device by the extension popup — file it as-is, no re-extract.
+                vm.ingestSharedDraft(image: image, draft: draft)
+            } else {
+                // No draft (non-FM device / extraction failed) — re-extract via the normal pipeline.
+                await vm.ingestImport(image: image, text: item.text)
+                vm.save()   // toProfileId defaults to the active profile
+            }
             saved += 1
         }
         if saved > 0 {

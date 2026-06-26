@@ -413,6 +413,17 @@ final class CaptureViewModel {
         }
     }
 
+    /// File a receipt the Share Extension already READ on-device. Bypasses OCR/extract entirely —
+    /// the popup ran the same on-device pipeline and handed us the finished draft — so the import
+    /// is instant. `rawText` stays empty (the OCR text lives in the extension, not the handoff);
+    /// the saved draft is the source of truth. `save()` files it under the active profile and
+    /// creates the PendingReceipt + image.
+    func ingestSharedDraft(image: UIImage, draft: ExtractedReceipt) {
+        capturedImage = image
+        self.draft = draft
+        save()   // toProfileId defaults to the active profile
+    }
+
     /// Reset to the camera for "Snap another".
     func reset() {
         extractTask?.cancel()

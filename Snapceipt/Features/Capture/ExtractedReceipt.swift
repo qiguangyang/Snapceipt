@@ -56,8 +56,9 @@ struct UploadedImage: Decodable {
     let byteSize: Int
 }
 
-/// One extracted line item (dollars on the wire).
-struct ExtractedLineItem: Decodable {
+/// One extracted line item (dollars on the wire). Codable so `ExtractedReceipt`
+/// can both decode the wire `lineItems` and re-encode them for the App Group draft.
+struct ExtractedLineItem: Codable {
     let name: String
     let price: Decimal
 }
@@ -65,10 +66,11 @@ struct ExtractedLineItem: Decodable {
 // MARK: - Editable draft
 
 /// The Review-screen draft: mirrors the wire `receipt` plus Review-editable extras
-/// (`paymentMethod`, `taxLabel`) and the local `extractionStatus`. Decodable so the
-/// response's nested `receipt` object decodes straight into it (Codable key
-/// `category` -> `categoryKey`).
-struct ExtractedReceipt: Decodable, Equatable {
+/// (`paymentMethod`, `taxLabel`) and the local `extractionStatus`. Codable so the
+/// response's nested `receipt` object decodes straight into it (wire key
+/// `category` -> `categoryKey`), AND so the Share Extension can encode a parsed
+/// draft into the App Group inbox for the app to file without re-extracting.
+struct ExtractedReceipt: Codable, Equatable {
     var merchant: String
     var date: String                 // "YYYY-MM-DD"
     var total: Decimal               // dollars, >= 0
@@ -118,6 +120,28 @@ struct ExtractedReceipt: Decodable, Equatable {
         needsReview = try c.decode(Bool.self, forKey: .needsReview)
         currencyCode = (try c.decodeIfPresent(String.self, forKey: .currencyCode)) ?? "AUD"
         // extras default; not present on the wire.
+    }
+
+    /// Mirrors `init(from:)` exactly: the same `CodingKeys` (so `categoryKey`
+    /// encodes back to the wire key `category`) and `nil`-omitting `gst`/`deductible`
+    /// to match `decodeIfPresent`. The Review-editable extras + `extractionStatus`
+    /// are deliberately NOT encoded — they aren't in `CodingKeys`, so decode of the
+    /// output round-trips them to their defaults exactly as decoding the wire does.
+    /// This is the format the Share Extension writes into the App Group draft handoff
+    /// and the app re-decodes (FM drafts carry only the wire-shaped fields).
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(merchant, forKey: .merchant)
+        try c.encode(date, forKey: .date)
+        try c.encode(total, forKey: .total)
+        try c.encodeIfPresent(gst, forKey: .gst)
+        try c.encode(categoryKey, forKey: .categoryKey)
+        try c.encodeIfPresent(deductible, forKey: .deductible)
+        try c.encode(lineItems.map { ExtractedLineItem(name: $0.name, price: $0.price) },
+                     forKey: .lineItems)
+        try c.encode(confidence, forKey: .confidence)
+        try c.encode(needsReview, forKey: .needsReview)
+        try c.encode(currencyCode, forKey: .currencyCode)
     }
 
     /// Memberwise (used by the two convenience builders + tests).
