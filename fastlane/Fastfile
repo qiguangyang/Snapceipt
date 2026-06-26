@@ -123,6 +123,8 @@ platform :ios do
       reset_ratings: false,
       # Precheck/non-interactive guards for CI.
       run_precheck_before_submit: true,
+      # Precheck can't check IAPs with an ASC API key (only Apple-ID login) — exclude them.
+      precheck_include_in_app_purchases: false,
       force: true, # skip the HTML preview/confirmation prompt
       submission_information: {
         # No IDFA / ad tracking — mirrors PrivacyInfo.xcprivacy NSPrivacyTracking=false.
