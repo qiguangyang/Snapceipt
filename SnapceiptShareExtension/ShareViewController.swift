@@ -28,12 +28,28 @@ final class ShareViewController: UIViewController {
             }
         }
         // Open the host app so it reads the receipt RIGHT AWAY (its inbox drain runs on foreground /
-        // launch). If the OS declines the open (older iOS), the receipt still imports the next time
-        // the app is opened — the App Group inbox is the durable handoff either way.
-        if wrote, let url = URL(string: "snapceipt://import"), let ctx = extensionContext {
-            ctx.open(url) { _ in ctx.completeRequest(returningItems: nil, completionHandler: nil) }
-        } else {
-            extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        // launch). NOTE: extensionContext.open() does NOT work for Share Extensions (Today widgets
+        // only) — we walk the responder chain to UIApplication and invoke openURL: at runtime. If
+        // that ever fails, the receipt still imports next time the app opens (the App Group inbox).
+        if wrote, let url = URL(string: "snapceipt://import") {
+            openHostApp(url)
+        }
+        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+    }
+
+    /// Launch the containing app via its URL scheme. `UIApplication.shared`/`open(_:)` are unavailable
+    /// to extensions at compile time, so we find the live UIApplication on the responder chain and
+    /// `perform("openURL:")` at runtime — the standard (and only reliable) way for a Share Extension
+    /// to open its host app.
+    private func openHostApp(_ url: URL) {
+        let selector = NSSelectorFromString("openURL:")
+        var responder: UIResponder? = self
+        while let r = responder {
+            if r.responds(to: selector) {
+                r.perform(selector, with: url)
+                return
+            }
+            responder = r.next
         }
     }
 
@@ -66,6 +82,8 @@ final class ShareViewController: UIViewController {
         await withCheckedContinuation { cont in
             provider.loadItem(forTypeIdentifier: type, options: nil) { item, _ in
                 if let url = item as? URL {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     cont.resume(returning: try? Data(contentsOf: url))
                 } else if let data = item as? Data {
                     cont.resume(returning: data)
