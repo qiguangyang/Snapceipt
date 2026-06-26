@@ -12,7 +12,8 @@ import UniformTypeIdentifiers
 struct CameraStep: View {
     let onScanned: (UIImage) -> Void
     /// An imported file (Photos or Files). `text` is the PDF's embedded text when available
-    /// (skip OCR); nil for images. Imports skip the camera edge-adjust/dewarp.
+    /// (skip OCR); nil for images. A nil-text import (photo / image-only PDF) is document-scanned
+    /// (edge-adjust + dewarp) like a live capture.
     let onImported: (UIImage, String?) -> Void
     let onClose: () -> Void
 

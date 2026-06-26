@@ -168,7 +168,13 @@ export function reconcileGst(
   const printedCap = total * (currency === "AUD" ? 0.12 : 0.3);
   const printed = printedGst(ocrText);
   if (printed != null && printed >= 0 && printed <= printedCap) return roundCents(printed);
-  // No trusted printed line: clamp an impossible MODEL value to the inclusive cap (AU/NZ only).
+  // Vision/AI path (the image scan sends NO OCR text): the model read the receipt image directly, so
+  // TRUST its GST — don't override a correct reading with a total/11 GUESS. A card surcharge
+  // legitimately pushes GST above total/11 (printed 11.55 on a 117.23 total that includes a 1.73
+  // surcharge), which the old clamp wrongly cut to 10.66.
+  if (ocrText.trim().length === 0) return gst;
+  // Text-only path (e.g. email-in): no image and no trusted printed line, so clamp an implausible
+  // model value to the inclusive cap (AU/NZ) — the text LLM occasionally grabs an ABN/payment figure.
   const cap = inclusiveTaxCap(currency, total);
   if (cap != null && gst != null && gst > cap + 0.005) return cap;
   return gst;

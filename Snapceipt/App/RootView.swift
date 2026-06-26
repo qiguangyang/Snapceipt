@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
+import UIKit   // UIImage for the share-extension drain; beginBackgroundTask for -bgDelay (DEBUG)
 #if DEBUG
-import UIKit   // beginBackgroundTask for the -bgDelay simulate mode (DEBUG-only dev tooling)
 import Combine // .onReceive(publisher) for the Darwin-notification simulate trigger
 #endif
 
@@ -174,6 +174,9 @@ struct ShellView: View {
     /// The tab is only re-keyed on tab/profile change (not on overlay dismiss), so a
     /// receipt deleted/edited/added from an overlay wouldn't otherwise disappear/update.
     @State private var activityReloadToken = 0
+    /// Reentrancy guard for `drainSharedReceipts` — it runs from both the launch `.task`
+    /// and `scenePhase==.active`, which would otherwise double-import the same inbox file.
+    @State private var isDraining = false
 
     var body: some View {
         let accent = profiles.accent
@@ -484,6 +487,10 @@ struct ShellView: View {
             // it on every launch/activation is safe.
             backfillGstDefaultsForActive()
             await sync.sync()
+            // Drain shared receipts BEFORE reconciling so a freshly-imported Share-Extension fallback
+            // (saved "pending" when on-device AI couldn't read the language) is cloud-upgraded by the
+            // reconciler in the SAME pass — not a foreground later.
+            await drainSharedReceipts()
             await reconcilePendingExtractions()
             #if DEBUG
             await runSimulateEmailInIfFlagged()
@@ -498,7 +505,7 @@ struct ShellView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await sync.sync(); await reconcilePendingExtractions() }
+                Task { await sync.sync(); await drainSharedReceipts(); await reconcilePendingExtractions() }
             }
         }
         // When the network path returns (offline → online), re-sync immediately rather than
@@ -525,6 +532,73 @@ struct ShellView: View {
     /// reactively via @Query when the reconciler saves.
     private func reconcilePendingExtractions() async {
         await PendingExtractionReconciler(api: captureAPI, context: profiles.context, sync: sync).reconcile()
+    }
+
+    /// Import receipts shared from other apps via the Share Extension. The extension's popup READ
+    /// each receipt on-device and dropped a JPEG + a parsed `ExtractedReceipt` draft in the App
+    /// Group inbox — file that draft instantly via `CaptureViewModel.ingestSharedDraft` (no
+    /// re-extraction). For a JPEG-only fallback (no draft: a non-FM device, or extraction failed),
+    /// run the SAME pipeline a Files/Photos import uses — `ingestImport` (OCR or PDF text → extract)
+    /// then `save()`. Either way it's filed under the ACTIVE profile, then the handoff file is
+    /// deleted. A receipt saved "pending" (offline / low-confidence) is upgraded later by
+    /// `reconcilePendingExtractions`.
+    private func drainSharedReceipts() async {
+        // Reentrancy guard: this runs from BOTH the launch `.task` and `scenePhase==.active`.
+        // Without it, a cold-launch-from-share plus a quick background/foreground re-reads the same
+        // not-yet-deleted inbox file (the per-item delete lands AFTER an await) and imports the
+        // receipt twice — and the duplicate survives reconcile as two cloud-upgraded txns. Mirrors
+        // CaptureHost.drainQueues.
+        guard !isDraining else { return }
+        isDraining = true
+        defer { isDraining = false }
+
+        let pending = ShareInbox.pending()
+        guard !pending.isEmpty else { return }
+        // No profile to file under → leave the inbox files untouched and try again on the next drain
+        // (it self-heals once a profile exists), rather than deleting them and dropping the receipts
+        // behind a false "added" toast.
+        guard profiles.activeProfile != nil
+            || profiles.profiles.contains(where: { $0.id == profiles.activeProfileId }) else { return }
+
+        // Visible feedback so a share that just opened the app shows it's "reading" right away.
+        toasts.show(pending.count == 1 ? "Reading shared receipt…"
+                                       : "Reading \(pending.count) shared receipts…", kind: .info)
+        var saved = 0
+        for item in pending {
+            // A non-decodable JPEG can never be imported — drop it so it doesn't re-read forever.
+            guard let image = UIImage(data: item.jpeg) else { ShareInbox.delete(item); continue }
+            let vm = CaptureFactory.makeViewModel(
+                api: captureAPI, sync: sync, profiles: profiles,
+                context: profiles.context, userId: profiles.userId, reachability: reachability)
+            if let draft = item.draft {
+                // Already read on-device by the extension popup — file it as-is, no re-extract.
+                vm.ingestSharedDraft(image: image, draft: draft)
+            } else if let text = item.text, !text.isEmpty {
+                // A PDF's embedded text — extract via the normal pipeline (no OCR needed).
+                await vm.ingestImport(image: image, text: text)
+                vm.save()   // toProfileId defaults to the active profile
+            } else {
+                // No draft and no text — e.g. a non-FM device (no on-device AI) sharing a photo.
+                // OCR the image on-device, then run the SAME extract→save pipeline a live capture
+                // uses. Without this the photo could never import headlessly: ingestImport(text: nil)
+                // only stages it for an interactive Confirm, so save() would bail (no draft) and the
+                // item would sit in the inbox re-prompting "Reading…" on every foreground. An empty
+                // OCR result still yields a reviewable pending draft (the reconciler upgrades it).
+                let lines = (try? await OCR.recognize(in: image)) ?? []
+                await vm.onScanned(image: image, lines: lines)
+                vm.save()   // toProfileId defaults to the active profile
+            }
+            // Only delete the handoff + count it once the receipt ACTUALLY persisted. `save()` bails
+            // WITHOUT persisting if no profile resolves; deleting then would lose the receipt and the
+            // success toast would lie. A not-persisted item is left for a later drain.
+            if vm.stage == .saved {
+                ShareInbox.delete(item)
+                saved += 1
+            }
+        }
+        if saved > 0 {
+            toasts.show(saved == 1 ? "Receipt added" : "\(saved) receipts added", kind: .success)
+        }
     }
 
     #if DEBUG

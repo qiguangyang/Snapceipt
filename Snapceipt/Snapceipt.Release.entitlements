@@ -13,5 +13,12 @@
 	     it fails App Store archive validation. Intentionally absent. -->
 	<key>aps-environment</key>
 	<string>production</string>
+	<!-- Shared container with the Share Extension (see Snapceipt.entitlements). NOTE: a Release
+	     archive needs the match App Store profiles for BOTH the app and the extension regenerated
+	     with this App Group (`bundle exec fastlane certs`) or distribution signing will fail. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.snapceipt</string>
+	</array>
 </dict>
 </plist>

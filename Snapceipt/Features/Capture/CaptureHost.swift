@@ -17,7 +17,13 @@ enum CaptureFactory {
                          // design simulates offline via the API throwing `uiTestOffline` (reachability
                          // stays true), so force online here; production uses real reachability.
                          isOnline: { [weak reachability] in
-                             AppLaunch.current.useStub ? true : (reachability?.isOnline ?? true) })
+                             // AppLaunch is a DEBUG-only test seam — in Release just use real reachability.
+                             #if DEBUG
+                             return AppLaunch.current.useStub ? true : (reachability?.isOnline ?? true)
+                             #else
+                             return reachability?.isOnline ?? true
+                             #endif
+                         })
     }
 }
 

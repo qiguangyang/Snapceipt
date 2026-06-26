@@ -179,6 +179,10 @@ struct SnapceiptApp: App {
                 .environment(entitlement)
                 .modelContainer(container)
                 .onOpenURL { url in
+                    // Share Extension (snapceipt://import): just bring the app forward — the inbox
+                    // drain on launch/foreground reads the shared receipt. Don't route it through
+                    // the budget/auth deep-link handlers.
+                    if url.scheme == "snapceipt", url.host == "import" { return }
                     // Budget deep-link (snapceipt://budget/<id>) routes to the editor first.
                     if router.handleBudgetDeepLink(url) { return }
                     // Magic-link Universal Link / custom-scheme deep link.
@@ -199,6 +203,13 @@ struct SnapceiptApp: App {
                             entitlement.applyServerPlan("pro")
                         }
                     }
+                    // Default Cloud AI by plan now that the entitlement is known: ON for Pro, OFF for
+                    // Free (no-op once the user has pinned the toggle, or auto-disabled it at the cap).
+                    AppSettings.applyPlanDefaultSmartScan(isPro: entitlement.isPro)
+                }
+                .onChange(of: entitlement.isPro) { _, isPro in
+                    // Upgrade flips an unpinned toggle ON; a downgrade flips it OFF.
+                    AppSettings.applyPlanDefaultSmartScan(isPro: isPro)
                 }
         }
     }

@@ -24,7 +24,7 @@ settings:
     # .xcodeproj is generated from this file.
     DEVELOPMENT_TEAM: "2SU47GHJQX"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "1.0.0"
+    MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   Snapceipt:
@@ -37,9 +37,17 @@ targets:
           - "Info.plist"
           - "Snapceipt.entitlements"
           - "Snapceipt.Release.entitlements"
+      # Shared App Group bridge — compiled into both the app and the Share Extension.
+      - path: SnapceiptShareExtension/ShareExtensionStore.swift
+    dependencies:
+      # Embeds the Share Extension into the app bundle's PlugIns.
+      - target: SnapceiptShareExtension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt
+        # Marks the app target so shared files (e.g. OnDeviceAI) can gate app-only
+        # seams like AppLaunch that the Share Extension target doesn't compile.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) SNAPCEIPT_APP"
         INFOPLIST_FILE: Snapceipt/Info.plist
         CODE_SIGN_ENTITLEMENTS: Snapceipt/Snapceipt.entitlements
         GENERATE_INFOPLIST_FILE: NO
@@ -58,6 +66,45 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "match AppStore app.snapceipt.Snapceipt"
+  # Share Extension: makes Snapceipt a target in other apps' share sheets for image/PDF receipts.
+  # No UI — it writes the shared file into the App Group inbox; the app imports it on next open.
+  SnapceiptShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SnapceiptShareExtension
+        excludes:
+          - "Info.plist"
+          - "SnapceiptShareExtension.entitlements"
+      # On-device extraction (OCR + layout rows + Foundation Models) compiled into the
+      # extension so its popup reads the receipt itself — no host-app round-trip. These
+      # are PURE (Foundation/Vision/CoreGraphics/FoundationModels only); they also build
+      # in the app via its `- path: Snapceipt` tree, so they're shared, not duplicated.
+      - path: Snapceipt/Model/CategoryKey.swift
+      - path: Snapceipt/Features/Capture/ExtractedReceipt.swift
+      - path: Snapceipt/Features/Capture/Scanner/DocumentScan.swift
+      - path: Snapceipt/Features/Capture/Scanner/OCR.swift
+      - path: Snapceipt/Features/Capture/Scanner/ReceiptRows.swift
+      - path: Snapceipt/Features/Capture/Scanner/OnDeviceGuards.swift
+      - path: Snapceipt/Features/Capture/Scanner/OnDeviceExtracting.swift
+      - path: Snapceipt/Features/Capture/Scanner/FoundationModelExtractor.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.snapceipt.Snapceipt.ShareExtension
+        INFOPLIST_FILE: SnapceiptShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SnapceiptShareExtension/SnapceiptShareExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+      configs:
+        Release:
+          # App Store distribution: manual signing with the match-managed extension profile
+          # (regenerated via `fastlane certs`); the App Group entitlement must be on the App ID.
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "match AppStore app.snapceipt.Snapceipt.ShareExtension"
   SnapceiptTests:
     type: bundle.unit-test
     platform: iOS
@@ -95,6 +142,7 @@ schemes:
     build:
       targets:
         Snapceipt: all
+        SnapceiptShareExtension: all
         SnapceiptTests: [test]
         SnapceiptUITests: [test]
     run:

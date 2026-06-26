@@ -62,7 +62,8 @@ platform :ios do
       xcargs: "CURRENT_PROJECT_VERSION=#{build_num} DEVELOPMENT_TEAM=#{ENV.fetch("FASTLANE_TEAM_ID")}",
       export_options: {
         provisioningProfiles: {
-          "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt"
+          "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt",
+          "app.snapceipt.Snapceipt.ShareExtension" => "match AppStore app.snapceipt.Snapceipt.ShareExtension"
         },
         # Same duplicate-cert disambiguation for the export re-sign step
         # (accepts a SHA-1 hash); .compact drops it when the env is unset.
@@ -98,7 +99,8 @@ platform :ios do
       xcargs: "CURRENT_PROJECT_VERSION=#{build_num} DEVELOPMENT_TEAM=#{ENV.fetch("FASTLANE_TEAM_ID")}",
       export_options: {
         provisioningProfiles: {
-          "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt"
+          "app.snapceipt.Snapceipt" => "match AppStore app.snapceipt.Snapceipt",
+          "app.snapceipt.Snapceipt.ShareExtension" => "match AppStore app.snapceipt.Snapceipt.ShareExtension"
         },
         signingCertificate: ENV["CODESIGN_IDENTITY"]
       }.compact
