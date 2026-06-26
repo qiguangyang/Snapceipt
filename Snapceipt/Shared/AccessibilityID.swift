@@ -206,6 +206,7 @@ enum AccessibilityID {
     static let quoteRowDelete = "quote.row.delete."      // + quote.id
     static let quoteRowDuplicate = "quote.row.duplicate." // + quote.id
     static let quotesAdd = "quotes.add"
+    static let quotesMonthPicker = "quotes.monthPicker"
     static let quoteEditorScreen = "quote.editor.screen"
     static let quoteEditorClient = "quote.editor.client"
     static let quoteEditorAddLine = "quote.editor.addLine"
@@ -369,6 +370,7 @@ enum AccessibilityID {
     static let invoicesScreen = "invoices.screen"
     static let invoiceRowPrefix = "invoice.row."          // + invoice.id
     static let invoicesAdd = "invoices.add"
+    static let invoicesMonthPicker = "invoices.monthPicker"
     static let invoiceNeedsAttentionSection = "invoices.needsAttention"
     static let invoiceEditorScreen = "invoice.editor.screen"
     static let invoiceEditorClient = "invoice.editor.client"

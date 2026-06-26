@@ -18,6 +18,9 @@ struct QuoteListView: View {
     @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: QuoteListViewModel?
     @State private var showPaywall = false
+    /// Date filter: "" = All time, else "YYYY-MM". Defaults to the current month and snaps to the
+    /// newest quote's month on load (like the Activity page's filter).
+    @State private var monthKey: String = MonthKey.current
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -34,38 +37,51 @@ struct QuoteListView: View {
                             .padding(.top, 6)
                         Spacer()
                     } else {
-                        List {
-                            ForEach(vm.quotes) { quote in
-                                Button {
-                                    guard entitlement.isPro else { showPaywall = true; return }
-                                    onEdit(quote.id)
-                                } label: { rowBody(quote) }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier(AccessibilityID.quoteRowPrefix + quote.id)
-                                    .listRowBackground(Palette.cream)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
-                                    .swipeActions(allowsFullSwipe: false) {
-                                        Button(role: .destructive) { vm.delete(quote) } label: {
-                                            Image(systemName: "trash")
+                        MonthFilterMenu(selection: $monthKey,
+                                        availableKeys: MonthKey.available(vm.quotes.map { isoDay($0.createdAt) }),
+                                        accessibilityID: AccessibilityID.quotesMonthPicker)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 8)
+                        let shown = vm.quotes.filter { MonthKey.matches(isoDay($0.createdAt), monthKey) }
+                        if shown.isEmpty {
+                            Spacer(); EmptyArt()
+                            Text("No quotes in \(MonthKey.label(monthKey))").font(.ui(15)).foregroundStyle(Palette.ink3)
+                                .padding(.top, 6)
+                            Spacer()
+                        } else {
+                            List {
+                                ForEach(shown) { quote in
+                                    Button {
+                                        guard entitlement.isPro else { showPaywall = true; return }
+                                        onEdit(quote.id)
+                                    } label: { rowBody(quote) }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier(AccessibilityID.quoteRowPrefix + quote.id)
+                                        .listRowBackground(Palette.cream)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 5, leading: 18, bottom: 5, trailing: 18))
+                                        .swipeActions(allowsFullSwipe: false) {
+                                            Button(role: .destructive) { vm.delete(quote) } label: {
+                                                Image(systemName: "trash")
+                                            }
+                                            .accessibilityIdentifier(AccessibilityID.quoteRowDelete + quote.id)
+                                            Button {
+                                                guard entitlement.isPro else { showPaywall = true; return }
+                                                if let newId = vm.duplicate(quote) { onEdit(newId) }
+                                            } label: {
+                                                Image(systemName: "plus.square.on.square")
+                                            }
+                                            .tint(accent.base)
+                                            .accessibilityIdentifier(AccessibilityID.quoteRowDuplicate + quote.id)
                                         }
-                                        .accessibilityIdentifier(AccessibilityID.quoteRowDelete + quote.id)
-                                        Button {
-                                            guard entitlement.isPro else { showPaywall = true; return }
-                                            if let newId = vm.duplicate(quote) { onEdit(newId) }
-                                        } label: {
-                                            Image(systemName: "plus.square.on.square")
-                                        }
-                                        .tint(accent.base)
-                                        .accessibilityIdentifier(AccessibilityID.quoteRowDuplicate + quote.id)
-                                    }
+                                }
                             }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .refreshable { await onRefresh(); vm.reload() }
+                            // Reserve room so the last row clears the floating "New quote" CTA.
+                            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        .refreshable { await onRefresh(); vm.reload() }
-                        // Reserve room so the last row clears the floating "New quote" CTA.
-                        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                     }
                 } else { Color.clear }
             }
@@ -82,6 +98,9 @@ struct QuoteListView: View {
             if !entitlement.isPro { showPaywall = true; return }
             await onRefresh()      // pull a client's web "Accept" before the list settles
             vm?.reload()
+            // Land on the newest quote's month so the list shows data by default (like Activity);
+            // a profile with no quotes stays on the current month.
+            if let newest = vm?.quotes.first { monthKey = String(isoDay(newest.createdAt).prefix(7)) }
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }

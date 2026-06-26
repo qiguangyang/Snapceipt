@@ -20,6 +20,9 @@ struct InvoiceListView: View {
     @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: InvoiceListViewModel?
     @State private var showPaywall = false
+    /// Date filter: "" = All time, else "YYYY-MM". Starts unset and is set on load to the newest
+    /// invoice's month (else the current month), like the Activity page's filter.
+    @State private var monthKey: String = MonthKey.allTime
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -30,32 +33,42 @@ struct InvoiceListView: View {
                     onEdit(nil)
                 })
                 if let vm {
-                    if vm.needsAttention.isEmpty && vm.others.isEmpty {
+                    if !vm.hasAny {
                         Spacer(); EmptyArt()
                         Text("No invoices yet").font(.ui(15)).foregroundStyle(Palette.ink3).padding(.top, 6)
                         Spacer()
                     } else {
-                        List {
-                            if !vm.needsAttention.isEmpty {
-                                Section {
-                                    ForEach(vm.needsAttention) { row in rowButton(vm, row) }
-                                } header: {
-                                    Text("Needs attention").font(.ui(12.5, .bold)).foregroundStyle(Palette.warn)
-                                        .accessibilityIdentifier(AccessibilityID.invoiceNeedsAttentionSection)
+                        MonthFilterMenu(selection: $monthKey, availableKeys: vm.availableMonthKeys,
+                                        accessibilityID: AccessibilityID.invoicesMonthPicker)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 8)
+                        if vm.needsAttention.isEmpty && vm.others.isEmpty {
+                            Spacer(); EmptyArt()
+                            Text("No invoices in \(MonthKey.label(monthKey))").font(.ui(15)).foregroundStyle(Palette.ink3).padding(.top, 6)
+                            Spacer()
+                        } else {
+                            List {
+                                if !vm.needsAttention.isEmpty {
+                                    Section {
+                                        ForEach(vm.needsAttention) { row in rowButton(vm, row) }
+                                    } header: {
+                                        Text("Needs attention").font(.ui(12.5, .bold)).foregroundStyle(Palette.warn)
+                                            .accessibilityIdentifier(AccessibilityID.invoiceNeedsAttentionSection)
+                                    }
+                                    .listRowBackground(Palette.cream)
                                 }
-                                .listRowBackground(Palette.cream)
-                            }
-                            if !vm.others.isEmpty {
-                                Section {
-                                    ForEach(vm.others) { row in rowButton(vm, row) }
+                                if !vm.others.isEmpty {
+                                    Section {
+                                        ForEach(vm.others) { row in rowButton(vm, row) }
+                                    }
+                                    .listRowBackground(Palette.cream)
                                 }
-                                .listRowBackground(Palette.cream)
                             }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            // Reserve room so the last row clears the floating "New invoice" CTA.
+                            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                         }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        // Reserve room so the last row clears the floating "New invoice" CTA.
-                        .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 96) }
                     }
                 } else { Color.clear }
             }
@@ -68,9 +81,14 @@ struct InvoiceListView: View {
         .accessibilityIdentifier(AccessibilityID.invoicesScreen)
         .transition(.opacity)
         .task {
-            vm = InvoiceListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            let model = InvoiceListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            vm = model
+            // Default the filter to the newest invoice's month (like Activity), else the current
+            // month. Changing monthKey from the "" default flows through .onChange to filter the VM.
+            monthKey = model.newestMonthWithData ?? MonthKey.current
             if !entitlement.isPro { showPaywall = true }
         }
+        .onChange(of: monthKey) { _, new in vm?.monthKey = new; vm?.reload() }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 

@@ -33,6 +33,18 @@ final class InvoiceListViewModel {
 
     private(set) var needsAttention: [Row] = []
     private(set) var others: [Row] = []
+    /// Date filter: "" = All time (default — a bare VM shows everything), else "YYYY-MM" — matched
+    /// against each invoice's issue date (falling back to its created date for drafts). The VIEW owns
+    /// the default month selection (current / newest); it sets this and calls reload().
+    var monthKey: String = MonthKey.allTime
+    /// Months present in the profile's invoices (+ the current month), newest first — the menu
+    /// options. Computed over the FULL set in reload() so it stays populated under any filter.
+    private(set) var availableMonthKeys: [String] = []
+    /// Newest month that has an invoice — for landing the list on recent data on open; nil if none.
+    private(set) var newestMonthWithData: String?
+    /// True when the profile has ANY invoice (pre-filter) — distinguishes "no invoices yet" from
+    /// "none in the selected month" for the empty state.
+    private(set) var hasAny: Bool = false
 
     init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String,
          today: String = ExportDateFormatter.shared.string(from: Date())) {
@@ -50,12 +62,19 @@ final class InvoiceListViewModel {
             predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         let invoices = (try? context.fetch(d)) ?? []
+        // Full-set facts for the month filter, computed BEFORE filtering so the menu options and the
+        // snap-to-newest target stay stable regardless of the current selection.
+        hasAny = !invoices.isEmpty
+        let dayKeys = invoices.map { Self.effectiveDay($0) }
+        availableMonthKeys = MonthKey.available(dayKeys)
+        newestMonthWithData = MonthKey.newest(dayKeys)
         let soonCutoff = Self.dayOffset(today, days: 7)   // hoisted: due on/before this is "due soon"
 
         var attnOverdue: [Row] = []
         var attnDueSoon: [Row] = []
         var rest: [Row] = []
         for inv in invoices {
+            guard MonthKey.matches(Self.effectiveDay(inv), monthKey) else { continue }   // month filter
             let paid = Self.amountPaidCents(context, invoiceId: inv.id)
             let state = AccountsReceivable.paymentState(totalCents: inv.totalCents, paidCents: paid)
             let overdue = AccountsReceivable.isOverdue(status: inv.status, paymentState: state,
@@ -71,6 +90,12 @@ final class InvoiceListViewModel {
         }
         needsAttention = attnOverdue + attnDueSoon   // each already newest-first (source order)
         others = rest
+    }
+
+    /// The day-string the date filter keys off: the issue date (the tax-invoice date), falling back
+    /// to the created date for drafts (issueDate == nil) so a draft isn't hidden by the filter.
+    static func effectiveDay(_ inv: Invoice) -> String {
+        inv.issueDate ?? ExportDateFormatter.shared.string(from: Date(timeIntervalSince1970: Double(inv.createdAt) / 1000.0))
     }
 
     func badge(for invoice: Invoice) -> InvoiceBadge {
