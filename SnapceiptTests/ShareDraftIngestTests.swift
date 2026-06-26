@@ -59,6 +59,7 @@ struct ShareDraftIngestTests {
 
         #expect(vm.stage != .saved)        // the exact gate the drain uses to NOT delete/count
         #expect(try ctx.fetch(FetchDescriptor<Transaction>()).isEmpty)
+        #expect(try ctx.fetch(FetchDescriptor<PendingReceipt>()).isEmpty)
         #expect(vm.errorMessage != nil)
     }
 }
