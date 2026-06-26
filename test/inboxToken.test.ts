@@ -7,7 +7,6 @@ import {
   generateInboxToken,
   mintInboxToken,
   resolveInboxToken,
-  rotateInboxToken,
   tokenFromRecipient,
 } from "../src/lib/inboxToken";
 
@@ -59,15 +58,6 @@ describe("inboxToken — D1 helpers", () => {
     expect(t1).toBe(t2); // idempotent — does not rotate
     const owner = await resolveInboxToken(env.DB, t1);
     expect(owner).toEqual({ userId, profileId });
-  });
-
-  it("rotate invalidates the old token and resolves the new one", async () => {
-    const { userId, profileId } = await seedProfile();
-    const old = await mintInboxToken(env.DB, userId, profileId, nowMs());
-    const fresh = await rotateInboxToken(env.DB, userId, profileId, nowMs());
-    expect(fresh).not.toBe(old);
-    expect(await resolveInboxToken(env.DB, old)).toBeNull();
-    expect(await resolveInboxToken(env.DB, fresh)).toEqual({ userId, profileId });
   });
 
   it("resolve returns null for an unknown token", async () => {

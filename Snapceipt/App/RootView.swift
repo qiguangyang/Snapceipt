@@ -406,7 +406,8 @@ struct ShellView: View {
                                 userId: profiles.userId, profileId: profiles.activeProfileId,
                                 quoteId: id,
                                 onClose: { router.dismissOverlay() },
-                                onConvert: { invId in router.openInvoice(invId) })
+                                onConvert: { invId in router.openInvoice(invId) },
+                                onSavedDraft: { router.present(.quotes) })
                     .environment(\.accent, accent).transition(.opacity)
             }
         }

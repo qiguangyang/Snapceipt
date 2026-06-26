@@ -60,17 +60,7 @@ describe("GET /profiles/:id/inbox", () => {
   });
 });
 
-describe("POST /profiles/:id/inbox/rotate", () => {
-  it("returns a different token than the one GET minted", async () => {
-    const { profileId, bearer } = await seedAuthedProfile("pro");
-    const first = (await (await SELF.fetch(`https://x/profiles/${profileId}/inbox`, { headers: { authorization: bearer } })).json()) as { token: string };
-    const rotated = (await (await SELF.fetch(`https://x/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: { authorization: bearer } })).json()) as { token: string; address: string };
-    expect(rotated.token).not.toBe(first.token);
-    expect(rotated.address).toBe(`r.${rotated.token}@in.snapceipt.cc`);
-  });
-});
-
-// Email-in is Pro-only: the alias mint/rotate routes are Pro-gated server-side
+// Email-in is Pro-only: the alias mint route is Pro-gated server-side
 // (defence in depth alongside the inbound bounce + the iOS paywall). The Pro gate
 // runs AFTER the ownership check, so a non-owner still gets 404 (above), while an
 // owned-but-free user gets 403 FORBIDDEN.
@@ -90,13 +80,5 @@ describe("inbox alias routes are Pro-gated", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { address: string };
     expect(body.address).toMatch(/@in\.snapceipt\.cc$/);
-  });
-
-  it("POST /profiles/:id/inbox/rotate is 403 FORBIDDEN for an owned, free user", async () => {
-    const { profileId, bearer } = await seedAuthedProfile("free");
-    const res = await SELF.fetch(`https://x/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: { authorization: bearer } });
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("FORBIDDEN");
   });
 });

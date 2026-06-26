@@ -29,19 +29,15 @@ struct EmailInViewModelTests {
         #expect(vm.inbox.map(\.merchant) == ["Failed-old", "Done-new", "Done-old"]) // p2 excluded
     }
 
-    @Test("loadAddress + rotate go through the API client")
+    @Test("loadAddress goes through the API client")
     func addressFlow() async throws {
         let (ctx, sync, api) = try fixture()
         api.profileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t1", address: "r.t1@in.snapceipt.cc") }
-        api.rotateProfileInboxHandler = { pid in InboxAddressResponse(profileId: pid, token: "t2", address: "r.t2@in.snapceipt.cc") }
         let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
 
         await vm.loadAddress()
         #expect(vm.address?.address == "r.t1@in.snapceipt.cc")
-        await vm.rotate()
-        #expect(vm.address?.address == "r.t2@in.snapceipt.cc")
         #expect(api.profileInboxCalls == ["p1"])
-        #expect(api.rotateProfileInboxCalls == ["p1"])
     }
 
     @Test("loadAddress failure surfaces an errorMessage and leaves address nil")
@@ -69,18 +65,6 @@ struct EmailInViewModelTests {
         #expect(vm.proRequired == true)
         #expect(vm.errorMessage == nil)   // not the dead-button error path; the view shows upgrade
         #expect(vm.address == nil)
-    }
-
-    @Test("rotate failure surfaces an errorMessage")
-    func rotateFailure() async throws {
-        let (ctx, sync, api) = try fixture()
-        api.rotateProfileInboxHandler = { _ in throw MockAPIClientError.unscripted }
-        let vm = EmailInViewModel(context: ctx, sync: sync, api: api, userId: "u1", profileId: "p1")
-
-        await vm.rotate()
-
-        #expect(vm.errorMessage != nil)
-        #expect(api.rotateProfileInboxCalls == ["p1"])
     }
 
     @Test("loadAddressIfPro no-ops for a free user (no network, no error)")
