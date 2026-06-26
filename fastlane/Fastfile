@@ -114,11 +114,11 @@ platform :ios do
       skip_screenshots: false,
       metadata_path: "./metadata",
       screenshots_path: "./screenshots",
-      # Submit straight into App Review.
+      # Submit straight into App Review. Phased release is OMITTED entirely: it applies to
+      # UPDATES, not a first release, and passing it either way (true=create / false=remove) hits
+      # an ASC endpoint that returns "No data" on the first version (fastlane#20538). Re-add
+      # `phased_release: true` for 1.x updates.
       submit_for_review: true,
-      # Phased release applies to UPDATES, not a brand-new app's FIRST release — the ASC API
-      # returns "No data" on the first version (fastlane#20538). Re-enable for 1.x updates.
-      phased_release: false,
       # Reset ratings only on explicit request — keep history across updates.
       reset_ratings: false,
       # Precheck/non-interactive guards for CI.
