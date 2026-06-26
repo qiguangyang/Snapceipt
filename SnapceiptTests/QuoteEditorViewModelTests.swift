@@ -29,6 +29,18 @@ struct QuoteEditorViewModelTests {
         #expect(v.totals.total == 230_00)
     }
 
+    @Test("addLine() appends a blank line and returns its id (so the editor can focus its Description)")
+    func addLineReturnsNewId() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        let id = v.addLine()
+        #expect(id != nil)
+        #expect(v.lineItems.count == 1)
+        #expect(v.lineItems.last?.id == id)
+        #expect(v.lineItems.last?.itemDescription == "")
+    }
+
     @Test("load(nil) starts a fresh draft: empty lines, gst on, no client, not sendable")
     func loadNew() throws {
         let (ctx, sync) = try makeFixture()

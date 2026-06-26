@@ -158,11 +158,16 @@ final class QuoteEditorViewModel {
         clientAddress = address
     }
 
-    func addLine() {
-        guard let qid = quoteId else { return }
-        lineItems.append(QuoteLineItem(userId: userId, quoteId: qid,
-                                       itemDescription: "", quantity: 1, unitPriceCents: 0,
-                                       sortOrder: lineItems.count))
+    /// Append a blank line item. Returns the new line's id so the editor can move keyboard
+    /// focus to its Description field (nil only if there's no draft quote to attach it to).
+    @discardableResult
+    func addLine() -> String? {
+        guard let qid = quoteId else { return nil }
+        let line = QuoteLineItem(userId: userId, quoteId: qid,
+                                 itemDescription: "", quantity: 1, unitPriceCents: 0,
+                                 sortOrder: lineItems.count)
+        lineItems.append(line)
+        return line.id
     }
 
     func removeLine(_ line: QuoteLineItem) {
