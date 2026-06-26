@@ -114,9 +114,11 @@ platform :ios do
       skip_screenshots: false,
       metadata_path: "./metadata",
       screenshots_path: "./screenshots",
-      # Submit straight into App Review, rolled out gradually once approved.
+      # Submit straight into App Review.
       submit_for_review: true,
-      phased_release: true,
+      # Phased release applies to UPDATES, not a brand-new app's FIRST release — the ASC API
+      # returns "No data" on the first version (fastlane#20538). Re-enable for 1.x updates.
+      phased_release: false,
       # Reset ratings only on explicit request — keep history across updates.
       reset_ratings: false,
       # Precheck/non-interactive guards for CI.
