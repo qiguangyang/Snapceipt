@@ -83,6 +83,7 @@ targets:
       # in the app via its `- path: Snapceipt` tree, so they're shared, not duplicated.
       - path: Snapceipt/Model/CategoryKey.swift
       - path: Snapceipt/Features/Capture/ExtractedReceipt.swift
+      - path: Snapceipt/Features/Capture/Scanner/DocumentScan.swift
       - path: Snapceipt/Features/Capture/Scanner/OCR.swift
       - path: Snapceipt/Features/Capture/Scanner/ReceiptRows.swift
       - path: Snapceipt/Features/Capture/Scanner/OnDeviceGuards.swift

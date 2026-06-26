@@ -91,13 +91,37 @@ final class ShareViewController: UIViewController {
                 lines = try await OCR.recognize(in: image)
             }
             let rawText = lines.map(\.text).joined(separator: "\n")
-            let layoutText = ReceiptRows.rows(from: lines).joined(separator: "\n")
-            return try await extractor.extract(
+            // Column-aligned 2D reconstruction (names left, prices right) so the model reads the
+            // receipt's layout instead of a flat token stream — the fix for the dense item column.
+            let layoutText = ReceiptRows.layoutGrid(from: lines)
+            let extracted = try await extractor.extract(
                 ocrText: rawText, layoutText: layoutText, capturedAt: capturedAt)
+            // Geometry-based backstops (line-based, independent of row reconstruction): pair the
+            // "Total" / "GST" labels with the amount on their OWN printed row, so neither can be
+            // corrupted by row-merge/model errors.
+            let withTotal = OnDeviceGuards.withGeometricTotal(extracted, lines: lines)
+            let draft = OnDeviceGuards.withGeometricGst(withTotal, lines: lines)
+            model.debugInfo = Self.debugString(rawText: rawText, layoutText: layoutText, lines: lines, draft: draft)
+            return draft
         } catch {
             shareLog.error("share: extraction failed: \(String(describing: error), privacy: .public)")
+            model.debugInfo = "Extraction failed: \(String(describing: error))"
             return nil
         }
+    }
+
+    /// TEMPORARY: builds the popup's debug panel text from the OCR + the read result, so a wrong
+    /// read can be diagnosed from a screenshot. Remove with the `debugInfo` panel once tuned.
+    private static func debugString(rawText: String, layoutText: String,
+                                    lines: [RecognizedLine], draft: ExtractedReceipt?) -> String {
+        let gst = draft?.gst.map { "\($0)" } ?? "nil"
+        let total = draft.map { "\($0.total)" } ?? "nil"
+        // Reconstructed rows + the raw per-observation geometry (text, vertical center y, height),
+        // so a wrong row-pairing can be diagnosed from the screenshot.
+        let geom = lines.map {
+            "\($0.text)  y\(String(format: "%.3f", $0.boundingBox.midY)) h\(String(format: "%.3f", $0.boundingBox.height))"
+        }.joined(separator: "\n")
+        return "READ → gst=\(gst)  total=\(total)\n— ROWS —\n\(layoutText)\n— GEOMETRY (text y h) —\n\(geom)"
     }
 
     // MARK: Save / Cancel
@@ -135,8 +159,20 @@ final class ShareViewController: UIViewController {
     // MARK: Attachment loading
 
     private func imageFromImage(_ provider: NSItemProvider) async -> UIImage? {
-        guard let data = await loadData(provider, UTType.image.identifier) else { return nil }
-        return UIImage(data: data)
+        guard let data = await loadData(provider, UTType.image.identifier),
+              let image = UIImage(data: data) else { return nil }
+        // Flatten the shared PHOTO the same way the in-app camera does — detect the receipt quad and
+        // perspective-correct it — so a skewed/curled photo's rows line up for OCR. This is the key
+        // difference vs in-app capture (which dewarps before reading); without it the dense item
+        // column collapses. Falls back to the orientation-normalized original if nothing's detected.
+        return Self.dewarpedReceipt(image)
+    }
+
+    private static func dewarpedReceipt(_ image: UIImage) -> UIImage {
+        let up = image.normalizedUp()
+        guard let quad = DocumentScan.detect(in: up),
+              let flat = DocumentScan.dewarp(up, quad: quad) else { return up }
+        return flat
     }
 
     private func imageFromPDF(_ provider: NSItemProvider) async -> UIImage? {
@@ -186,5 +222,16 @@ final class ShareViewController: UIViewController {
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         return scaled.jpegData(compressionQuality: quality) ?? Data()
+    }
+}
+
+private extension UIImage {
+    /// Redraw in `.up` orientation so Vision/CoreImage (which read raw pixels, ignoring EXIF) detect
+    /// + dewarp the receipt correctly on a shared photo.
+    func normalizedUp() -> UIImage {
+        guard imageOrientation != .up else { return self }
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 }

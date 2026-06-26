@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Minimal deterministic safety net for an on-device LLM result (it's a small model and can
 /// hallucinate). Mirrors the server's GST reconcile (src/lib/deepseek.ts reconcileGst): honor a
@@ -66,6 +67,98 @@ enum OnDeviceGuards {
             }
         }
         return found
+    }
+
+    /// Geometry-based GST backstop: pair the "GST" label observation with the money observation on
+    /// its SAME printed row, even when row reconstruction failed to merge them (columnar receipts).
+    /// Picks the amount whose vertical center is closest to a GST label's center, among amounts to
+    /// the label's right that are a plausible GST (`0 <= v <= total*0.12`). Returns nil without
+    /// geometry or when no qualifying pair is found.
+    static func geometricGst(lines: [RecognizedLine], total: Decimal) -> Decimal? {
+        guard lines.contains(where: { $0.boundingBox != .zero }) else { return nil }
+        let gstCap = total * Decimal(string: "0.12")!
+        // GST label observations (line names "GST" as a whole word).
+        let labels = lines.filter {
+            $0.text.range(of: #"\bgst\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        guard !labels.isEmpty else { return nil }
+        // Money observations: a single amount match, value within the plausible-GST window.
+        struct MoneyObs { let value: Decimal; let box: CGRect }
+        let amounts: [MoneyObs] = lines.compactMap { line in
+            let normalized = joinSplitDecimals(Substring(line.text))
+            let matches = normalized.matches(of: Self.amountRegex)
+            guard matches.count == 1, let v = amount(normalized[matches[0].range]) else { return nil }
+            guard v >= 0, v <= gstCap else { return nil }
+            return MoneyObs(value: v, box: line.boundingBox)
+        }
+        guard !amounts.isEmpty else { return nil }
+        var best: (dy: CGFloat, value: Decimal)?
+        for label in labels {
+            let lbox = label.boundingBox
+            for m in amounts {
+                guard m.box.minX >= lbox.minX - 1 else { continue }   // amount to the label's right
+                let dy = abs(m.box.midY - lbox.midY)
+                guard dy <= max(lbox.height, m.box.height) else { continue }   // same printed row
+                if best == nil || dy < best!.dy { best = (dy, m.value) }
+            }
+        }
+        return best.map { round2($0.value) }
+    }
+
+    /// Apply the geometric GST backstop to an extracted receipt: when a total is present and a
+    /// geometric GST is found, return a copy with `gst` replaced. No-op otherwise.
+    static func withGeometricGst(_ r: ExtractedReceipt, lines: [RecognizedLine]) -> ExtractedReceipt {
+        guard r.total > 0, let g = geometricGst(lines: lines, total: r.total) else { return r }
+        var out = r
+        out.gst = g
+        return out
+    }
+
+    /// Geometry-based grand-total backstop: pair the "Total" label (whole word, NOT "Subtotal")
+    /// with the largest money amount on its SAME printed row. Independent of row reconstruction, so
+    /// the model/row-merge can't corrupt the total. Returns nil without geometry or no qualifying pair.
+    static func geometricTotal(lines: [RecognizedLine]) -> Decimal? {
+        guard lines.contains(where: { $0.boundingBox != .zero }) else { return nil }
+        let labels = lines.filter {
+            $0.text.range(of: #"\btotal\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+            && $0.text.range(of: #"sub[ ]?total"#, options: [.regularExpression, .caseInsensitive]) == nil
+        }
+        guard !labels.isEmpty else { return nil }
+        struct MoneyObs { let value: Decimal; let box: CGRect }
+        let amounts: [MoneyObs] = lines.compactMap { line in
+            let normalized = joinSplitDecimals(Substring(line.text))
+            let matches = normalized.matches(of: Self.amountRegex)
+            guard matches.count == 1, let v = amount(normalized[matches[0].range]), v > 0 else { return nil }
+            return MoneyObs(value: v, box: line.boundingBox)
+        }
+        guard !amounts.isEmpty else { return nil }
+        // Nearest-row amount to a Total label (tie → larger value, i.e. the grand total).
+        var best: (dy: CGFloat, value: Decimal)?
+        for label in labels {
+            let lbox = label.boundingBox
+            for m in amounts {
+                guard m.box.minX >= lbox.minX - 1 else { continue }
+                let dy = abs(m.box.midY - lbox.midY)
+                guard dy <= max(lbox.height, m.box.height) else { continue }
+                let better: Bool
+                if let b = best {
+                    better = dy < b.dy || (dy == b.dy && m.value > b.value)
+                } else {
+                    better = true
+                }
+                if better { best = (dy, m.value) }
+            }
+        }
+        return best.map { round2($0.value) }
+    }
+
+    /// Apply the geometric total backstop: replace `total` with the geometry-paired grand total when
+    /// one is found (> 0). No-op otherwise.
+    static func withGeometricTotal(_ r: ExtractedReceipt, lines: [RecognizedLine]) -> ExtractedReceipt {
+        guard let t = geometricTotal(lines: lines), t > 0 else { return r }
+        var out = r
+        out.total = t
+        return out
     }
 
     private static func reconcileGst(_ gst: Decimal?, total: Decimal, ocrText: String) -> Decimal? {
