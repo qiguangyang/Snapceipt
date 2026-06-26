@@ -62,4 +62,38 @@ struct ShareDraftIngestTests {
         #expect(try ctx.fetch(FetchDescriptor<PendingReceipt>()).isEmpty)
         #expect(vm.errorMessage != nil)
     }
+
+    @Test("no-text image fallback: empty OCR still persists a reviewable receipt via onScanned+save")
+    func noTextImagePersistsViaOnScanned() async throws {
+        UserDefaults.standard.removeObject(forKey: "sc.activeProfile")
+        // Cloud ON + a stub handler so onScanned's extraction is deterministic (no device FM).
+        UserDefaults.standard.set(true, forKey: AppSettings.smartScanEnabledKey)
+        defer { UserDefaults.standard.removeObject(forKey: AppSettings.smartScanEnabledKey) }
+        let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
+        let ctx = ModelContext(container)
+        let profile = Profile(userId: "u1", name: "Me", type: "personal",
+                              accent1: "#E8602C", accent2: "#FDEBE0", accent3: "#C2461A", isDefault: true)
+        ctx.insert(profile); try ctx.save()
+        let store = ProfilesStore(context: ctx, sync: SpySync(), userId: "u1")
+        store.setActive(profile.id)
+        let api = MockAPIClient()
+        let okJSON = """
+        {"requestId":"r","receipt":{"merchant":"Cafe","date":"2026-05-28","currencyCode":"AUD",
+          "total":10.00,"gst":0.91,"category":"meals","deductible":50,
+          "lineItems":[{"name":"Latte","price":5.00}],"confidence":0.95,"needsReview":false},
+         "meta":{"model":"x","source":"scan","latencyMs":1,"attempts":1,"stub":false}}
+        """
+        api.extractHandler = { _, _, _ in
+            try! JSONDecoder().decode(ExtractionResponse.self, from: Data(okJSON.utf8))
+        }
+        let vm = CaptureViewModel(api: api, reducer: PassReducer(), sync: SpySync(),
+                                  profiles: store, context: ctx, userId: "u1")
+
+        // Mirror the drain's no-draft/no-text branch: empty OCR lines -> onScanned -> save.
+        await vm.onScanned(image: image(), lines: [])
+        vm.save()
+
+        #expect(vm.stage == .saved)                                              // imported, not left
+        #expect(try ctx.fetch(FetchDescriptor<Transaction>()).count == 1)
+    }
 }

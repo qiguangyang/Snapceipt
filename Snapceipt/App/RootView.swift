@@ -573,9 +573,19 @@ struct ShellView: View {
             if let draft = item.draft {
                 // Already read on-device by the extension popup — file it as-is, no re-extract.
                 vm.ingestSharedDraft(image: image, draft: draft)
+            } else if let text = item.text, !text.isEmpty {
+                // A PDF's embedded text — extract via the normal pipeline (no OCR needed).
+                await vm.ingestImport(image: image, text: text)
+                vm.save()   // toProfileId defaults to the active profile
             } else {
-                // No draft (non-FM device / extraction failed) — re-extract via the normal pipeline.
-                await vm.ingestImport(image: image, text: item.text)
+                // No draft and no text — e.g. a non-FM device (no on-device AI) sharing a photo.
+                // OCR the image on-device, then run the SAME extract→save pipeline a live capture
+                // uses. Without this the photo could never import headlessly: ingestImport(text: nil)
+                // only stages it for an interactive Confirm, so save() would bail (no draft) and the
+                // item would sit in the inbox re-prompting "Reading…" on every foreground. An empty
+                // OCR result still yields a reviewable pending draft (the reconciler upgrades it).
+                let lines = (try? await OCR.recognize(in: image)) ?? []
+                await vm.onScanned(image: image, lines: lines)
                 vm.save()   // toProfileId defaults to the active profile
             }
             // Only delete the handoff + count it once the receipt ACTUALLY persisted. `save()` bails
