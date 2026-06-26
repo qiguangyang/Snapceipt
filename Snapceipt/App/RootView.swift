@@ -174,6 +174,9 @@ struct ShellView: View {
     /// The tab is only re-keyed on tab/profile change (not on overlay dismiss), so a
     /// receipt deleted/edited/added from an overlay wouldn't otherwise disappear/update.
     @State private var activityReloadToken = 0
+    /// Reentrancy guard for `drainSharedReceipts` — it runs from both the launch `.task`
+    /// and `scenePhase==.active`, which would otherwise double-import the same inbox file.
+    @State private var isDraining = false
 
     var body: some View {
         let accent = profiles.accent
@@ -540,15 +543,30 @@ struct ShellView: View {
     /// deleted. A receipt saved "pending" (offline / low-confidence) is upgraded later by
     /// `reconcilePendingExtractions`.
     private func drainSharedReceipts() async {
+        // Reentrancy guard: this runs from BOTH the launch `.task` and `scenePhase==.active`.
+        // Without it, a cold-launch-from-share plus a quick background/foreground re-reads the same
+        // not-yet-deleted inbox file (the per-item delete lands AFTER an await) and imports the
+        // receipt twice — and the duplicate survives reconcile as two cloud-upgraded txns. Mirrors
+        // CaptureHost.drainQueues.
+        guard !isDraining else { return }
+        isDraining = true
+        defer { isDraining = false }
+
         let pending = ShareInbox.pending()
         guard !pending.isEmpty else { return }
+        // No profile to file under → leave the inbox files untouched and try again on the next drain
+        // (it self-heals once a profile exists), rather than deleting them and dropping the receipts
+        // behind a false "added" toast.
+        guard profiles.activeProfile != nil
+            || profiles.profiles.contains(where: { $0.id == profiles.activeProfileId }) else { return }
+
         // Visible feedback so a share that just opened the app shows it's "reading" right away.
         toasts.show(pending.count == 1 ? "Reading shared receipt…"
                                        : "Reading \(pending.count) shared receipts…", kind: .info)
         var saved = 0
         for item in pending {
-            defer { ShareInbox.delete(item) }
-            guard let image = UIImage(data: item.jpeg) else { continue }
+            // A non-decodable JPEG can never be imported — drop it so it doesn't re-read forever.
+            guard let image = UIImage(data: item.jpeg) else { ShareInbox.delete(item); continue }
             let vm = CaptureFactory.makeViewModel(
                 api: captureAPI, sync: sync, profiles: profiles,
                 context: profiles.context, userId: profiles.userId, reachability: reachability)
@@ -560,7 +578,13 @@ struct ShellView: View {
                 await vm.ingestImport(image: image, text: item.text)
                 vm.save()   // toProfileId defaults to the active profile
             }
-            saved += 1
+            // Only delete the handoff + count it once the receipt ACTUALLY persisted. `save()` bails
+            // WITHOUT persisting if no profile resolves; deleting then would lose the receipt and the
+            // success toast would lie. A not-persisted item is left for a later drain.
+            if vm.stage == .saved {
+                ShareInbox.delete(item)
+                saved += 1
+            }
         }
         if saved > 0 {
             toasts.show(saved == 1 ? "Receipt added" : "\(saved) receipts added", kind: .success)
