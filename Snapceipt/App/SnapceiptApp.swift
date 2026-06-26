@@ -179,6 +179,10 @@ struct SnapceiptApp: App {
                 .environment(entitlement)
                 .modelContainer(container)
                 .onOpenURL { url in
+                    // Share Extension (snapceipt://import): just bring the app forward — the inbox
+                    // drain on launch/foreground reads the shared receipt. Don't route it through
+                    // the budget/auth deep-link handlers.
+                    if url.scheme == "snapceipt", url.host == "import" { return }
                     // Budget deep-link (snapceipt://budget/<id>) routes to the editor first.
                     if router.handleBudgetDeepLink(url) { return }
                     // Magic-link Universal Link / custom-scheme deep link.

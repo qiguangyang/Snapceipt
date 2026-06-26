@@ -534,7 +534,13 @@ struct ShellView: View {
     /// `save()` — filing it under the ACTIVE profile, then delete the handoff file. A receipt saved
     /// "pending" (offline / low-confidence) is upgraded later by `reconcilePendingExtractions`.
     private func drainSharedReceipts() async {
-        for item in ShareInbox.pending() {
+        let pending = ShareInbox.pending()
+        guard !pending.isEmpty else { return }
+        // Visible feedback so a share that just opened the app shows it's "reading" right away.
+        toasts.show(pending.count == 1 ? "Reading shared receipt…"
+                                       : "Reading \(pending.count) shared receipts…", kind: .info)
+        var saved = 0
+        for item in pending {
             defer { ShareInbox.delete(item) }
             guard let image = UIImage(data: item.jpeg) else { continue }
             let vm = CaptureFactory.makeViewModel(
@@ -542,6 +548,10 @@ struct ShellView: View {
                 context: profiles.context, userId: profiles.userId, reachability: reachability)
             await vm.ingestImport(image: image, text: item.text)
             vm.save()   // toProfileId defaults to the active profile
+            saved += 1
+        }
+        if saved > 0 {
+            toasts.show(saved == 1 ? "Receipt added" : "\(saved) receipts added", kind: .success)
         }
     }
 

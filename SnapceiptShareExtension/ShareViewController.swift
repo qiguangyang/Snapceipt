@@ -14,30 +14,39 @@ final class ShareViewController: UIViewController {
     }
 
     private func handleShare() async {
-        defer { extensionContext?.completeRequest(returningItems: nil, completionHandler: nil) }
         let items = (extensionContext?.inputItems as? [NSExtensionItem]) ?? []
+        var wrote = false
         for item in items {
             for provider in item.attachments ?? [] {
                 // PDF first: a native PDF carries selectable text we can feed to extraction
                 // (far better than re-OCRing a rendered page). public.image is the catch-all.
                 if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
-                    await ingestPDF(provider)
+                    wrote = await ingestPDF(provider) || wrote
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                    await ingestImage(provider)
+                    wrote = await ingestImage(provider) || wrote
                 }
             }
         }
+        // Open the host app so it reads the receipt RIGHT AWAY (its inbox drain runs on foreground /
+        // launch). If the OS declines the open (older iOS), the receipt still imports the next time
+        // the app is opened — the App Group inbox is the durable handoff either way.
+        if wrote, let url = URL(string: "snapceipt://import"), let ctx = extensionContext {
+            ctx.open(url) { _ in ctx.completeRequest(returningItems: nil, completionHandler: nil) }
+        } else {
+            extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        }
     }
 
-    private func ingestImage(_ provider: NSItemProvider) async {
+    private func ingestImage(_ provider: NSItemProvider) async -> Bool {
         guard let data = await loadData(provider, UTType.image.identifier),
-              let image = UIImage(data: data) else { return }
-        try? ShareInbox.write(jpeg: Self.jpeg(from: image), text: nil)
+              let image = UIImage(data: data) else { return false }
+        do { try ShareInbox.write(jpeg: Self.jpeg(from: image), text: nil); return true }
+        catch { return false }
     }
 
-    private func ingestPDF(_ provider: NSItemProvider) async {
+    private func ingestPDF(_ provider: NSItemProvider) async -> Bool {
         guard let data = await loadData(provider, UTType.pdf.identifier),
-              let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return }
+              let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return false }
         let bounds = page.bounds(for: .mediaBox)
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 2   // render at 2x so small receipt type stays legible for OCR
@@ -49,7 +58,8 @@ final class ShareViewController: UIViewController {
             page.draw(with: .mediaBox, to: ctx.cgContext)
         }
         // Embedded text — nil/empty for a scanned (image-only) PDF, which the app then OCRs.
-        try? ShareInbox.write(jpeg: Self.jpeg(from: image), text: page.string)
+        do { try ShareInbox.write(jpeg: Self.jpeg(from: image), text: page.string); return true }
+        catch { return false }
     }
 
     private func loadData(_ provider: NSItemProvider, _ type: String) async -> Data? {
