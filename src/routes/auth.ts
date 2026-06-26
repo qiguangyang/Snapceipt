@@ -324,30 +324,50 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
   const emailHash = await sha256Hex(normalized);
   const kvKey = `oc:${emailHash}`;
 
-  const raw = await c.env.KV.get(kvKey);
-  if (!raw) throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired sign-in code");
-  const pending = JSON.parse(raw) as {
-    codeHash: string;
-    email: string;
-    attempts: number;
-    expiresAtMs: number;
-  };
-
-  if (!constantTimeEqual(await sha256Hex(code), pending.codeHash)) {
-    const attempts = (pending.attempts ?? 0) + 1;
-    if (attempts >= OTP_MAX_ATTEMPTS) {
-      await c.env.KV.delete(kvKey);
-      throw new ApiError("AUTH_INVALID_TOKEN", "Too many attempts, request a new code");
+  // App Review accommodation: the configured demo account may clear the SECOND FACTOR with the
+  // fixed code "123456" — but ONLY after a correct password login on this device, proven by the
+  // single-use `rml:` marker that /password/login sets on a verified password. So this never
+  // bypasses the password, and the passwordless /otp/request path can't trigger it. Inert unless
+  // REVIEW_DEMO_EMAIL is set, and only that one account is ever affected. See env.ts.
+  const reviewEmail = c.env.REVIEW_DEMO_EMAIL?.trim()
+    ? normalizeEmail(c.env.REVIEW_DEMO_EMAIL) : null;
+  let reviewBypass = false;
+  if (reviewEmail !== null && normalized === reviewEmail && code === "123456") {
+    const rmlKey = `rml:${emailHash}`;
+    if (await c.env.KV.get(rmlKey)) {
+      await c.env.KV.delete(rmlKey);   // single-use: requires a fresh password login each time
+      reviewBypass = true;
     }
-    const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - nowMs()) / 1000));
-    await c.env.KV.put(kvKey, JSON.stringify({ ...pending, attempts }), { expirationTtl: ttl });
-    throw new ApiError("VALIDATION_FAILED", "Incorrect code");
   }
 
-  // Correct: single-use delete before issuing.
-  await c.env.KV.delete(kvKey);
+  let userEmail: string;
+  if (reviewBypass) {
+    userEmail = normalized;
+  } else {
+    const raw = await c.env.KV.get(kvKey);
+    if (!raw) throw new ApiError("AUTH_INVALID_TOKEN", "Invalid or expired sign-in code");
+    const pending = JSON.parse(raw) as {
+      codeHash: string;
+      email: string;
+      attempts: number;
+      expiresAtMs: number;
+    };
 
-  const userEmail = normalizeEmail(pending.email);
+    if (!constantTimeEqual(await sha256Hex(code), pending.codeHash)) {
+      const attempts = (pending.attempts ?? 0) + 1;
+      if (attempts >= OTP_MAX_ATTEMPTS) {
+        await c.env.KV.delete(kvKey);
+        throw new ApiError("AUTH_INVALID_TOKEN", "Too many attempts, request a new code");
+      }
+      const ttl = Math.max(1, Math.ceil((pending.expiresAtMs - nowMs()) / 1000));
+      await c.env.KV.put(kvKey, JSON.stringify({ ...pending, attempts }), { expirationTtl: ttl });
+      throw new ApiError("VALIDATION_FAILED", "Incorrect code");
+    }
+
+    // Correct: single-use delete before issuing.
+    await c.env.KV.delete(kvKey);
+    userEmail = normalizeEmail(pending.email);
+  }
   const now = nowMs();
 
   let user = await c.env.DB.prepare(
@@ -468,6 +488,13 @@ authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c
 
   if (!device?.trusted_at) {
     const code = await sendOtpCode(c, normalized);
+    // App Review accommodation: record that the demo account just passed the password check on a
+    // new device, so /otp/verify's fixed-code (123456) bypass requires a real password first.
+    // Inert unless REVIEW_DEMO_EMAIL is set. See env.ts + /otp/verify.
+    const reviewEmail = c.env.REVIEW_DEMO_EMAIL?.trim() ? normalizeEmail(c.env.REVIEW_DEMO_EMAIL) : null;
+    if (reviewEmail && normalized === reviewEmail) {
+      await c.env.KV.put(`rml:${await sha256Hex(normalized)}`, "1", { expirationTtl: OTP_TTL_SECONDS });
+    }
     const body: { mfaRequired: true; devCode?: string } = { mfaRequired: true };
     if (c.env.E2E_TEST_MODE === "1") body.devCode = code;
     return c.json(body);

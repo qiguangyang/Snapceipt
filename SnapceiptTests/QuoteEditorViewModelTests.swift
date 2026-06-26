@@ -41,6 +41,32 @@ struct QuoteEditorViewModelTests {
         #expect(v.lineItems.last?.itemDescription == "")
     }
 
+    @Test("canSaveDraft gates an empty quote: false when blank, true with a client or a line")
+    func canSaveDraftGate() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        #expect(v.canSaveDraft == false)            // brand-new: no client, no lines
+        v.setClient(name: "Acme Pty", email: nil)
+        #expect(v.canSaveDraft == true)             // a client is enough
+    }
+
+    @Test("Save Draft persists a draft-status quote (listed) and is idempotent on a second save")
+    func saveDraftPersistsDraftAndIsIdempotent() throws {
+        let (ctx, sync) = try makeFixture()
+        let v = vm(ctx, sync)
+        v.load(id: nil)
+        v.setClient(name: "Acme Pty", email: nil)
+        v.addLine(); v.lineItems[0].unitPriceCents = 100_00
+        v.saveDraft()
+        v.saveDraft()   // a second save (e.g. re-tap) must not duplicate
+        let quotes = try ctx.fetch(FetchDescriptor<Quote>())
+        #expect(quotes.count == 1)
+        #expect(quotes.first?.status == QuoteStatus.draft.rawValue)   // stays a draft → listed + re-editable
+        let liveLines = try ctx.fetch(FetchDescriptor<QuoteLineItem>()).filter { $0.deletedAt == nil }
+        #expect(liveLines.count == 1)
+    }
+
     @Test("load(nil) starts a fresh draft: empty lines, gst on, no client, not sendable")
     func loadNew() throws {
         let (ctx, sync) = try makeFixture()

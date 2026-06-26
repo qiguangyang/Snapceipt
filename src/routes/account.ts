@@ -161,9 +161,11 @@ accountRoutes.delete("/account", async (c) => {
   ]);
 
   // 2. Purge the user's R2 objects across EVERY prefix the app writes to.
-  //   u/${userId}/...        — receipt images (images.ts) + inbound attachments (inbound.ts)
-  //   ${userId}/exports/...  — CSV/PDF/BAS export packs (export.ts)
-  //   ${userId}/quotes/...   — quote PDFs (quotes.ts)
+  //   u/${userId}/...          — receipt images (images.ts) + inbound attachments (inbound.ts)
+  //   ${userId}/exports/...    — CSV/PDF/BAS export packs (export.ts)
+  //   ${userId}/quotes/...     — quote PDFs (quotes.ts)
+  //   ${userId}/invoices/...   — invoice PDFs (invoices.ts)
+  //   ${userId}/profiles/...   — business-profile logos (profile.ts)
   // Missing any one leaves financial PII orphaned after account deletion.
   // MAINTENANCE CONTRACT: this is the ONLY place R2 is purged on account delete.
   // If a new route ever calls RECEIPTS.put() under a new prefix, add it here —
@@ -172,6 +174,8 @@ accountRoutes.delete("/account", async (c) => {
     `u/${userId}/`,
     `${userId}/exports/`,
     `${userId}/quotes/`,
+    `${userId}/invoices/`,
+    `${userId}/profiles/`,
   ];
   for (const prefix of r2Prefixes) {
     let cursor: string | undefined;

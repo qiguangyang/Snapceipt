@@ -107,6 +107,12 @@ final class QuoteEditorViewModel {
         !(clientName ?? "").trimmingCharacters(in: .whitespaces).isEmpty && !lineItems.isEmpty
     }
 
+    /// "Save Draft" is worth enabling once the quote has a client OR at least one line item —
+    /// keeps a completely empty shell quote from being persisted and cluttering the Quotes list.
+    var canSaveDraft: Bool {
+        !(clientName ?? "").trimmingCharacters(in: .whitespaces).isEmpty || !lineItems.isEmpty
+    }
+
     var displayNumber: String { number ?? "Draft" }
 
     func load(id: String?) {

@@ -72,4 +72,34 @@ struct CategorySeederGstTests {
             && $0.op == "upsert" && $0.entityId == groceries.id }
         #expect(upsert != nil)
     }
+
+    @Test func seedDefaultsEveryExpenseCategoryTo100Deductible() throws {
+        let (ctx, engine) = try makeCtx()
+        CategorySeeder.ensure(profileId: "p1", userId: "u1", context: ctx, sync: engine)
+        let cats = try ctx.fetch(FetchDescriptor<Snapceipt.Category>())
+        let byKey = Dictionary(uniqueKeysWithValues: cats.map { ($0.key, $0.defaultDeductiblePct) })
+        for key in ["meals", "groceries", "fuel", "software", "office", "home", "health", "travel"] {
+            #expect(byKey[key] == 100, "\(key) should default to 100% deductible")
+        }
+        #expect(byKey["income"] == 0)   // income is inert (excluded from the deductible list)
+    }
+
+    @Test func backfillRaisesExistingDeductiblesTo100AndRunsOnce() throws {
+        let (ctx, engine) = try makeCtx()
+        // Pre-change install: meals seeded at the OLD 50% default.
+        let meals = Snapceipt.Category(userId: "u1", profileId: "p1", key: "meals", label: "Meals",
+                                       icon: "tag", tint: "#E8602C", soft: "#FBEADF", defaultDeductiblePct: 50)
+        ctx.insert(meals); try ctx.save()
+        let defaults = UserDefaults(suiteName: "sc.test.deduct.\(UUID().uuidString)")!
+
+        CategorySeeder.backfillDeductibleDefaults(profileId: "p1", context: ctx, sync: engine, defaults: defaults)
+        #expect(meals.defaultDeductiblePct == 100)
+        let outbox = try ctx.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(outbox.contains { $0.entityType == EntityType.category.rawValue && $0.op == "upsert" && $0.entityId == meals.id })
+
+        // Idempotent: a second run does not re-enqueue.
+        let after1 = try ctx.fetch(FetchDescriptor<OutboxMutation>()).count
+        CategorySeeder.backfillDeductibleDefaults(profileId: "p1", context: ctx, sync: engine, defaults: defaults)
+        #expect(try ctx.fetch(FetchDescriptor<OutboxMutation>()).count == after1)
+    }
 }

@@ -91,7 +91,7 @@ app.use("/i/*", rateLimit("default"));
 // the wildcard also IP-limits the public GET /invoices/dl/* download.
 app.use("/invoices", rateLimit("quotes"));
 app.use("/invoices/*", rateLimit("quotes"));
-// Inbox alias mint/rotate — light per-user tier. Auth-gated (not public).
+// Inbox alias mint — light per-user tier. Auth-gated (not public).
 app.use("/profiles/*", rateLimit("inbox"));
 // Business-profile asset upload (logo) — default tier. Auth-gated (NOT in PUBLIC_PATHS).
 // Mount on BOTH the exact path AND the wildcard so the POST is limited.
@@ -122,7 +122,7 @@ app.route("/export", exportRoutes);
 app.route("/quotes", quotesRoutes);
 // Protected: POST /invoices/:id/issue|send|pdf (+ public GET /invoices/dl/:token via PUBLIC_PATHS).
 app.route("/invoices", invoicesRoutes);
-// Protected: per-profile inbox alias (GET mint + POST rotate).
+// Protected: per-profile inbox alias (GET mint).
 app.route("/profiles", inboxRoutes);
 // Protected: business-profile assets (POST /profile/logo -> R2 + logo_r2_key).
 app.route("/profile", profileRoutes);

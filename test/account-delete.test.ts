@@ -30,7 +30,7 @@ const PURGE_ORDER = [
 // real parent/child FKs (profile→txn→line_item, profile→txn→receipt_image,
 // quote→quote_line_item, vehicle→vehicle_year, etc.) so the purge has to honor
 // the FK-safe delete order to succeed.
-async function seedRichUser(): Promise<{ userId: string; profileId: string; bearer: string; r2Key: string; exportKey: string; quoteR2Key: string }> {
+async function seedRichUser(): Promise<{ userId: string; profileId: string; bearer: string; r2Key: string; exportKey: string; quoteR2Key: string; invoiceR2Key: string; logoR2Key: string }> {
   const userId = uuidv7();
   const deviceId = uuidv7();
   const profileId = uuidv7();
@@ -113,11 +113,15 @@ async function seedRichUser(): Promise<{ userId: string; profileId: string; bear
   const r2Key = `u/${userId}/x.jpg`;
   const exportKey = `${userId}/exports/${exportId}.pdf`;
   const quoteR2Key = `${userId}/quotes/${quoteId}.pdf`;
+  const invoiceR2Key = `${userId}/invoices/${invoiceId}.pdf`;
+  const logoR2Key = `${userId}/profiles/${profileId}/logo`;
   await env.RECEIPTS.put(r2Key, new TextEncoder().encode("img"));
   await env.RECEIPTS.put(exportKey, new TextEncoder().encode("export-pdf"));
   await env.RECEIPTS.put(quoteR2Key, new TextEncoder().encode("quote-pdf"));
+  await env.RECEIPTS.put(invoiceR2Key, new TextEncoder().encode("invoice-pdf"));
+  await env.RECEIPTS.put(logoR2Key, new TextEncoder().encode("logo-png"));
   const { accessToken } = await issueSession(env.DB, { userId, deviceId, signingKey: env.JWT_SIGNING_KEY });
-  return { userId, profileId, bearer: `Bearer ${accessToken}`, r2Key, exportKey, quoteR2Key };
+  return { userId, profileId, bearer: `Bearer ${accessToken}`, r2Key, exportKey, quoteR2Key, invoiceR2Key, logoR2Key };
 }
 
 beforeEach(async () => {
@@ -141,7 +145,7 @@ async function countForUser(table: string, userId: string): Promise<number> {
 
 describe("DELETE /account", () => {
   it("purges all D1 rows across every user-scoped table + R2 objects", async () => {
-    const { userId, profileId, bearer, r2Key, exportKey, quoteR2Key } = await seedRichUser();
+    const { userId, profileId, bearer, r2Key, exportKey, quoteR2Key, invoiceR2Key, logoR2Key } = await seedRichUser();
 
     // Sanity: the seed actually populated the graph (a few representative tables).
     for (const table of ["transactions", "line_items", "receipt_images", "quotes", "quote_line_items", "invoices", "payments", "vehicle_years", "profiles", "users"]) {
@@ -163,9 +167,11 @@ describe("DELETE /account", () => {
       (await env.DB.prepare("SELECT COUNT(*) c FROM invoice_counters WHERE profile_id = ?").bind(profileId).first<{ c: number }>())!.c,
     ).toBe(0);
 
-    expect(await env.RECEIPTS.get(r2Key)).toBeNull();       // u/${userId}/x.jpg
+    expect(await env.RECEIPTS.get(r2Key)).toBeNull();        // u/${userId}/x.jpg
     expect(await env.RECEIPTS.get(exportKey)).toBeNull();    // ${userId}/exports/<id>.pdf
     expect(await env.RECEIPTS.get(quoteR2Key)).toBeNull();   // ${userId}/quotes/<id>.pdf
+    expect(await env.RECEIPTS.get(invoiceR2Key)).toBeNull(); // ${userId}/invoices/<id>.pdf
+    expect(await env.RECEIPTS.get(logoR2Key)).toBeNull();    // ${userId}/profiles/<id>/logo
   });
 
   it("does not touch another user's data", async () => {

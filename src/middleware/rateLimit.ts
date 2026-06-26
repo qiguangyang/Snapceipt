@@ -48,7 +48,7 @@ export const RATE_LIMIT_TIERS = {
   export: { name: "export", limit: 60, windowMs: HOUR_MS, dimension: "user" },
   /** quote send — PDF build + email; 60/user/hr. */
   quotes: { name: "quotes", limit: 60, windowMs: HOUR_MS, dimension: "user" },
-  /** inbox alias mint/rotate — light per-user tier. */
+  /** inbox alias mint — light per-user tier. */
   inbox: { name: "inbox", limit: 60, windowMs: HOUR_MS, dimension: "user" },
   /** account ops (change email / delete account) — tight per-user tier. */
   account: { name: "account", limit: 60, windowMs: HOUR_MS, dimension: "user" },

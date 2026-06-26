@@ -69,6 +69,10 @@ export default defineWorkersConfig({
             // regardless of local .dev.vars. Real keys stay in .dev.vars / `wrangler secret`.
             DEEPSEEK_API_KEY: "",
             GEMINI_API_KEY: "",
+            // App Review accommodation seam: the demo-account email exercised by the /otp/verify
+            // "123456" bypass test. Inert for every other test (no other test uses this email with
+            // that code). Production sets this var only during a review.
+            REVIEW_DEMO_EMAIL: "reviewer@snapceipt.cc",
           },
           // .dev.vars isn't read in tests; inject the secrets/vars tests need.
           // (real secrets stay in .dev.vars locally / `wrangler secret` on deploy)

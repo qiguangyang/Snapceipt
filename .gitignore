@@ -53,3 +53,8 @@ artifacts/
 # Live-dev journey runner persist dirs (Plan B)
 .e2e-journey-state*/
 .design-ref/
+
+# App Store reviewer demo login (uses a REAL account's credentials — keep local only;
+# fastlane `deliver`/`release` reads them from the working tree at release time).
+fastlane/metadata/review_information/demo_user.txt
+fastlane/metadata/review_information/demo_password.txt

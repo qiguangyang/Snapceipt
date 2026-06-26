@@ -1,3 +1,17 @@
-Snapceipt signs in with Sign in with Apple or an emailed magic link — no username/password. To review the full app without email, a demo account can be provisioned on request (contact support@snapceipt.cc). The app is Australian (AUD/GST); receipt OCR sends only extracted receipt text (never name/email) to our processor. Subscriptions are auto-renewing Apple In-App Purchases.
+Snapceipt is an Australian (AUD / 10% GST) receipt + expense tracker. Receipt scanning, manual entry, mileage, work-from-home logging and reports are free. Quotes, Invoices and Email-in are Pro features, unlocked by an auto-renewing Apple In-App Purchase subscription.
 
-EULA: https://snapceipt.cc/terms (set in ASC App Information -> License Agreement).
+SIGNING IN (demo account in demo_user.txt / demo_password.txt):
+1. On the landing screen tap "Sign in" then "Continue with email".
+2. Enter the demo email + password above.
+3. On a first sign-in from a new device the app emails a 6-digit verification code (new-device two-factor). For THIS demo account, enter the verification code 123456 to complete sign-in (you do not need the emailed code).
+The demo account is Pro-entitled, so Quotes, Invoices and Email-in are all reviewable. Sign in with Apple is also supported.
+
+PERMISSIONS / DATA:
+- Camera + Photos: to capture/import receipt images.
+- Receipt OCR sends only the receipt image/text to our extraction processor (Google Gemini); no account name or email is shared.
+- Subscriptions are auto-renewing Apple In-App Purchases billed in AUD.
+- Account deletion is available in-app: Profile tab -> Account -> Delete account (irreversibly deletes all data server-side).
+
+EULA: https://snapceipt.cc/terms  (set in ASC App Information -> License Agreement)
+Privacy policy: https://snapceipt.cc/privacy
+Support: support@snapceipt.cc

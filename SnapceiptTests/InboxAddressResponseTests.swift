@@ -14,20 +14,14 @@ struct InboxAddressResponseTests {
     }
 
     @MainActor
-    @Test("MockAPIClient records profileInbox + rotate calls")
+    @Test("MockAPIClient records profileInbox calls")
     func mockRecords() async throws {
         let mock = MockAPIClient()
         mock.profileInboxHandler = { pid in
             InboxAddressResponse(profileId: pid, token: "t1", address: "r.t1@in.snapceipt.cc")
         }
-        mock.rotateProfileInboxHandler = { pid in
-            InboxAddressResponse(profileId: pid, token: "t2", address: "r.t2@in.snapceipt.cc")
-        }
         let a = try await mock.profileInbox(profileId: "p9")
-        let b = try await mock.rotateProfileInbox(profileId: "p9")
         #expect(a.token == "t1")
-        #expect(b.token == "t2")
         #expect(mock.profileInboxCalls == ["p9"])
-        #expect(mock.rotateProfileInboxCalls == ["p9"])
     }
 }

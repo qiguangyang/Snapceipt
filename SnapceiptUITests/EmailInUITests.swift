@@ -3,12 +3,12 @@ import XCTest
 /// Hermetic Email-in flow: seeded shell + stub API (no network). Business profile
 /// p1 is active and seeded with two `email_in` transactions (1 failed, 1 done), so
 /// the list renders failed-first. Profile tab -> Email-in receipts -> address card
-/// (stub alias) -> tap a row -> receipt detail -> close -> re-open list -> Rotate.
+/// (stub alias) -> tap a row -> receipt detail -> close -> re-open list.
 final class EmailInUITests: UITestCase {
     func testEmailInAddressCardAndDetailFlow() {
         // Email-in is a Pro feature. Launch with pro: true so the app reports a Pro
-        // plan and the screen / review / rotate open WITHOUT the paywall ever
-        // appearing (the StoreKit-test purchase hack can't complete in the stub).
+        // plan and the screen / review open WITHOUT the paywall ever appearing
+        // (the StoreKit-test purchase hack can't complete in the stub).
         launchSeeded(pro: true)
 
         // Navigate to the Profile tab. (The real id is `tab.profile` — the tab-bar
@@ -23,7 +23,7 @@ final class EmailInUITests: UITestCase {
         row.tap()
 
         // Pro plan is active (launched with pro: true), so the Pro gate falls away
-        // and no paywall appears as we drive the list / review / rotate.
+        // and no paywall appears as we drive the list / review.
 
         // Address card renders (stub alias).
         let address = app.staticTexts[AccessibilityID.emailInAddress]
@@ -52,10 +52,5 @@ final class EmailInUITests: UITestCase {
         rowAgain.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.emailInScreen].waitForExistence(timeout: 5),
                       "Email-in list did not reopen")
-
-        // Rotate the address (the stub returns a different alias).
-        let rotate = app.buttons[AccessibilityID.emailInRotate]
-        XCTAssertTrue(rotate.waitForExistence(timeout: 5), "Rotate button missing")
-        rotate.tap()
     }
 }

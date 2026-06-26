@@ -13,6 +13,7 @@ import { type InvoiceHtmlData } from "../lib/invoiceHtml";
 import { logoDataUri, APP_URL, API_ORIGIN } from "./quotes";
 import * as emailModule from "../lib/email";
 import { uuidv7 } from "../lib/ids";
+import { requireProPlan } from "../lib/plan";
 
 /**
  * POST /invoices/:id/issue  — Bearer (global auth) + rate tier "quotes" (app.ts).
@@ -188,6 +189,10 @@ invoicesRoutes.post("/:id/issue", async (c) => {
 
   const { invoice, lineItems, sender } = await loadInvoiceForPdf(c, invoiceId, userId);
 
+  // Pro-gate AFTER the load + ownership check (non-owner/unknown already 404'd, no-items
+  // already 400'd) and BEFORE the number mint / PDF build / R2 write. Issuing is Pro-only.
+  await requireProPlan(c);
+
   // Recompute totals authoritatively at the invoice's snapshotted rate (null ⇒ 1000).
   const gstEnabled = invoice.gst_enabled === 1;
   const gstInclusive = invoice.gst_inclusive === 1;
@@ -333,6 +338,8 @@ invoicesRoutes.post("/:id/send", async (c) => {
   // invoice must have a client email. loadInvoiceForPdf also 400s on no line items
   // and 404s on unknown/other-user, all before R2/outbox writes.
   const { invoice } = await loadInvoiceForPdf(c, invoiceId, userId);
+  // Pro-gate AFTER the load + ownership check (non-owner → 404) and before any mutation.
+  await requireProPlan(c);
   if (!invoice.client_email) {
     throw new ApiError("VALIDATION_FAILED", "Invoice has no client email to send to");
   }
@@ -414,6 +421,13 @@ invoicesRoutes.post("/:id/send", async (c) => {
 invoicesRoutes.post("/:id/pdf", async (c) => {
   const userId = c.var.userId;
   const invoiceId = c.req.param("id");
+  // Verify ownership BEFORE the Pro gate (non-owner → 404, not 403) and before
+  // rebuildInvoicePdf mutates R2/D1, so a free owner is 403'd without a PDF rebuild.
+  const owned = await c.env.DB.prepare(
+    `SELECT 1 FROM invoices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(invoiceId, userId).first();
+  if (!owned) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
+  await requireProPlan(c);
   const built = await rebuildInvoicePdf(c, invoiceId, userId);
 
   const origin = new URL(c.req.url).origin;

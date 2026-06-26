@@ -14,6 +14,10 @@ struct QuoteEditorView: View {
     let onClose: () -> Void
     /// Routes to the invoice editor after a convert (the new/existing invoice id). (spec §4.2)
     let onConvert: (String) -> Void
+    /// Called after "Save Draft" persists the quote — routes to the Quotes list so the user lands
+    /// on the saved draft. The editor and the list are sibling overlays, so a plain dismiss would
+    /// land on the tab root, not the list.
+    let onSavedDraft: () -> Void
 
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
@@ -25,6 +29,9 @@ struct QuoteEditorView: View {
     /// Moves the keyboard to a line item's Description field (by line id) — set when "+ Add"
     /// inserts a new row so the user can start typing the description immediately.
     @FocusState private var focusedLineId: String?
+    /// Hides the bottom send bar while the keyboard is up — it otherwise floats over the
+    /// totals/content (`.ignoresSafeArea(.keyboard)` can't pin a ZStack-aligned child).
+    @State private var keyboard = KeyboardObserver()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,7 +42,8 @@ struct QuoteEditorView: View {
             }
             // Pin the send bar to the bottom (behind the keyboard) instead of letting
             // it ride up and collide with the keyboard accessory bar while editing.
-            if let vm { sendBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
+            // Hide the send bar while the keyboard is up so it doesn't float over the content.
+            if let vm, !keyboard.isVisible { sendBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
             if sent, let vm { successOverlay(vm) }
         }
         .accessibilityElement(children: .contain)
@@ -80,9 +88,25 @@ struct QuoteEditorView: View {
             .accessibilityIdentifier(AccessibilityID.logbookClose)
             Text(quoteId == nil ? "New quote" : "Quote").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
-            // Trailing quote number, right-aligned in a slot matching the close button's width.
-            Text(vm?.displayNumber ?? "Draft").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
-                .lineLimit(1).frame(minWidth: 40, alignment: .trailing)
+            // Trailing slot: a "Save Draft" button while the quote is still a draft — persists it
+            // (so it can be re-opened from the Quotes list) then dismisses; once sent it shows the
+            // server-minted quote number instead.
+            if vm == nil || vm?.statusValue == .draft {
+                Button {
+                    vm?.saveDraft()
+                    onSavedDraft()
+                } label: {
+                    Text("Save Draft").font(.ui(12.5, .bold))
+                        .foregroundStyle((vm?.canSaveDraft ?? false) ? accent.base : Palette.ink3)
+                        .lineLimit(1).frame(minWidth: 40, alignment: .trailing)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(vm?.canSaveDraft ?? false))
+                .accessibilityIdentifier(AccessibilityID.quoteSaveDraft)
+            } else {
+                Text(vm?.displayNumber ?? "Draft").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
+                    .lineLimit(1).frame(minWidth: 40, alignment: .trailing)
+            }
         }
         .padding(.top, 12).padding(.horizontal, 18).padding(.bottom, 12)
     }

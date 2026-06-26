@@ -23,14 +23,17 @@ enum CategorySeeder {
         let isIncome: Bool
     }
 
+    // Every expense category defaults to 100% deductible (claim the full amount); the user can
+    // lower it per category in Categories settings. `income` is a transaction TYPE excluded from
+    // the deductible list, so its value is inert (kept 0).
     private static let seedMeta: [CategoryKey: SeedMeta] = [
-        .meals:     SeedMeta(tintHex: "#E8602C", softHex: "#FBEADF", defaultDeductiblePct: 50,  isIncome: false),
-        .groceries: SeedMeta(tintHex: "#C99A22", softHex: "#F6EECE", defaultDeductiblePct: 0,   isIncome: false),
+        .meals:     SeedMeta(tintHex: "#E8602C", softHex: "#FBEADF", defaultDeductiblePct: 100, isIncome: false),
+        .groceries: SeedMeta(tintHex: "#C99A22", softHex: "#F6EECE", defaultDeductiblePct: 100, isIncome: false),
         .fuel:      SeedMeta(tintHex: "#2F6FB0", softHex: "#E2ECF6", defaultDeductiblePct: 100, isIncome: false),
         .software:  SeedMeta(tintHex: "#7B5BD6", softHex: "#EBE5F8", defaultDeductiblePct: 100, isIncome: false),
         .office:    SeedMeta(tintHex: "#0E7C72", softHex: "#DCF0ED", defaultDeductiblePct: 100, isIncome: false),
-        .home:      SeedMeta(tintHex: "#B0568F", softHex: "#F4E4EF", defaultDeductiblePct: 0,   isIncome: false),
-        .health:    SeedMeta(tintHex: "#D6452B", softHex: "#F8E2DD", defaultDeductiblePct: 0,   isIncome: false),
+        .home:      SeedMeta(tintHex: "#B0568F", softHex: "#F4E4EF", defaultDeductiblePct: 100, isIncome: false),
+        .health:    SeedMeta(tintHex: "#D6452B", softHex: "#F8E2DD", defaultDeductiblePct: 100, isIncome: false),
         .travel:    SeedMeta(tintHex: "#1F9D6B", softHex: "#DEF3E9", defaultDeductiblePct: 100, isIncome: false),
         .income:    SeedMeta(tintHex: "#1F9D6B", softHex: "#DEF3E9", defaultDeductiblePct: 0,   isIncome: true),
     ]
@@ -90,6 +93,34 @@ enum CategorySeeder {
             let want = (CategoryKey(rawValue: row.key)).flatMap { gstFreeDefaultByKey[$0] } ?? false
             if row.gstFreeDefault != want {
                 row.gstFreeDefault = want
+                row.updatedAt = Epoch.nowMs()
+                sync.enqueue(op: "upsert", entityType: .category, entity: row)
+                changed = true
+            }
+        }
+        if changed { try? context.save() }
+        defaults.set(true, forKey: doneKey)
+    }
+
+    /// One-time per-profile backfill bringing existing category rows up to the seed default
+    /// deductible % (now 100% for every expense category). `ensure()` is insert-only so it never
+    /// revisits existing rows; this updates profiles seeded before the default changed. Runs once
+    /// per profile (UserDefaults-guarded): that single run raises EVERY category to the seed
+    /// default — including any earlier per-category customization (e.g. a deliberately-lowered
+    /// meals %) — after which the guard means later user edits are never touched. Safe at launch
+    /// (no existing production users), and matches the "100% for all categories" intent.
+    static func backfillDeductibleDefaults(profileId: String, context: ModelContext,
+                                           sync: any SyncEnqueuing, defaults: UserDefaults = .standard) {
+        let doneKey = "sc.cat.deductibleDefaultsBackfilled.\(profileId)"
+        if defaults.bool(forKey: doneKey) { return }
+        let pid = profileId
+        let rows = (try? context.fetch(FetchDescriptor<Category>(
+            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }))) ?? []
+        var changed = false
+        for row in rows {
+            let want = CategoryKey(rawValue: row.key).flatMap { seedMeta[$0]?.defaultDeductiblePct }
+            if let want, row.defaultDeductiblePct != want {
+                row.defaultDeductiblePct = want
                 row.updatedAt = Epoch.nowMs()
                 sync.enqueue(op: "upsert", entityType: .category, entity: row)
                 changed = true

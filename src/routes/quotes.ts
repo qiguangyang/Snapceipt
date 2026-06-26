@@ -8,6 +8,7 @@ import { assignQuoteNumber } from "../lib/quoteCounter";
 import * as emailModule from "../lib/email";
 import { signQuoteLinkToken } from "../lib/exportToken";
 import { type QuoteHtmlData } from "../lib/quoteHtml";
+import { requireProPlan } from "../lib/plan";
 
 /**
  * POST /quotes/:id/link  — Bearer; mint a 30-day signed link to the public HTML quote.
@@ -166,6 +167,10 @@ quotesRoutes.post("/:id/send", async (c) => {
   }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
 
+  // Pro-gate AFTER ownership (a non-owner still gets 404, not 403). Sending a quote
+  // is a Pro feature; the server must enforce it independently of the client paywall.
+  await requireProPlan(c);
+
   // 1b. Load the owning profile for the rich email header (name/logo/abn/contact).
   const profile = await c.env.DB.prepare(
     `SELECT name, abn, business_email, phone, logo_r2_key
@@ -285,6 +290,9 @@ quotesRoutes.post("/:id/link", async (c) => {
   ).bind(quoteId, userId).first<{ number: string | null; link_version: number }>();
   if (!quote) throw new ApiError("NOT_FOUND", "Quote not found for this user");
 
+  // Pro-gate AFTER ownership (non-owner → 404, not 403). Minting a public link is Pro-only.
+  await requireProPlan(c);
+
   const items = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM quote_line_items WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(quoteId, userId).first<{ n: number }>();
@@ -309,6 +317,13 @@ quotesRoutes.post("/:id/link", async (c) => {
 quotesRoutes.post("/:id/link/revoke", async (c) => {
   const userId = c.var.userId;
   const quoteId = c.req.param("id");
+  // Verify ownership BEFORE the Pro gate (non-owner → 404, not 403) and before mutating,
+  // so a free owner is 403'd without their link_version being bumped.
+  const owned = await c.env.DB.prepare(
+    `SELECT 1 FROM quotes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(quoteId, userId).first();
+  if (!owned) throw new ApiError("NOT_FOUND", "Quote not found for this user");
+  await requireProPlan(c);
   const res = await c.env.DB.prepare(
     `UPDATE quotes SET link_version = link_version + 1, updated_at = ?
        WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,

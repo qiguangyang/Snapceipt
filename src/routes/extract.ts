@@ -7,6 +7,7 @@ import { nowMs } from "../lib/time";
 import { type ExtractedReceipt } from "../lib/deepseek";
 import { runExtraction } from "../email/inbound";
 import { currentPeriod, capForPlan, getUsage, incrementUsage } from "../lib/smartScan";
+import { isProUser } from "../lib/plan";
 
 /**
  * POST /extract — auth (global middleware) + rate tier "extract" (mounted in app.ts).
@@ -65,10 +66,9 @@ extractRoutes.post("/", async (c) => {
   } else {
     const now = nowMs();
     const userId = c.var.userId;
-    const userRow = await c.env.DB.prepare(
-      "SELECT plan FROM users WHERE id = ? AND deleted_at IS NULL",
-    ).bind(userId).first<{ plan: string }>();
-    const plan = userRow?.plan ?? "free";
+    // Base the Pro cap on isProUser (plan=pro AND a live, non-revoked, non-expired sub),
+    // not the raw users.plan column — a lapsed/revoked sub must NOT keep the Pro cap.
+    const plan = (await isProUser(c.env.DB, userId)) ? "pro" : "free";
     const period = currentPeriod(now);
     const cap = capForPlan(plan, c.env);
     const used = await getUsage(c.env.DB, userId, period);

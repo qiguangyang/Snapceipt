@@ -55,6 +55,43 @@ struct InvoiceListViewModelTests {
         #expect(vm.others.map { $0.invoice.id } == [newer.id, older.id])
     }
 
+    @Test("month filter scopes the list to the selected month; drafts bucket by createdAt; facts span the full set")
+    func monthFilter() throws {
+        let c = try ctx()
+        let may1 = seed(c, status: "draft", total: 100_00, due: nil, created: 300); may1.issueDate = "2026-05-10"
+        let may2 = seed(c, status: "draft", total: 50_00, due: nil, created: 200); may2.issueDate = "2026-05-02"
+        seed(c, status: "draft", total: 20_00, due: nil, created: 100).issueDate = "2026-03-15"
+        // A draft with no issueDate falls back to its createdAt month (April here).
+        let aprMs = Int(ISO8601DateFormatter().date(from: "2026-04-15T00:00:00Z")!.timeIntervalSince1970 * 1000)
+        let draftApr = seed(c, status: "draft", total: 30_00, due: nil, created: aprMs)
+        try c.save()
+        let vm = InvoiceListViewModel(context: c, sync: MockSyncEngine(),
+                                      userId: "u1", profileId: "p1", today: "2026-06-10")
+
+        // Full-set facts (computed pre-filter, stable under any selection).
+        #expect(vm.hasAny == true)
+        #expect(Set(vm.availableMonthKeys).isSuperset(of: ["2026-05", "2026-04", "2026-03"]))
+        #expect(vm.newestMonthWithData == "2026-05")
+
+        // Select May → only the two May invoices (all drafts → in `others`).
+        vm.monthKey = "2026-05"; vm.reload()
+        #expect(Set(vm.others.map { $0.invoice.id }) == [may1.id, may2.id])
+        #expect(vm.needsAttention.isEmpty)
+
+        // A draft with issueDate == nil buckets by its createdAt month.
+        vm.monthKey = "2026-04"; vm.reload()
+        #expect(vm.others.map { $0.invoice.id } == [draftApr.id])
+
+        // A month with no data → empty list, but hasAny stays true (not "no invoices yet").
+        vm.monthKey = "2026-01"; vm.reload()
+        #expect(vm.needsAttention.isEmpty && vm.others.isEmpty)
+        #expect(vm.hasAny == true)
+
+        // All time → everything.
+        vm.monthKey = MonthKey.allTime; vm.reload()
+        #expect(vm.others.count == 4)
+    }
+
     @Test("needs-attention is scoped to the active profile")
     func scoping() throws {
         let c = try ctx()
