@@ -1,6 +1,16 @@
 import UIKit
 import PDFKit
 import UniformTypeIdentifiers
+import OSLog
+
+private let shareLog = Logger(subsystem: "app.snapceipt", category: "share")
+
+/// Mirrors UIApplication's `open(_:options:completionHandler:)` (ObjC selector
+/// `openURL:options:completionHandler:`), which is compile-time-unavailable to extensions. Casting
+/// the responder-chain UIApplication to this @objc protocol dispatches the real method at runtime.
+@objc private protocol URLOpening {
+    @objc func open(_ url: URL, options: [AnyHashable: Any], completionHandler: ((Bool) -> Void)?)
+}
 
 /// Share Extension entry point. Accepts an image or PDF shared from another app, reduces it to a
 /// JPEG (rasterizing a PDF's first page and keeping its embedded text), and drops it in the App
@@ -31,8 +41,11 @@ final class ShareViewController: UIViewController {
         // launch). NOTE: extensionContext.open() does NOT work for Share Extensions (Today widgets
         // only) — we walk the responder chain to UIApplication and invoke openURL: at runtime. If
         // that ever fails, the receipt still imports next time the app opens (the App Group inbox).
+        shareLog.info("share: wrote=\(wrote, privacy: .public)")
         if wrote, let url = URL(string: "snapceipt://import") {
             openHostApp(url)
+            // Let the openURL: dispatch reach the system before we tear down the extension process.
+            try? await Task.sleep(for: .milliseconds(400))
         }
         extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
@@ -42,15 +55,27 @@ final class ShareViewController: UIViewController {
     /// `perform("openURL:")` at runtime — the standard (and only reliable) way for a Share Extension
     /// to open its host app.
     private func openHostApp(_ url: URL) {
-        let selector = NSSelectorFromString("openURL:")
+        let legacy = NSSelectorFromString("openURL:")
         var responder: UIResponder? = self
+        var hop = 0
         while let r = responder {
-            if r.responds(to: selector) {
-                r.perform(selector, with: url)
+            shareLog.info("openHostApp hop \(hop): \(String(describing: type(of: r)), privacy: .public)")
+            // Modern UIApplication.open(_:options:completionHandler:) via the @objc protocol cast.
+            if let opener = r as AnyObject as? URLOpening {
+                shareLog.info("openHostApp: open(_:options:) via \(String(describing: type(of: r)), privacy: .public)")
+                opener.open(url, options: [:], completionHandler: nil)
+                return
+            }
+            // Fallback to the legacy single-arg openURL: selector.
+            if r.responds(to: legacy) {
+                shareLog.info("openHostApp: legacy openURL: via \(String(describing: type(of: r)), privacy: .public)")
+                r.perform(legacy, with: url)
                 return
             }
             responder = r.next
+            hop += 1
         }
+        shareLog.error("openHostApp: no opener on the responder chain after \(hop) hops")
     }
 
     private func ingestImage(_ provider: NSItemProvider) async -> Bool {
