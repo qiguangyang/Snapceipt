@@ -213,6 +213,7 @@ enum AccessibilityID {
     static let quoteEditorGst = "quote.editor.gst"
     static let quoteEditorGstInclusive = "quote.editor.gstInclusive"
     static let quoteEditorSend = "quote.editor.send"
+    static let quoteSaveDraft = "quote.editor.saveDraft"
     static let clientPickerScreen = "client.picker.screen"
     static let clientPickerAdd = "client.picker.add"
     static let clientRowPrefix = "client.row."           // + client.id
