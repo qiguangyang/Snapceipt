@@ -16,9 +16,9 @@ struct CaptureFlow: View {
             Palette.cream.ignoresSafeArea()
             switch vm.stage {
             case .camera:
-                // A live capture goes to the edge-adjust/dewarp step first; OCR is deferred
-                // to "Confirm scan". Imports (Photos/Files) skip dewarp and go straight to
-                // extract — PDFs pass their embedded text so OCR is skipped entirely.
+                // A live capture OR an imported photo goes to the edge-adjust/dewarp step first;
+                // OCR is deferred to "Confirm scan". A PDF with embedded text skips dewarp + OCR
+                // and goes straight to extract.
                 CameraStep(
                     onScanned: { image in vm.presentCapture(image: image) },
                     onImported: { image, text in Task { await vm.ingestImport(image: image, text: text) } },

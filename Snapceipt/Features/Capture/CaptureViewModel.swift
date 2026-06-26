@@ -397,10 +397,12 @@ final class CaptureViewModel {
         stage = .camera
     }
 
-    /// An imported file (Photos/Files). Imports skip the camera edge-adjust/dewarp (they're
-    /// already clean documents) and go straight to extract. PDFs pass their embedded `text`
-    /// so OCR is skipped entirely — far more accurate than re-OCRing a rendered page; photos
-    /// and scanned (image-only) PDFs pass nil and fall back to on-device OCR.
+    /// An imported file (Photos/Files). A PDF with embedded `text` skips OCR entirely (far more
+    /// accurate than re-OCRing a rendered page). Everything else — a photo from the library, an image
+    /// file, or a scanned/image-only PDF — is run through the SAME edge-adjust/dewarp step as a live
+    /// capture: an imported receipt photo can be skewed or curled, so it gets document-scanned too.
+    /// Imported photos carry EXIF orientation (the camera path strips it via `normalizedUp`), so
+    /// normalize first or `DocumentScan.detect`/`dewarp` (which work in pixel space) would be rotated.
     func ingestImport(image: UIImage, text: String?) async {
         if let text, !text.isEmpty {
             let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map {
@@ -408,8 +410,7 @@ final class CaptureViewModel {
             }
             await onScanned(image: image, lines: lines)
         } else {
-            let lines = (try? await OCR.recognize(in: image)) ?? []
-            await onScanned(image: image, lines: lines)
+            presentCapture(image: image.normalizedUp())
         }
     }
 
