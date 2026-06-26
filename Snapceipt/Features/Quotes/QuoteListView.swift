@@ -94,13 +94,15 @@ struct QuoteListView: View {
         .accessibilityIdentifier(AccessibilityID.quotesScreen)
         .transition(.opacity)
         .task {
-            vm = QuoteListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            let model = QuoteListViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
+            model.reload()         // local fetch first so the month snaps BEFORE the slow sync
+            // Land on the newest quote's month so the list shows data by default (like Activity);
+            // a profile with no quotes stays on the current month.
+            if let newest = model.quotes.first { monthKey = String(isoDay(newest.createdAt).prefix(7)) }
+            vm = model
             if !entitlement.isPro { showPaywall = true; return }
             await onRefresh()      // pull a client's web "Accept" before the list settles
             vm?.reload()
-            // Land on the newest quote's month so the list shows data by default (like Activity);
-            // a profile with no quotes stays on the current month.
-            if let newest = vm?.quotes.first { monthKey = String(isoDay(newest.createdAt).prefix(7)) }
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }

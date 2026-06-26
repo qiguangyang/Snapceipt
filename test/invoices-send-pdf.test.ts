@@ -34,9 +34,11 @@ async function seedAuthed() {
   const userId = uuidv7();
   const deviceId = uuidv7();
   const now = nowMs();
+  // 'pro' plan: POST /invoices/:id/send + /pdf are server-side Pro-gated, so the
+  // success-path tests below must authenticate as a Pro user.
   await env.DB.prepare(
     `INSERT INTO users (id, email, email_verified, plan, created_at, updated_at)
-     VALUES (?, ?, 1, 'free', ?, ?)`,
+     VALUES (?, ?, 1, 'pro', ?, ?)`,
   ).bind(userId, `${userId}@example.com`, now, now).run();
   await env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, push_enabled, created_at, updated_at)

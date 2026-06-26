@@ -33,9 +33,12 @@ async function seedAuthed() {
   const userId = uuidv7();
   const deviceId = uuidv7();
   const now = nowMs();
+  // 'pro' plan: POST /quotes/:id/send is server-side Pro-gated, so the success-path
+  // tests below must authenticate as a Pro user. (The free-403 case lives in
+  // quote-invoice-pro-gate.test.ts.)
   await env.DB.prepare(
     `INSERT INTO users (id, email, email_verified, display_name, plan, created_at, updated_at)
-     VALUES (?, ?, 1, 'Dev', 'free', ?, ?)`,
+     VALUES (?, ?, 1, 'Dev', 'pro', ?, ?)`,
   ).bind(userId, `${userId}@example.com`, now, now).run();
   await env.DB.prepare(
     `INSERT INTO devices (id, user_id, platform, push_enabled, created_at, updated_at)

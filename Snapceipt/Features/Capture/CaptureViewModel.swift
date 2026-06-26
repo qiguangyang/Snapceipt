@@ -363,7 +363,12 @@ final class CaptureViewModel {
             imageLocalPath: path, width: width, height: height,
             autoSaved: autoSaved)
         context.insert(pending)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            errorMessage = "Couldn't save the receipt. Please try again."
+            return
+        }
 
         stage = .saved
     }
