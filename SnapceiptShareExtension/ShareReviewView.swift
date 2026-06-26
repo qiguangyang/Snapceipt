@@ -19,10 +19,6 @@ final class ShareReviewModel: ObservableObject {
     /// it writes the JPEG only and the app re-extracts on open).
     @Published var draft: ExtractedReceipt?
 
-    /// TEMPORARY diagnostic: the OCR money/total lines + the GST/total the reader produced, shown
-    /// in the popup so a wrong read can be diagnosed from a screenshot. Remove once tuned.
-    @Published var debugInfo: String?
-
     /// True once we have an image to show (even while still reading it).
     var hasImage: Bool { image != nil }
 
@@ -83,9 +79,6 @@ struct ShareReviewView: View {
                             savedBanner
                         } else {
                             fieldsCard
-                        }
-                        if let dbg = model.debugInfo {
-                            debugBox(dbg)
                         }
                     }
                     .padding(16)
@@ -170,21 +163,6 @@ struct ShareReviewView: View {
         }
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
-    /// TEMPORARY diagnostic panel — shows the OCR money/total lines + the read GST/total.
-    private func debugBox(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("DEBUG · OCR read (temporary)")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(text)
-                .font(.system(.caption2, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(12)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func row(label: String, value: String) -> some View {

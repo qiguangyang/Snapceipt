@@ -1,4 +1,4 @@
 git_url(ENV["MATCH_GIT_URL"])
 storage_mode("git")
 type("appstore")
-app_identifier(["app.snapceipt.Snapceipt"])
+app_identifier(["app.snapceipt.Snapceipt", "app.snapceipt.Snapceipt.ShareExtension"])

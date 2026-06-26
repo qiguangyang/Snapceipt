@@ -100,29 +100,13 @@ final class ShareViewController: UIViewController {
             // "Total" / "GST" labels with the amount on their OWN printed row, so neither can be
             // corrupted by row-merge/model errors.
             let withTotal = OnDeviceGuards.withGeometricTotal(extracted, lines: lines)
-            let draft = OnDeviceGuards.withGeometricGst(withTotal, lines: lines)
-            model.debugInfo = Self.debugString(rawText: rawText, layoutText: layoutText, lines: lines, draft: draft)
-            return draft
+            return OnDeviceGuards.withGeometricGst(withTotal, lines: lines)
         } catch {
             shareLog.error("share: extraction failed: \(String(describing: error), privacy: .public)")
-            model.debugInfo = "Extraction failed: \(String(describing: error))"
             return nil
         }
     }
 
-    /// TEMPORARY: builds the popup's debug panel text from the OCR + the read result, so a wrong
-    /// read can be diagnosed from a screenshot. Remove with the `debugInfo` panel once tuned.
-    private static func debugString(rawText: String, layoutText: String,
-                                    lines: [RecognizedLine], draft: ExtractedReceipt?) -> String {
-        let gst = draft?.gst.map { "\($0)" } ?? "nil"
-        let total = draft.map { "\($0.total)" } ?? "nil"
-        // Reconstructed rows + the raw per-observation geometry (text, vertical center y, height),
-        // so a wrong row-pairing can be diagnosed from the screenshot.
-        let geom = lines.map {
-            "\($0.text)  y\(String(format: "%.3f", $0.boundingBox.midY)) h\(String(format: "%.3f", $0.boundingBox.height))"
-        }.joined(separator: "\n")
-        return "READ → gst=\(gst)  total=\(total)\n— ROWS —\n\(layoutText)\n— GEOMETRY (text y h) —\n\(geom)"
-    }
 
     // MARK: Save / Cancel
 

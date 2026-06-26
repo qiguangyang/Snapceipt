@@ -98,6 +98,13 @@ targets:
         SKIP_INSTALL: YES
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+      configs:
+        Release:
+          # App Store distribution: manual signing with the match-managed extension profile
+          # (regenerated via `fastlane certs`); the App Group entitlement must be on the App ID.
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "match AppStore app.snapceipt.Snapceipt.ShareExtension"
   SnapceiptTests:
     type: bundle.unit-test
     platform: iOS
