@@ -14,6 +14,10 @@ struct QuoteEditorView: View {
     let onClose: () -> Void
     /// Routes to the invoice editor after a convert (the new/existing invoice id). (spec §4.2)
     let onConvert: (String) -> Void
+    /// Called after "Save Draft" persists the quote — routes to the Quotes list so the user lands
+    /// on the saved draft. The editor and the list are sibling overlays, so a plain dismiss would
+    /// land on the tab root, not the list.
+    let onSavedDraft: () -> Void
 
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
@@ -90,7 +94,7 @@ struct QuoteEditorView: View {
             if vm == nil || vm?.statusValue == .draft {
                 Button {
                     vm?.saveDraft()
-                    onClose()
+                    onSavedDraft()
                 } label: {
                     Text("Save Draft").font(.ui(12.5, .bold))
                         .foregroundStyle((vm?.canSaveDraft ?? false) ? accent.base : Palette.ink3)
