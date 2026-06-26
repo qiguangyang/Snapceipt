@@ -310,7 +310,7 @@ struct InvoicePdfResponse: Decodable {
 
 // MARK: - Email-in (spec §3.1 / §3.4)
 
-/// GET /profiles/:id/inbox + POST .../rotate — the per-profile inbox alias. The
+/// GET /profiles/:id/inbox — the per-profile inbox alias. The
 /// client treats `address` as opaque (the server owns formatting).
 struct InboxAddressResponse: Decodable, Equatable {
     let profileId: String

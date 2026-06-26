@@ -45,7 +45,6 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     var sendInvoiceHandler: ((String) async throws -> SendInvoiceResponse)?
     var invoicePdfHandler: ((String) async throws -> InvoicePdfResponse)?
     var profileInboxHandler: ((String) async throws -> InboxAddressResponse)?
-    var rotateProfileInboxHandler: ((String) async throws -> InboxAddressResponse)?
 
     // MARK: Account scripting
 
@@ -68,7 +67,6 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     private(set) var sendInvoiceCalls: [String] = []
     private(set) var invoicePdfCalls: [String] = []
     private(set) var profileInboxCalls: [String] = []
-    private(set) var rotateProfileInboxCalls: [String] = []
 
     // MARK: Recorded calls
 
@@ -241,11 +239,6 @@ final class MockAPIClient: APIClient, @unchecked Sendable {
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {
         profileInboxCalls.append(profileId)
         guard let h = profileInboxHandler else { throw MockAPIClientError.unscripted }
-        return try await h(profileId)
-    }
-    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
-        rotateProfileInboxCalls.append(profileId)
-        guard let h = rotateProfileInboxHandler else { throw MockAPIClientError.unscripted }
         return try await h(profileId)
     }
 

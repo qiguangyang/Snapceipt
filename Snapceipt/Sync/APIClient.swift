@@ -71,8 +71,6 @@ protocol APIClient {
     func invoicePdf(_ id: String) async throws -> InvoicePdfResponse
     /// GET /profiles/:id/inbox — the per-profile email-in alias (minted on first read). (§3.1)
     func profileInbox(profileId: String) async throws -> InboxAddressResponse
-    /// POST /profiles/:id/inbox/rotate — replace the alias; the old token stops resolving. (§3.1)
-    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse
     /// POST /users/me/email — issue a 6-digit code to `newEmail`. (§8.1)
     func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested
     /// POST /users/me/email/verify — confirm the code; returns the updated user. (§8.1)
@@ -331,10 +329,6 @@ final class LiveAPIClient: APIClient {
 
     func profileInbox(profileId: String) async throws -> InboxAddressResponse {
         try await send("GET", "/profiles/\(profileId)/inbox", body: NoBody(), authenticated: true)
-    }
-
-    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
-        try await send("POST", "/profiles/\(profileId)/inbox/rotate", body: NoBody(), authenticated: true)
     }
 
     func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {

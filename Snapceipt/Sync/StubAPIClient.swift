@@ -136,10 +136,6 @@ final class StubAPIClient: APIClient {
         InboxAddressResponse(profileId: profileId, token: "stubtokeninitial",
                              address: "r.stubtokeninitial@in.snapceipt.cc")
     }
-    func rotateProfileInbox(profileId: String) async throws -> InboxAddressResponse {
-        InboxAddressResponse(profileId: profileId, token: "stubtokenrotated",
-                             address: "r.stubtokenrotated@in.snapceipt.cc")
-    }
     func requestEmailChange(newEmail: String) async throws -> EmailChangeRequested {
         EmailChangeRequested(sent: true, devCode: "000000")
     }

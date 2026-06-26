@@ -84,22 +84,3 @@ export async function mintInboxToken(
     .first<{ token: string }>();
   return row!.token;
 }
-
-/** Overwrite the profile's token with a fresh one (old token stops resolving). */
-export async function rotateInboxToken(
-  db: D1Database,
-  userId: string,
-  profileId: string,
-  now: number,
-): Promise<string> {
-  const token = generateInboxToken();
-  await db
-    .prepare(
-      `INSERT INTO profile_inbox_tokens (token, user_id, profile_id, created_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(profile_id) DO UPDATE SET token = excluded.token, created_at = excluded.created_at`,
-    )
-    .bind(token, userId, profileId, now)
-    .run();
-  return token;
-}

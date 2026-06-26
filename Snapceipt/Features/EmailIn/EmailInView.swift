@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import Combine
 
-/// The Email-in surface: an inbox-address card (copy / share / rotate) above a
+/// The Email-in surface: an inbox-address card (copy / share) above a
 /// failed-first list of email_in transactions. Tapping a row opens the review editor.
 struct EmailInView: View {
     @State private var vm: EmailInViewModel
@@ -99,7 +99,7 @@ struct EmailInView: View {
                         }
                     }
                 }
-                // Copy / Share / Rotate act on the address — only show them once it has loaded, so
+                // Copy / Share act on the address — only show them once it has loaded, so
                 // the error state isn't a row of dead buttons.
                 if let addr = vm.address?.address {
                     HStack(spacing: 10) {
@@ -108,9 +108,6 @@ struct EmailInView: View {
                             toasts.show("Address copied", kind: .success)
                         }
                         actionChip("Share", "square.and.arrow.up", id: nil) { shareItem = addr }
-                        actionChip("Rotate", "arrow.triangle.2.circlepath", id: AccessibilityID.emailInRotate) {
-                            Task { await vm.rotate() }
-                        }
                     }
                 }
             }

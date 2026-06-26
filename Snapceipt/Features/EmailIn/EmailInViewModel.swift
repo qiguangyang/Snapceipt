@@ -69,13 +69,4 @@ final class EmailInViewModel {
         guard isPro else { return }
         await loadAddress()
     }
-
-    func rotate() async {
-        errorMessage = nil
-        do {
-            address = try await api.rotateProfileInbox(profileId: profileId)
-        } catch {
-            errorMessage = "Couldn't rotate the address."
-        }
-    }
 }
