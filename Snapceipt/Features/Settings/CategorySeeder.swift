@@ -104,8 +104,11 @@ enum CategorySeeder {
 
     /// One-time per-profile backfill bringing existing category rows up to the seed default
     /// deductible % (now 100% for every expense category). `ensure()` is insert-only so it never
-    /// revisits existing rows; this updates profiles seeded before the default changed. Idempotent
-    /// (UserDefaults-guarded), so a user's later per-category edit is preserved.
+    /// revisits existing rows; this updates profiles seeded before the default changed. Runs once
+    /// per profile (UserDefaults-guarded): that single run raises EVERY category to the seed
+    /// default — including any earlier per-category customization (e.g. a deliberately-lowered
+    /// meals %) — after which the guard means later user edits are never touched. Safe at launch
+    /// (no existing production users), and matches the "100% for all categories" intent.
     static func backfillDeductibleDefaults(profileId: String, context: ModelContext,
                                            sync: any SyncEnqueuing, defaults: UserDefaults = .standard) {
         let doneKey = "sc.cat.deductibleDefaultsBackfilled.\(profileId)"

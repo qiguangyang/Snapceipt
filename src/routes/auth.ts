@@ -324,13 +324,21 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
   const emailHash = await sha256Hex(normalized);
   const kvKey = `oc:${emailHash}`;
 
-  // App Review accommodation: the configured demo account accepts the fixed code "123456" so a
-  // reviewer on a fresh device clears new-device 2FA without an emailed code. Inert unless
-  // REVIEW_DEMO_EMAIL is set, and only this one account is affected (its password was already
-  // verified by /password/login; this bypasses ONLY the second factor). See env.ts.
+  // App Review accommodation: the configured demo account may clear the SECOND FACTOR with the
+  // fixed code "123456" — but ONLY after a correct password login on this device, proven by the
+  // single-use `rml:` marker that /password/login sets on a verified password. So this never
+  // bypasses the password, and the passwordless /otp/request path can't trigger it. Inert unless
+  // REVIEW_DEMO_EMAIL is set, and only that one account is ever affected. See env.ts.
   const reviewEmail = c.env.REVIEW_DEMO_EMAIL?.trim()
     ? normalizeEmail(c.env.REVIEW_DEMO_EMAIL) : null;
-  const reviewBypass = reviewEmail !== null && normalized === reviewEmail && code === "123456";
+  let reviewBypass = false;
+  if (reviewEmail !== null && normalized === reviewEmail && code === "123456") {
+    const rmlKey = `rml:${emailHash}`;
+    if (await c.env.KV.get(rmlKey)) {
+      await c.env.KV.delete(rmlKey);   // single-use: requires a fresh password login each time
+      reviewBypass = true;
+    }
+  }
 
   let userEmail: string;
   if (reviewBypass) {
@@ -480,6 +488,13 @@ authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c
 
   if (!device?.trusted_at) {
     const code = await sendOtpCode(c, normalized);
+    // App Review accommodation: record that the demo account just passed the password check on a
+    // new device, so /otp/verify's fixed-code (123456) bypass requires a real password first.
+    // Inert unless REVIEW_DEMO_EMAIL is set. See env.ts + /otp/verify.
+    const reviewEmail = c.env.REVIEW_DEMO_EMAIL?.trim() ? normalizeEmail(c.env.REVIEW_DEMO_EMAIL) : null;
+    if (reviewEmail && normalized === reviewEmail) {
+      await c.env.KV.put(`rml:${await sha256Hex(normalized)}`, "1", { expirationTtl: OTP_TTL_SECONDS });
+    }
     const body: { mfaRequired: true; devCode?: string } = { mfaRequired: true };
     if (c.env.E2E_TEST_MODE === "1") body.devCode = code;
     return c.json(body);

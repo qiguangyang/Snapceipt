@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as emailModule from "../src/lib/email";
+import { hashPassword } from "../src/lib/password";
 
 // Migrations applied by test/apply-migrations.ts (vitest.config.ts setupFiles).
 
@@ -208,7 +209,12 @@ describe("POST /auth/otp/verify", () => {
 });
 
 // REVIEW_DEMO_EMAIL = "reviewer@snapceipt.cc" is set in vitest.config.ts (the worker reads it there).
-describe("POST /auth/otp/verify — App Review demo bypass", () => {
+// The 123456 bypass clears ONLY the second factor: it requires a prior correct password login
+// (the rml: marker /password/login sets), so it can never be a passwordless door into the account.
+describe("POST /auth/otp/verify — App Review demo bypass (password-gated)", () => {
+  const DEMO = "reviewer@snapceipt.cc";
+  const PW = "demo-pass-Aa1!";
+
   beforeEach(async () => {
     await env.DB.exec("DELETE FROM sessions");
     await env.DB.exec("DELETE FROM auth_identities");
@@ -216,27 +222,65 @@ describe("POST /auth/otp/verify — App Review demo bypass", () => {
     await env.DB.exec("DELETE FROM users");
   });
 
-  it("accepts the fixed 123456 for the demo email (no pending code); wrong code + other emails fall through", async () => {
-    // Demo email + 123456 → session issued WITHOUT any emailed/pending code (case-insensitive).
-    const ok = await SELF.fetch("https://x/auth/otp/verify", {
+  // The auth tier rate-limits per email + per IP; flush both so the multi-call flows don't 429.
+  async function resetRl(email: string) {
+    const hb = Math.floor(Date.now() / (60 * 60 * 1000));
+    await env.KV.delete(`rl:auth-email:email:${email}:${hb}`);
+    await env.KV.delete(`rl:auth-ip:ip:unknown:${hb}`);
+  }
+  async function seedDemo() {
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, email_verified, display_name, password_hash, plan, created_at, updated_at) VALUES (?,?,1,NULL,?,'pro',?,?)",
+    ).bind("u-demo", DEMO, await hashPassword(PW), now, now).run();
+  }
+  function verify(email: string, code: string, device = "rev-dev") {
+    return SELF.fetch("https://x/auth/otp/verify", {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Device-Id": "rev-dev" },
-      body: JSON.stringify({ email: "Reviewer@Snapceipt.cc", code: "123456" }),
+      headers: { "content-type": "application/json", "X-Device-Id": device },
+      body: JSON.stringify({ email, code }),
     });
-    expect(ok.status).toBe(200);
+  }
+  function login(email: string, password: string, device = "rev-dev") {
+    return SELF.fetch("https://x/auth/password/login", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Device-Id": device },
+      body: JSON.stringify({ email, password }),
+    });
+  }
 
-    // Demo email + a NON-123456 code → no bypass → normal flow → 401 (no pending).
-    const wrong = await SELF.fetch("https://x/auth/otp/verify", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "reviewer@snapceipt.cc", code: "000000" }),
-    });
-    expect(wrong.status).toBe(401);
+  it("123456 clears 2FA ONLY after a correct password login for the demo account", async () => {
+    await seedDemo();
 
-    // A DIFFERENT email + 123456 → no bypass (email != the demo) → 401.
-    const other = await SELF.fetch("https://x/auth/otp/verify", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "someone@else.com", code: "123456" }),
-    });
-    expect(other.status).toBe(401);
+    // (1) Passwordless: no prior login → no rml: marker → bypass refused.
+    await resetRl(DEMO);
+    expect((await verify(DEMO, "123456")).status).toBe(401);
+
+    // (2) Correct password on a new device → mfaRequired (and sets the rml: marker).
+    await resetRl(DEMO);
+    const res = await login(DEMO, PW);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { mfaRequired?: boolean }).mfaRequired).toBe(true);
+
+    // (3) Now 123456 clears the second factor → session.
+    await resetRl(DEMO);
+    expect((await verify(DEMO, "123456")).status).toBe(200);
+
+    // (4) Single-use: a replay without a fresh login → refused again.
+    await resetRl(DEMO);
+    expect((await verify(DEMO, "123456")).status).not.toBe(200);
+  });
+
+  it("a WRONG password never enables 123456 for the demo account", async () => {
+    await seedDemo();
+    await resetRl(DEMO);
+    expect((await login(DEMO, "wrong-password", "d2")).status).toBe(401);
+    await resetRl(DEMO);
+    expect((await verify(DEMO, "123456", "d2")).status).toBe(401);
+  });
+
+  it("a non-demo email never gets the 123456 bypass", async () => {
+    await resetRl("someone@else.com");
+    expect((await verify("someone@else.com", "123456")).status).toBe(401);
   });
 });

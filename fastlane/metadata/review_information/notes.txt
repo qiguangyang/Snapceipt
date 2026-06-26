@@ -3,7 +3,7 @@ Snapceipt is an Australian (AUD / 10% GST) receipt + expense tracker. Receipt sc
 SIGNING IN (demo account in demo_user.txt / demo_password.txt):
 1. On the landing screen tap "Sign in" then "Continue with email".
 2. Enter the demo email + password above.
-3. On a first sign-in from a new device the app emails a 6-digit verification code (new-device two-factor). The demo account is set up so this code is retrievable for review — see the access note below to complete sign-in.
+3. On a first sign-in from a new device the app emails a 6-digit verification code (new-device two-factor). For THIS demo account, enter the verification code 123456 to complete sign-in (you do not need the emailed code).
 The demo account is Pro-entitled, so Quotes, Invoices and Email-in are all reviewable. Sign in with Apple is also supported.
 
 PERMISSIONS / DATA:
