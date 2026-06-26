@@ -22,6 +22,9 @@ struct QuoteEditorView: View {
     @State private var shareURL: URL?
     @State private var shareFileURL: URL?
     @State private var renderer = QuotePdfRenderer()
+    /// Moves the keyboard to a line item's Description field (by line id) — set when "+ Add"
+    /// inserts a new row so the user can start typing the description immediately.
+    @FocusState private var focusedLineId: String?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -217,7 +220,12 @@ struct QuoteEditorView: View {
             HStack {
                 Text("Line items").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3).kerning(0.3)
                 Spacer()
-                Button { vm.addLine() } label: {
+                Button {
+                    guard let id = vm.addLine() else { return }
+                    // Defer one runloop tick so the freshly-inserted row's TextField is in the
+                    // hierarchy before we move focus to it (focusing a not-yet-installed field no-ops).
+                    DispatchQueue.main.async { focusedLineId = id }
+                } label: {
                     HStack(spacing: 4) {
                         Icon(name: "plus", size: 14, color: accent.base, lineWidth: 2)
                         Text("Add").font(.ui(13, .bold)).foregroundStyle(accent.base)
@@ -252,6 +260,7 @@ struct QuoteEditorView: View {
                 TextField("Description", text: Binding(
                     get: { line.itemDescription }, set: { line.itemDescription = $0 }),
                     axis: .vertical)
+                    .focused($focusedLineId, equals: line.id)
                     .lineLimit(1...6)
                     .font(.ui(14.5, .semibold))
                 Text(fmt(line.lineTotalCents)).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
