@@ -487,6 +487,7 @@ struct ShellView: View {
             // gstFreeDefault and is idempotent (UserDefaults-guarded per profile), so running
             // it on every launch/activation is safe.
             backfillGstDefaultsForActive()
+            backfillDeductibleDefaultsForActive()
             await sync.sync()
             // Drain shared receipts BEFORE reconciling so a freshly-imported Share-Extension fallback
             // (saved "pending" when on-device AI couldn't read the language) is cloud-upgraded by the
@@ -503,6 +504,7 @@ struct ShellView: View {
         .onChange(of: profiles.activeProfileId) { _, _ in
             seedCategoriesForActive()
             backfillGstDefaultsForActive()
+            backfillDeductibleDefaultsForActive()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -655,6 +657,15 @@ struct ShellView: View {
         let pid = profiles.activeProfileId
         guard !pid.isEmpty else { return }
         CategorySeeder.backfillGstDefaults(profileId: pid, context: profiles.context, sync: sync)
+    }
+
+    /// One-time per-profile backfill bringing existing categories up to the 100% default
+    /// deductible. Guarded by a per-profile UserDefaults flag inside the seeder, so it is safe to
+    /// call on every launch / active-profile change and preserves a user's later edits.
+    private func backfillDeductibleDefaultsForActive() {
+        let pid = profiles.activeProfileId
+        guard !pid.isEmpty else { return }
+        CategorySeeder.backfillDeductibleDefaults(profileId: pid, context: profiles.context, sync: sync)
     }
 
     /// Seed the active profile's default categories at launch / profile switch (idempotent,
