@@ -150,8 +150,7 @@ struct QuoteListView: View {
             .background((isSent ? Palette.income : Palette.ink3).opacity(0.14), in: Capsule())
     }
 
-    /// Convert an epoch-ms createdAt into a "yyyy-MM-dd" string for `fmtDate`.
-    private func isoDay(_ ms: Int) -> String {
-        ExportDateFormatter.shared.string(from: Date(timeIntervalSince1970: Double(ms) / 1000.0))
-    }
+    /// Convert an epoch-ms createdAt into a "yyyy-MM-dd" string in the device's LOCAL timezone —
+    /// used for both the row date and the month filter, so they reflect the user's calendar, not UTC.
+    private func isoDay(_ ms: Int) -> String { MonthKey.localDay(ms) }
 }

@@ -7,8 +7,22 @@ import SwiftUI
 enum MonthKey {
     static let allTime = ""
 
-    /// Current month `"YYYY-MM"` in UTC — matches the UTC day-strings the rows use.
-    static var current: String { String(ExportDateFormatter.shared.string(from: Date()).prefix(7)) }
+    /// `"YYYY-MM-DD"` for an epoch-ms instant in the DEVICE's local timezone (`TimeZone.current`),
+    /// so the month filter reflects the user's own calendar rather than UTC.
+    static func localDay(_ epochMs: Int) -> String {
+        localDayFormatter.string(from: Date(timeIntervalSince1970: Double(epochMs) / 1000.0))
+    }
+    private static let localDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        // No `timeZone` set → the formatter uses the device's current timezone.
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    /// Current month `"YYYY-MM"` in the device's local timezone.
+    static var current: String { String(localDayFormatter.string(from: Date()).prefix(7)) }
 
     /// Human label for a `"YYYY-MM"` key (e.g. "Jun 2026"); reuses the Activity formatter.
     static func label(_ key: String) -> String { ActivityDate.monthLabel(key) }

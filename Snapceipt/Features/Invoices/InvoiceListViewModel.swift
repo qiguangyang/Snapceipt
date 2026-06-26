@@ -95,7 +95,7 @@ final class InvoiceListViewModel {
     /// The day-string the date filter keys off: the issue date (the tax-invoice date), falling back
     /// to the created date for drafts (issueDate == nil) so a draft isn't hidden by the filter.
     static func effectiveDay(_ inv: Invoice) -> String {
-        inv.issueDate ?? ExportDateFormatter.shared.string(from: Date(timeIntervalSince1970: Double(inv.createdAt) / 1000.0))
+        inv.issueDate ?? MonthKey.localDay(inv.createdAt)
     }
 
     func badge(for invoice: Invoice) -> InvoiceBadge {
