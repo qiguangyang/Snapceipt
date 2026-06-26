@@ -61,8 +61,7 @@
   <p>We use a small number of trusted providers to run the app. They process data only on our instructions, and we require them to protect it to a standard consistent with this policy and the APPs.</p>
   <ul>
     <li><b>Cloudflare</b> — hosting and storage. Receipt images are kept in object storage; your records in our database.</li>
-    <li><b>DeepSeek</b> — to read a receipt, its extracted <b>text</b> is sent to DeepSeek's AI to identify the merchant, total, GST and category. Only receipt text is shared — never your name, email or account details.</li>
-    <li><b>Cloudflare Workers AI</b> — if you forward a receipt to your private Snapceipt inbox, its image is read (OCR) here before the same text-only extraction.</li>
+    <li><b>Google Gemini</b> — to read a receipt (one you capture in the app, or forward to your private Snapceipt inbox), its image is sent to Google's Gemini AI to identify the merchant, total, GST and category. Only the receipt is shared — never your name, email or account details.</li>
     <li><b>Apple</b> — processes your sign-in if you use Sign in with Apple, and handles all subscription payments through the App Store.</li>
   </ul>
   <div class="callout2">Some of these providers may process data on servers outside Australia. Where that happens, we take reasonable steps to ensure your information is handled consistently with the Australian Privacy Principles.</div>
