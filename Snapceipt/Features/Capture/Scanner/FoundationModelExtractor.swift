@@ -63,7 +63,8 @@ struct FoundationModelExtractor: OnDeviceExtracting {
         change, subtotals/totals, counts, and promos. Repair split decimals (e.g. 19 90 -> 19.90).
         """
         let session = LanguageModelSession(instructions: instructions)
-        let prompt = "Receipt (rows):\n" + (layoutText.isEmpty ? ocrText : layoutText)
+        let body = Self.latinScriptOnly(layoutText.isEmpty ? ocrText : layoutText)
+        let prompt = "Receipt (rows):\n" + body
         // respond(to:generating:) verified against the iOS 26.5 SDK; returns Response<Content>.content.
         let result = try await session.respond(to: prompt, generating: FMReceipt.self)
         let r = result.content
@@ -76,6 +77,14 @@ struct FoundationModelExtractor: OnDeviceExtracting {
             // Prefer the row-paired layoutText — raw OCR order scrambles the GST label and
             // its amount onto SEPARATE lines, so printedGst can't recover it from raw text.
             ocrText: layoutText.isEmpty ? ocrText : layoutText)
+    }
+
+    /// Apple Foundation Models throws `unsupportedLanguageOrLocale` when the prompt contains an
+    /// unsupported script — e.g. a Japanese store-name header (焼鳥 ゆりっぴ) on an otherwise
+    /// romanized AUD receipt. Keep ASCII + Latin (incl. accents); drop other scripts so the readable
+    /// body still extracts. The geometric/printed guards run on the original lines and are unaffected.
+    static func latinScriptOnly(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.filter { $0.value < 0x250 }))
     }
 }
 #endif

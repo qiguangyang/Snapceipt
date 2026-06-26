@@ -57,6 +57,24 @@ struct ReceiptLayoutGridTests {
         #expect(!rows.contains { $0.contains("Subtotal") && $0.contains("Orion") })
     }
 
+    @Test("deterministic line items parse from the layout (language-independent FM fallback)")
+    func fallbackLineItems() {
+        let grid = ReceiptRows.layoutGrid(from: Self.fixture())
+        let items = OnDeviceGuards.lineItems(fromLayout: grid, total: Decimal(string: "117.23")!)
+        let names = items.map(\.name)
+        // All 8 food items, each with its own price; quantities stripped from the name.
+        #expect(names.contains("Orion"))
+        #expect(items.first { $0.name == "Orion" }?.price == Decimal(string: "27.00"))
+        #expect(names.contains("Gyu-tan"))
+        #expect(items.first { $0.name == "Yamituki Cabbage" }?.price == Decimal(string: "11.50"))
+        // Totals / tax / payment / change rows are NOT items.
+        #expect(!names.contains { $0.localizedCaseInsensitiveContains("subtotal") })
+        #expect(!names.contains { $0.localizedCaseInsensitiveContains("gst") })
+        #expect(!names.contains { $0.localizedCaseInsensitiveContains("total") })
+        #expect(!names.contains { $0.localizedCaseInsensitiveContains("zeller") })
+        #expect(items.count == 8)
+    }
+
     @Test("geometric total + GST read the printed values")
     func totalAndGst() {
         let f = Self.fixture()

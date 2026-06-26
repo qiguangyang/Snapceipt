@@ -161,6 +161,41 @@ enum OnDeviceGuards {
         return out
     }
 
+    /// Deterministic, LANGUAGE-INDEPENDENT line items for the on-device fallback used when Apple's
+    /// model can't read the receipt (`unsupportedLanguageOrLocale` — common for non-English AU
+    /// receipts). Parses the column-aligned layout rows: a row's trailing amount is the price; the
+    /// text before it (minus a leading quantity) is the name. Skips total/tax/payment/meta rows and
+    /// any amount equal to the grand total (a payment line). Keeps non-Latin names as-is.
+    static func lineItems(fromLayout layoutText: String, total: Decimal) -> [ExtractedReceipt.LineItemDraft] {
+        let excludeRegex = #"(?i)\b(sub ?total|total|gst|tax|change|cash|visa|eftpos|master ?card|amex|credit|debit|card|balance|tip|surcharge|round|payment|paid|tender|amount|qty|description|discount|savings?|zeller|tyro|square|account|approved|terminal|abn|invoice|receipt|date|time|server|table|guests?)\b"#
+        var items: [ExtractedReceipt.LineItemDraft] = []
+        for row in layoutText.split(whereSeparator: \.isNewline) {
+            let normalized = joinSplitDecimals(row)
+            guard let last = normalized.matches(of: Self.amountRegex).last,
+                  let price = amount(normalized[last.range]), price > 0 else { continue }
+            if total > 0, price == total { continue }   // a payment / grand-total line, not an item
+            var name = String(normalized[..<last.range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            name = name.replacing(#/^\d+\s+/#, with: "").trimmingCharacters(in: .whitespaces)  // drop leading qty
+            guard name.range(of: #"\p{L}"#, options: .regularExpression) != nil,            // must have a letter
+                  name.range(of: excludeRegex, options: .regularExpression) == nil else { continue }
+            items.append(.init(name: name, price: round2(price)))
+        }
+        return items
+    }
+
+    /// Best-guess merchant for the fallback: the topmost (highest on the receipt) text line carrying
+    /// letters and no amount. Any script — a non-English store name is kept verbatim.
+    static func topMerchant(lines: [RecognizedLine]) -> String {
+        let candidates = lines.filter { (line: RecognizedLine) -> Bool in
+            guard line.boundingBox != .zero else { return false }
+            let hasLetter = line.text.range(of: #"\p{L}"#, options: .regularExpression) != nil
+            let hasAmount = !line.text.matches(of: Self.amountRegex).isEmpty
+            return hasLetter && !hasAmount
+        }
+        guard let top = candidates.max(by: { $0.boundingBox.midY < $1.boundingBox.midY }) else { return "" }
+        return top.text.trimmingCharacters(in: .whitespaces)
+    }
+
     private static func reconcileGst(_ gst: Decimal?, total: Decimal, ocrText: String) -> Decimal? {
         guard total > 0 else { return nil }
         let cap = round2(total / 11)

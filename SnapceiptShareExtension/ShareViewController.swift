@@ -80,30 +80,42 @@ final class ShareViewController: UIViewController {
     private func extract(image: UIImage, pdfText: String?) async -> ExtractedReceipt? {
         guard let extractor = OnDeviceAI.makeExtractor() else { return nil }
         let capturedAt = ExtractedReceipt.ymd(from: Date()) ?? ""
-        do {
-            let lines: [RecognizedLine]
-            if let pdfText, !pdfText.isEmpty {
-                // PDF text is already in reading order (zero-box lines).
-                lines = pdfText.split(separator: "\n", omittingEmptySubsequences: true).map {
-                    RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
-                }
-            } else {
-                lines = try await OCR.recognize(in: image)
+        // OCR (or a PDF's embedded reading-order text) first, OUTSIDE the model's do/catch, so `lines`
+        // stays in scope: the geometry backstops can still recover the printed Total/GST if the model
+        // later rejects the text.
+        let lines: [RecognizedLine]
+        if let pdfText, !pdfText.isEmpty {
+            lines = pdfText.split(separator: "\n", omittingEmptySubsequences: true).map {
+                RecognizedLine(text: String($0), confidence: 1, boundingBox: .zero)
             }
-            let rawText = lines.map(\.text).joined(separator: "\n")
-            // Column-aligned 2D reconstruction (names left, prices right) so the model reads the
-            // receipt's layout instead of a flat token stream — the fix for the dense item column.
-            let layoutText = ReceiptRows.layoutGrid(from: lines)
+        } else if let recognized = try? await OCR.recognize(in: image) {
+            lines = recognized
+        } else {
+            return nil
+        }
+        let rawText = lines.map(\.text).joined(separator: "\n")
+        // Column-aligned 2D reconstruction (names left, prices right) so the model reads the receipt's
+        // layout instead of a flat token stream — the fix for the dense item column.
+        let layoutText = ReceiptRows.layoutGrid(from: lines)
+        // Geometry backstops (line-based, independent of row reconstruction AND of the model): pair
+        // the "Total" / "GST" labels with the amount on their OWN printed row.
+        func withGeometry(_ r: ExtractedReceipt) -> ExtractedReceipt {
+            OnDeviceGuards.withGeometricGst(OnDeviceGuards.withGeometricTotal(r, lines: lines), lines: lines)
+        }
+        do {
             let extracted = try await extractor.extract(
                 ocrText: rawText, layoutText: layoutText, capturedAt: capturedAt)
-            // Geometry-based backstops (line-based, independent of row reconstruction): pair the
-            // "Total" / "GST" labels with the amount on their OWN printed row, so neither can be
-            // corrupted by row-merge/model errors.
-            let withTotal = OnDeviceGuards.withGeometricTotal(extracted, lines: lines)
-            return OnDeviceGuards.withGeometricGst(withTotal, lines: lines)
+            return withGeometry(extracted)
         } catch {
-            shareLog.error("share: extraction failed: \(String(describing: error), privacy: .public)")
-            return nil
+            // The model rejected the text (e.g. a non-English receipt → unsupportedLanguageOrLocale).
+            // Build a deterministic, language-independent draft from the geometry: printed Total/GST +
+            // line items parsed from the column layout + a top-line merchant. nil only if even that
+            // found nothing (then Save does a JPEG-only handoff and the app re-extracts on open).
+            var fallback = withGeometry(.empty(capturedAt: capturedAt))
+            fallback.lineItems = OnDeviceGuards.lineItems(fromLayout: layoutText, total: fallback.total)
+            fallback.merchant = OnDeviceGuards.topMerchant(lines: lines)
+            shareLog.error("share: FM failed, using deterministic fallback: \(String(describing: error), privacy: .public)")
+            return (fallback.total > 0 || !fallback.lineItems.isEmpty) ? fallback : nil
         }
     }
 
@@ -145,11 +157,13 @@ final class ShareViewController: UIViewController {
     private func imageFromImage(_ provider: NSItemProvider) async -> UIImage? {
         guard let data = await loadData(provider, UTType.image.identifier),
               let image = UIImage(data: data) else { return nil }
-        // Flatten the shared PHOTO the same way the in-app camera does — detect the receipt quad and
-        // perspective-correct it — so a skewed/curled photo's rows line up for OCR. This is the key
-        // difference vs in-app capture (which dewarps before reading); without it the dense item
-        // column collapses. Falls back to the orientation-normalized original if nothing's detected.
-        return Self.dewarpedReceipt(image)
+        // MEMORY: a Share Extension has a ~220 MB HARD limit; a full-res photo (~48 MB decoded) +
+        // perspective dewarp + OCR + Foundation Models blows past it → iOS jetsams the extension
+        // before the popup can show. Downscale FIRST so everything downstream works on a small image.
+        let capped = Self.downscaled(image, maxEdge: 2000)
+        // Then flatten the (now small) image like the in-app camera does, so a skewed/curled photo's
+        // rows line up for OCR. Falls back to the orientation-normalized original if nothing detected.
+        return Self.dewarpedReceipt(capped)
     }
 
     private static func dewarpedReceipt(_ image: UIImage) -> UIImage {
@@ -157,6 +171,19 @@ final class ShareViewController: UIViewController {
         guard let quad = DocumentScan.detect(in: up),
               let flat = DocumentScan.dewarp(up, quad: quad) else { return up }
         return flat
+    }
+
+    /// Downscale so the longest edge is at most `maxEdge` px (memory cap). Original if already small.
+    static func downscaled(_ image: UIImage, maxEdge: CGFloat) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxEdge else { return image }
+        let s = maxEdge / longest
+        let size = CGSize(width: image.size.width * s, height: image.size.height * s)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1   // 1 pt == 1 px so the result is exactly `size` pixels
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     private func imageFromPDF(_ provider: NSItemProvider) async -> UIImage? {
@@ -174,7 +201,7 @@ final class ShareViewController: UIViewController {
         }
         // Embedded text — nil/empty for a scanned (image-only) PDF, which we then OCR.
         pdfText = page.string
-        return image
+        return Self.downscaled(image, maxEdge: 2000)   // memory cap (Share Extension ~220 MB limit)
     }
 
     private func loadData(_ provider: NSItemProvider, _ type: String) async -> Data? {
