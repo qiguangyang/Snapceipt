@@ -216,6 +216,9 @@ final class CaptureViewModel {
             if Task.isCancelled || draftUserEdited { return }
             draft = ExtractedReceipt(response: resp)
             smartScanCapped = resp.meta.capped; smartScanCap = resp.meta.smartScan?.cap; smartScanUsed = resp.meta.smartScan?.used
+            // Usage limit reached → auto-switch Cloud AI off (past the cap it only returns a
+            // heuristic; free on-device AI is better). Pins the toggle off until the user re-enables.
+            if let ss = resp.meta.smartScan, ss.used >= ss.cap { AppSettings.disableSmartScanOnCap() }
             diagnostics = ScanDiagnostics(engine: .gemini, model: resp.meta.model,
                 clientMs: Self.elapsedMs(since: started), serverMs: resp.meta.latencyMs,
                 attempts: resp.meta.attempts, stub: resp.meta.stub, capped: resp.meta.capped,
@@ -439,6 +442,10 @@ final class CaptureViewModel {
 enum AppSettings {
     /// Persisted "Smart Scan AI" toggle key.
     static let smartScanEnabledKey = "sc.smartScan.enabled"
+    /// Set once the Cloud AI toggle is PINNED — the user flipped it in Settings, OR it was
+    /// auto-disabled on hitting the usage cap. A pinned toggle is never overridden by the
+    /// plan-based default (`applyPlanDefaultSmartScan`).
+    static let smartScanUserSetKey = "sc.smartScan.userSet"
 
     /// Whether Apple's on-device Foundation Models are usable on this device (computed once).
     /// On-device extraction is free + uncapped; Cloud AI is the metered alternative.
@@ -474,6 +481,31 @@ enum AppSettings {
            UserDefaults.standard.object(forKey: smartScanEnabledKey) as? Bool == false {
             UserDefaults.standard.set(true, forKey: smartScanEnabledKey)
         }
+    }
+
+    /// True once the Cloud AI toggle is pinned (user-chosen in Settings, or auto-disabled at the cap).
+    static var smartScanUserPinned: Bool { UserDefaults.standard.bool(forKey: smartScanUserSetKey) }
+
+    /// Pin the Cloud AI toggle so the plan-based default stops overriding it. Called when the user
+    /// flips it in Settings, or when it's auto-disabled at the usage cap.
+    static func pinSmartScan() { UserDefaults.standard.set(true, forKey: smartScanUserSetKey) }
+
+    /// PLAN-based Cloud AI default, applied UNLESS the toggle is pinned: Cloud ON for Pro, OFF for
+    /// Free — EXCEPT a device without on-device AI always gets Cloud (else it would have no AI at
+    /// all). Idempotent; call at launch and whenever the Pro entitlement changes, so upgrading flips
+    /// an untouched toggle ON and a Free account defaults to free, private on-device AI.
+    static func applyPlanDefaultSmartScan(isPro: Bool) {
+        guard !smartScanUserPinned else { return }
+        UserDefaults.standard.set(!isOnDeviceAIAvailable || isPro, forKey: smartScanEnabledKey)
+    }
+
+    /// Auto-disable Cloud AI when the monthly usage limit is reached — past the cap the cloud only
+    /// returns a heuristic, so on-device AI is the better default — and pin it so it stays off until
+    /// the user re-enables it. No-op when Cloud AI is already off.
+    static func disableSmartScanOnCap() {
+        guard smartScanEnabled else { return }
+        smartScanEnabled = false
+        pinSmartScan()
     }
 
     /// The currencies the app localizes tax labels for.

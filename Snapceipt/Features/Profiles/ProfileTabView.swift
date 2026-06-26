@@ -252,7 +252,10 @@ struct ProfileTabView: View {
                     .font(.ui(12)).foregroundStyle(Palette.ink3)
             }
             Spacer()
-            Toggle("", isOn: $smartScanEnabled).labelsHidden().tint(Palette.income)
+            // A manual flip PINS the choice so the plan-based default never overrides it again.
+            Toggle("", isOn: Binding(get: { smartScanEnabled },
+                                     set: { smartScanEnabled = $0; AppSettings.pinSmartScan() }))
+                .labelsHidden().tint(Palette.income)
         }
         .padding(.vertical, 13)
         .accessibilityIdentifier(AccessibilityID.profileSmartScanToggle)
