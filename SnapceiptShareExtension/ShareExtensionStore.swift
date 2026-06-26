@@ -12,8 +12,15 @@ enum ShareInbox {
     /// Must match the `com.apple.security.application-groups` entry in BOTH targets' entitlements.
     static let appGroupId = "group.app.snapceipt"
 
+    /// Test seam: when set, the inbox uses THIS directory instead of the live App Group
+    /// container. The unit-test host lacks the App Group entitlement, so
+    /// `containerURL(forSecurityApplicationGroupIdentifier:)` returns nil and a round-trip test
+    /// would silently no-op. Production never sets this (stays nil).
+    static var containerOverride: URL?
+
     static var containerURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId)
+        containerOverride
+            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId)
     }
 
     private static var dir: URL? {
