@@ -1,12 +1,14 @@
-Snapceipt is the Australian receipt and expense app that does the boring bit for you. Snap a receipt and Snapceipt reads the merchant, amount, GST and category automatically — so your records are ready when BAS and tax time arrive.
+Snapceipt does the boring bit of bookkeeping for you. Snap a receipt and it reads the merchant, amount, tax and category automatically — so your records are ready when tax time arrives.
+
+Snapceipt reads receipts from Australia, New Zealand, the United States and Canada — in their own currency and sales tax / GST.
 
 WHY SNAPCEIPT
 • Snap & done — capture a receipt and the details are extracted for you.
-• GST & BAS ready — amounts and GST are tracked so your quarterly BAS is a few taps, not a weekend.
-• Built for Australia — AUD, GST, and the Australian Privacy Principles, by default.
+• Reads AU, NZ, US & Canada receipts — totals, tax and merchant, wherever you bought it.
+• GST & BAS for Australia — GST is tracked so your quarterly BAS is a few taps, not a weekend.
+• Quotes & invoices — send quotes and tax invoices, and track who's paid.
 • Separate business & personal — keep profiles apart with one tap.
 • Logbooks & budgets — mileage, work-from-home hours, and spending caps in one place.
-• Quotes & loyalty cards — send GST-inclusive quotes and keep your cards handy.
 • Email receipts in — forward digital receipts and they land in the right profile.
 • Private by design — no ads, no third-party trackers, and we never sell your data.
 

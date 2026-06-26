@@ -420,6 +420,45 @@ struct AppLaunch {
                          status: "sent", sentAt: Epoch.nowMs())
         context.insert(sent)
 
+        // invoices: an accounts-receivable spread so the Invoices list shows the
+        // "Needs attention" (overdue) section + Paid/Unpaid/Partial badges in screenshots.
+        // dueDate uses monthStart-relative Jan dates → always past vs the real tour run date,
+        // so the issued+unpaid rows read as Overdue deterministically (no shipping-view change).
+        let invPaid = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-0006",
+                              clientName: "Harbour Studios", clientEmail: "hello@harbour.example",
+                              gstEnabled: true, subtotalCents: 2_000_00, gstCents: 200_00, totalCents: 2_200_00,
+                              status: "issued", issueDate: dayISO(2), dueDate: dayISO(12),
+                              issuedAt: Epoch.nowMs() - 30_000, createdAt: Epoch.nowMs() - 30_000)
+        context.insert(invPaid)
+        context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invPaid.id,
+                                       itemDescription: "Brand video production", quantity: 1, unitPriceCents: 2_000_00, sortOrder: 0))
+        context.insert(Payment(userId: DevAccount.userId, invoiceId: invPaid.id, amountCents: 2_200_00, paidOn: dayISO(9)))
+        let invUnpaid = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-0007",
+                                clientName: "Lighthouse Co", clientEmail: "ap@lighthouse.example",
+                                gstEnabled: true, subtotalCents: 480_00, gstCents: 48_00, totalCents: 528_00,
+                                status: "issued", issueDate: dayISO(6), dueDate: nil,
+                                issuedAt: Epoch.nowMs() - 60_000, createdAt: Epoch.nowMs() - 60_000)
+        context.insert(invUnpaid)
+        context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invUnpaid.id,
+                                       itemDescription: "Social media templates", quantity: 1, unitPriceCents: 480_00, sortOrder: 0))
+        let invOverdue = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-0008",
+                                 clientName: "Acme Pty Ltd", clientEmail: "accounts@acme.example",
+                                 gstEnabled: true, subtotalCents: 1_200_00, gstCents: 120_00, totalCents: 1_320_00,
+                                 status: "issued", issueDate: dayISO(1), dueDate: dayISO(3),
+                                 issuedAt: Epoch.nowMs() - 120_000, createdAt: Epoch.nowMs() - 120_000)
+        context.insert(invOverdue)
+        context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invOverdue.id,
+                                       itemDescription: "Website design — phase 1", quantity: 1, unitPriceCents: 1_200_00, sortOrder: 0))
+        let invPartial = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-0005",
+                                 clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
+                                 gstEnabled: true, subtotalCents: 600_00, gstCents: 60_00, totalCents: 660_00,
+                                 status: "issued", issueDate: dayISO(4), dueDate: dayISO(5),
+                                 issuedAt: Epoch.nowMs() - 90_000, createdAt: Epoch.nowMs() - 90_000)
+        context.insert(invPartial)
+        context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invPartial.id,
+                                       itemDescription: "Menu photography", quantity: 1, unitPriceCents: 600_00, sortOrder: 0))
+        context.insert(Payment(userId: DevAccount.userId, invoiceId: invPartial.id, amountCents: 300_00, paidOn: dayISO(2)))
+
         // smart rule on p1
         context.insert(SmartRule(userId: DevAccount.userId, profileId: p1.id,
                                  matchType: "merchant_contains", matcher: "BP",

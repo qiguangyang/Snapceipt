@@ -1,1 +1,1 @@
-Snap a receipt and we read the merchant, total and GST for you. Built for Australian sole traders and small business — BAS-ready, no spreadsheets.
+Snap a receipt and we read the merchant, total and tax for you — from Australia, NZ, the US and Canada. GST & BAS-ready for Australian sole traders.

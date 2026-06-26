@@ -21,8 +21,10 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 # Only the 4 most representative areas; Apple allows up to 10, 3-5 is plenty for GA.
 HERO_METHODS=(
   test_area03_home
-  test_area05_reports
+  test_area04_capture
   test_area09_quotes
+  test_area_invoices
+  test_area05_reports
   test_area14_bas
 )
 
@@ -82,8 +84,9 @@ PY
 # Regenerate the .xcodeproj from project.yml (the xcodeproj is gitignored).
 /opt/homebrew/bin/xcodegen generate
 
-shoot_size "6.7" "iPhone 16 Plus"
-shoot_size "6.5" "iPhone 11 Pro Max"
+# Only one large-iPhone sim is installed (17 Pro Max, 6.9" = 1320x2868). Capture there; the
+# 6.5" (1242x2688) set is downscaled from these afterwards (no 1242x2688 sim available).
+shoot_size "6.9" "iPhone 17 Pro Max"
 
 echo "appstore tour done: $OUT"
 echo ""

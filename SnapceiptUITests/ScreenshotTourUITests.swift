@@ -240,6 +240,20 @@ final class ScreenshotTourUITests: UITestCase {
         }
     }
 
+    // Area 9b — Invoices (list + editor). Business quick action (Pro-gated), business is the
+    // tour default, so no profile switch. Mirror of test_area09_quotes; the tour fixture seeds
+    // an accounts-receivable spread (overdue/paid/unpaid) so the list renders populated.
+    @MainActor func test_area_invoices() {
+        launchTour(pro: true)
+        require(app.buttons[AccessibilityID.homeQuickInvoices], "home.quick.invoices")
+        app.buttons[AccessibilityID.homeQuickInvoices].firstMatch.tap()
+        require(app.descendants(matching: .any)[AccessibilityID.invoicesScreen], "invoice list")
+        shoot(app, "invoices-list-populated")
+        app.buttons[AccessibilityID.invoicesAdd].firstMatch.tap()
+        require(app.descendants(matching: .any)[AccessibilityID.invoiceEditorScreen], "invoice editor")
+        shoot(app, "invoice-editor-new")
+    }
+
     // Area 10 — Email-in + Settings + Profiles. Broadest area: shoot the hub +
     // every reachable sub-screen the spec names.
     @MainActor func test_area10_emailSettingsProfiles() {
