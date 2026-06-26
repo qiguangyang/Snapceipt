@@ -59,6 +59,36 @@ struct ExtractionResponseTests {
         #expect(draft.lineItems.count == 1)
     }
 
+    @Test("Share Extension handoff round-trips extractionStatus so a pending fallback survives")
+    func handoffCarriesPendingStatus() throws {
+        // A deterministic fallback draft the extension marks "pending" (non-English receipt).
+        let fallback = ExtractedReceipt(
+            merchant: "焼鳥 ゆりっぴ", date: "2026-06-26", total: Decimal(string: "143.62")!,
+            gst: Decimal(string: "14.15"), categoryKey: CategoryKey.office.rawValue, deductible: 100,
+            lineItems: [.init(name: "Orion", price: Decimal(string: "27.00")!)],
+            confidence: 0, needsReview: true, extractionStatus: "pending")
+        let json = try JSONEncoder().encode(fallback)
+        let decoded = try JSONDecoder().decode(ExtractedReceipt.self, from: json)
+        // The whole cloud-upgrade flow hinges on this: the app sees "pending" → saves a pending scan
+        // → PendingExtractionReconciler re-extracts via the cloud → corrects the category.
+        #expect(decoded.extractionStatus == "pending")
+        #expect(decoded.merchant == "焼鳥 ゆりっぴ")   // non-Latin merchant survives the handoff
+        #expect(decoded.total == Decimal(string: "143.62"))
+        #expect(decoded.lineItems.first?.name == "Orion")
+    }
+
+    @Test("a server /extract response (no extractionStatus) decodes to done, never pending")
+    func responseDefaultsToDone() throws {
+        let resp = try decode("""
+        {"requestId":"r5",
+         "receipt":{"merchant":"Cafe","date":"2026-05-28","currencyCode":"AUD",
+           "total":10.00,"gst":0.91,"category":"meals","deductible":50,
+           "lineItems":[],"confidence":0.95,"needsReview":false},
+         "meta":{"model":"x","source":"scan","latencyMs":5,"attempts":1,"stub":false}}
+        """)
+        #expect(resp.receipt.extractionStatus == "done")
+    }
+
     @Test("decodes meta.capped and meta.smartScan when present")
     func decodesCappedMeta() throws {
         let resp = try decode("""

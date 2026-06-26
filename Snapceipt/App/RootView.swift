@@ -484,8 +484,11 @@ struct ShellView: View {
             // it on every launch/activation is safe.
             backfillGstDefaultsForActive()
             await sync.sync()
-            await reconcilePendingExtractions()
+            // Drain shared receipts BEFORE reconciling so a freshly-imported Share-Extension fallback
+            // (saved "pending" when on-device AI couldn't read the language) is cloud-upgraded by the
+            // reconciler in the SAME pass — not a foreground later.
             await drainSharedReceipts()
+            await reconcilePendingExtractions()
             #if DEBUG
             await runSimulateEmailInIfFlagged()
             registerSimDarwinObserver()
@@ -499,7 +502,7 @@ struct ShellView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                Task { await sync.sync(); await reconcilePendingExtractions(); await drainSharedReceipts() }
+                Task { await sync.sync(); await drainSharedReceipts(); await reconcilePendingExtractions() }
             }
         }
         // When the network path returns (offline → online), re-sync immediately rather than

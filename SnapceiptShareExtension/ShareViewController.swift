@@ -109,9 +109,11 @@ final class ShareViewController: UIViewController {
         } catch {
             // The model rejected the text (e.g. a non-English receipt → unsupportedLanguageOrLocale).
             // Build a deterministic, language-independent draft from the geometry: printed Total/GST +
-            // line items parsed from the column layout + a top-line merchant. nil only if even that
-            // found nothing (then Save does a JPEG-only handoff and the app re-extracts on open).
-            var fallback = withGeometry(.empty(capturedAt: capturedAt))
+            // line items parsed from the column layout + a top-line merchant. Mark it "pending" so the
+            // app saves it as a pending scan and the PendingExtractionReconciler cloud-upgrades it
+            // (the cloud reads any language → corrects the category/etc to match the in-app result).
+            // nil only if even the geometry found nothing (then Save does a JPEG-only handoff).
+            var fallback = withGeometry(.empty(capturedAt: capturedAt, extractionStatus: "pending"))
             fallback.lineItems = OnDeviceGuards.lineItems(fromLayout: layoutText, total: fallback.total)
             fallback.merchant = OnDeviceGuards.topMerchant(lines: lines)
             shareLog.error("share: FM failed, using deterministic fallback: \(String(describing: error), privacy: .public)")
