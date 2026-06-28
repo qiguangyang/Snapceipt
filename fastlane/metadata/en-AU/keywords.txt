@@ -1,1 +1,1 @@
-scanner,tracker,ATO,deduction,mileage,logbook,sole trader,small business,invoice,quote,bookkeeping
+scanner,tracker,ATO,deduction,mileage,logbook,sole,trader,small,business,invoice,quote,bookkeeping
