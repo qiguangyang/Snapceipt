@@ -131,4 +131,10 @@ ${FOOTER}
 `;
 }
 
+export const CTA_HTML = `<aside class="ctaBlock">
+  <h2>Stop typing receipts.</h2>
+  <p>Snapceipt reads the merchant, total, GST and category from a photo — instantly. Made in Australia for sole traders &amp; households.</p>
+  <a class="badge" href="${APP_URL}" aria-label="Download Snapceipt on the App Store"><img src="/assets/app-store-badge.svg" alt="Download on the App Store"></a>
+</aside>`;
+
 export { SITE, APP_URL, esc };

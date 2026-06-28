@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import { marked } from "marked";
-import renderPage, { renderIndex } from "./template.js";
+import renderPage, { renderIndex, CTA_HTML } from "./template.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,7 +24,7 @@ export async function build({ contentDir, outDir, publicDir }) {
       related: data.related || [],
       updated: data.updated,
       faq: data.faq || null,
-      bodyHtml: marked.parse(content),
+      bodyHtml: marked.parse(content) + CTA_HTML,
     });
   }
 

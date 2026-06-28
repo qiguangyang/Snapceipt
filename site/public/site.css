@@ -297,3 +297,27 @@ tbody tr:last-child td{border-bottom:none;}
     transition-duration:.001ms !important;scroll-behavior:auto !important;}
   .scene{transition:none;}
 }
+
+/* ---- guides / long-form articles ---- */
+.crumbs{font-size:13px;color:var(--ink3);margin:28px 0 8px;}
+.crumbs a{color:var(--ink2);text-decoration:none;}
+.crumbs a:hover{color:var(--ink);}
+.article{padding-bottom:64px;}
+.article h1{font-family:Fraunces;font-weight:600;font-size:38px;line-height:1.15;letter-spacing:-.5px;margin:6px 0 22px;}
+.article h2{font-family:Fraunces;font-weight:600;font-size:26px;margin:38px 0 12px;}
+.article h3{font-size:20px;font-weight:600;margin:28px 0 10px;}
+.article p,.article li{color:var(--ink);font-size:17px;line-height:1.7;}
+.article p,.article ul,.article ol{margin:0 0 18px;}
+.article ul,.article ol{padding-left:22px;}
+.article li{margin:6px 0;}
+.article a{color:var(--terra2);text-decoration:underline;text-underline-offset:2px;}
+.article blockquote{border-left:3px solid var(--terra);padding:4px 0 4px 18px;margin:0 0 18px;color:var(--ink2);font-style:italic;}
+.guideList{list-style:none;padding:0;margin:24px 0 64px;}
+.guideList li{padding:18px 0;border-bottom:1px solid var(--line);}
+.guideList li a{font-family:Fraunces;font-size:21px;color:var(--ink);text-decoration:none;}
+.guideList li a:hover{color:var(--terra2);}
+.guideList li p{color:var(--ink2);font-size:15px;margin:6px 0 0;}
+.ctaBlock{background:var(--cream2);border:1px solid var(--line);border-radius:18px;padding:32px;margin:40px 0 0;text-align:center;}
+.ctaBlock h2{font-family:Fraunces;font-weight:600;font-size:24px;margin:0 0 8px;}
+.ctaBlock p{color:var(--ink2);max-width:520px;margin:0 auto 18px;}
+.ctaBlock .badge{justify-content:center;}
