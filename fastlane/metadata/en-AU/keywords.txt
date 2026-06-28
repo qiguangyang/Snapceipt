@@ -1,1 +1,1 @@
-receipt,expense,gst,bas,tax,mileage,logbook,sole trader,small business,invoice,budget,quote
+scanner,tracker,ATO,deduction,mileage,logbook,sole trader,small business,invoice,quote,bookkeeping

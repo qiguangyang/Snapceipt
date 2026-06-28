@@ -1,1 +1,1 @@
-Snap a receipt and we read the merchant, total and tax for you — from Australia, NZ, the US and Canada. GST & BAS-ready for Australian sole traders.
+Snap a receipt — Snapceipt reads the merchant, total, GST and category instantly. Sorted for tax time, made in Australia. Now with quotes & invoices.

@@ -1,0 +1,14 @@
+{
+  "name": "snapceipt-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test",
+    "deploy": "npm run build && npm test && wrangler deploy"
+  },
+  "devDependencies": {
+    "gray-matter": "4.0.3",
+    "marked": "12.0.2"
+  }
+}
