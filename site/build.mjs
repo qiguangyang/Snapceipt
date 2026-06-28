@@ -23,6 +23,7 @@ export async function build({ contentDir, outDir, publicDir }) {
       keywords: data.keywords || [],
       related: data.related || [],
       updated: data.updated,
+      faq: data.faq || null,
       bodyHtml: marked.parse(content),
     });
   }

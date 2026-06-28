@@ -43,6 +43,17 @@ test("writes a /guides index page listing the guides", async () => {
   assert.match(index, /<title>[^<]*Guides[^<]*<\/title>/i, "index has a Guides title");
 });
 
+test("emits Article + BreadcrumbList JSON-LD that parses", async () => {
+  const { pages } = await build({ contentDir, outDir, publicDir: path.join(__dirname, ".test-out") });
+  for (const page of pages) {
+    const html = await readFile(path.join(outDir, `${page.slug}.html`), "utf8");
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+    const types = blocks.map((b) => b["@type"]);
+    assert.ok(types.includes("Article"), `${page.slug}: has Article schema`);
+    assert.ok(types.includes("BreadcrumbList"), `${page.slug}: has BreadcrumbList schema`);
+  }
+});
+
 test("throws when a related slug does not resolve", async () => {
   const tmpContent = path.join(__dirname, ".test-content");
   await rm(tmpContent, { recursive: true, force: true });

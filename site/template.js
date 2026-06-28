@@ -28,8 +28,36 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function jsonLd(page, url) {
+  const article = {
+    "@context": "https://schema.org", "@type": "Article",
+    headline: page.title, description: page.description,
+    datePublished: page.updated, dateModified: page.updated,
+    author: { "@type": "Organization", name: "Snapceipt" },
+    publisher: { "@type": "Organization", name: "Snapceipt", logo: { "@type": "ImageObject", url: `${SITE}/favicon.svg` } },
+    mainEntityOfPage: url,
+  };
+  const crumbs = {
+    "@context": "https://schema.org", "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE },
+      { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE}/guides` },
+      { "@type": "ListItem", position: 3, name: page.title, item: url },
+    ],
+  };
+  const blocks = [article, crumbs];
+  if (page.faq && page.faq.length) {
+    blocks.push({
+      "@context": "https://schema.org", "@type": "FAQPage",
+      mainEntity: page.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+    });
+  }
+  return blocks.map((b) => `<script type="application/ld+json">${JSON.stringify(b)}</script>`).join("\n");
+}
+
 export default function renderPage(page) {
   const url = `${SITE}/guides/${page.slug}`;
+  const schema = jsonLd(page, url);
   return `<!doctype html>
 <html lang="en-AU">
 <head>
@@ -47,11 +75,13 @@ export default function renderPage(page) {
 <meta name="twitter:card" content="summary_large_image">
 ${FONT_LINKS}
 <link rel="stylesheet" href="/site.css">
+${schema}
 </head>
 <body>
 <div class="wrap">
 ${NAV}
   <article class="prose article">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> › <a href="/guides">Guides</a> › <span>${esc(page.title)}</span></nav>
     <h1>${esc(page.title)}</h1>
     ${page.bodyHtml}
   </article>
