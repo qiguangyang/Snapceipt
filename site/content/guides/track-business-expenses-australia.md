@@ -67,6 +67,7 @@ Tracking business expenses well isn't about working harder; it's about a steady 
 - [How to organise receipts for tax](/guides/organise-receipts-for-tax)
 - [The best way to track receipts on your phone](/guides/track-receipts-on-phone)
 - [Best receipt scanner apps in Australia (2026)](/guides/best-receipt-scanner-app-australia)
+- [Quotes & invoices, built for Australian sole traders](/guides/quote-invoice-app-australia)
 - [GST on business expenses, explained simply](/guides/gst-on-business-expenses)
 - [Do you need to keep paper receipts? What the ATO requires](/guides/do-you-need-paper-receipts-ato)
 - [Are photos of receipts valid for tax?](/guides/digital-receipts-ato)
