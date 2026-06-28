@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOP_LEVEL = ["/", "/pricing", "/privacy", "/terms", "/support", "/guides"];
 
 export async function build({ contentDir, outDir, publicDir }) {
-  const mdFiles = (await readdir(contentDir)).filter((f) => f.endsWith(".md"));
+  const mdFiles = (await readdir(contentDir)).filter((f) => f.endsWith(".md")).sort();
   const pages = [];
   for (const file of mdFiles) {
     const raw = await readFile(path.join(contentDir, file), "utf8");
