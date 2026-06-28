@@ -39,7 +39,7 @@ That last one matters more than people expect. A receipt from a hardware store t
 
 ## Keeping receipts the ATO accepts
 
-Here's where many sole traders worry unnecessarily. The ATO's substantiation rule for work-related expenses is this: if your total claim is more than $300, you must keep written evidence — a receipt or invoice — for the whole amount, not just the part above $300. If your total work-related claim is $300 or less, you still need records showing how you worked out the claim, but you don't need to hold receipts for every item. (Note that car, travel allowance and a few other categories have their own special rules.)
+Here's where many sole traders worry unnecessarily. The ATO's substantiation rule for work-related expenses is this: if your total claim is more than $300, you must keep written evidence — a receipt or invoice — for the whole amount, not just the part above $300. If your total work-related claim is $300 or less, you still need records showing how you worked out the claim, but you don't need to hold receipts for every item. (Note that car, travel allowance and a few other categories have their own special rules.) One important catch, though: that $300 threshold is the work-related-deduction rule for individuals — if you're running a business as a sole trader, there's no de-minimis, so you should keep records for all your business transactions regardless of amount.
 
 The format is up to you. The ATO accepts digital copies of receipts, including photos, provided each is a true and clear reproduction of the original. So a clear photo of a receipt is perfectly acceptable, and you don't need to keep the paper once you have a legible copy — which is a relief given how quickly thermal receipts fade.
 

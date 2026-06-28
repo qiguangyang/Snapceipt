@@ -29,7 +29,7 @@ It's worth knowing that you don't always need a receipt for every single item. F
 - If your **total** work-related expense claim is **more than $300**, you must keep written evidence — receipts or invoices — for the *whole* claim, not just the amount over $300.
 - If your total claim is **$300 or less**, you still need records showing how you worked out the claim, but you don't have to hold a receipt for each item.
 
-Some categories sit outside this rule and have their own requirements — car expenses, travel allowances and a few others — so check the specific rules if you're claiming those. For practical purposes, though, most sole traders are well over $300 in total deductions, which means keeping evidence for everything is the safe default. There's no real downside to over-keeping: the effort of photographing a small receipt is tiny next to the cost of losing a deduction because you couldn't substantiate it.
+Some categories sit outside this rule and have their own requirements — car expenses, travel allowances and a few others — so check the specific rules if you're claiming those. Worth flagging, too: this $300 line applies to individuals claiming work-related deductions, not to a business — if you're a sole trader carrying on a business, you're expected to keep records of every business transaction no matter how small. For practical purposes, though, most sole traders are well over $300 in total deductions, which means keeping evidence for everything is the safe default. There's no real downside to over-keeping: the effort of photographing a small receipt is tiny next to the cost of losing a deduction because you couldn't substantiate it.
 
 ## The conditions, in plain English
 
