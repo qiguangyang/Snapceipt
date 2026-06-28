@@ -12,6 +12,14 @@ export type Env = {
   RECEIPTS: R2Bucket;
   /** R2 bucket for hourly D1 SQL dumps (ops backup; never read at request time). */
   BACKUPS: R2Bucket;
+  /**
+   * Secret: AES-256-GCM key material for the D1->R2 backup (L9 — the dump contains
+   * password hashes + tokens, so it must not sit in R2 as plaintext). Any string; the
+   * cron derives a 256-bit key via SHA-256(secret). When UNSET the backup is written
+   * UNENCRYPTED (a warning is logged) so the cron never crashes before the secret is
+   * provisioned. Set via `wrangler secret put BACKUP_ENCRYPTION_KEY`.
+   */
+  BACKUP_ENCRYPTION_KEY?: string;
   /** Workers AI binding for email-in OCR (unused this phase). */
   AI: Ai;
   /** KV: rate-limit counters + magic-link/nonce/JWKS cache. */

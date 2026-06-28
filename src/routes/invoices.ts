@@ -39,6 +39,7 @@ interface InvoiceRow {
   due_date: string | null;
   issued_at: number | null;
   pdf_r2_key: string | null;
+  link_version: number;
 }
 
 interface InvoiceLineRow {
@@ -64,7 +65,7 @@ async function loadInvoiceForPdf(
 }> {
   const invoice = await c.env.DB.prepare(
     `SELECT id, user_id, profile_id, number, client_name, client_email, gst_enabled, gst_inclusive,
-            gst_rate_bp, status, issue_date, due_date, issued_at, pdf_r2_key
+            gst_rate_bp, status, issue_date, due_date, issued_at, pdf_r2_key, link_version
        FROM invoices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
   ).bind(invoiceId, userId).first<InvoiceRow>();
   if (!invoice) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
@@ -178,7 +179,7 @@ export async function loadInvoiceForRender(
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
-    logoDataUri: await logoDataUri(env, profile.logo_r2_key),
+    logoDataUri: await logoDataUri(env, profile.logo_r2_key, userId),
     appUrl: APP_URL,
   };
 }
@@ -363,8 +364,9 @@ invoicesRoutes.post("/:id/send", async (c) => {
   const now = nowMs();
   const expiresAt = now + DOWNLOAD_TTL_SECONDS * 1000;
 
-  // Mint the public hosted invoice link (https://api.snapceipt.cc/i/<token>).
-  const linkToken = await signInvoiceLinkToken(c.env.JWT_SIGNING_KEY, invoiceId, userId);
+  // Mint the public hosted invoice link (https://api.snapceipt.cc/i/<token>); carries the
+  // invoice's current link_version so a later /link/revoke can invalidate this link.
+  const linkToken = await signInvoiceLinkToken(c.env.JWT_SIGNING_KEY, invoiceId, userId, invoice.link_version);
   const hostedUrl = `${API_ORIGIN}/i/${linkToken}`;
 
   // email_outbox row + gated send (mirrors the quote send exactly).
@@ -436,6 +438,30 @@ invoicesRoutes.post("/:id/pdf", async (c) => {
   const expiresAt = nowMs() + DOWNLOAD_TTL_SECONDS * 1000;
 
   return c.json({ status: built.status, totalCents: built.totalCents, pdfUrl, expiresAt });
+});
+
+// POST /invoices/:id/link/revoke — invalidate every previously-minted public /i/ link for this
+// invoice by bumping its link_version. The next /send mints a fresh, working link. Owner-scoped:
+// a non-owner is 404'd without touching anyone's link_version.
+invoicesRoutes.post("/:id/link/revoke", async (c) => {
+  const userId = c.var.userId;
+  const invoiceId = c.req.param("id");
+  // Verify ownership BEFORE the Pro gate (non-owner → 404, not 403) and before mutating,
+  // so a free owner is 403'd without their link_version being bumped.
+  const owned = await c.env.DB.prepare(
+    `SELECT 1 FROM invoices WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(invoiceId, userId).first();
+  if (!owned) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
+  await requireProPlan(c);
+  const res = await c.env.DB.prepare(
+    `UPDATE invoices SET link_version = link_version + 1, updated_at = ?
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+  ).bind(nowMs(), invoiceId, userId).run();
+  if ((res.meta.changes ?? 0) === 0) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
+  const row = await c.env.DB.prepare(
+    `SELECT link_version FROM invoices WHERE id = ? AND user_id = ?`,
+  ).bind(invoiceId, userId).first<{ link_version: number }>();
+  return c.json({ ok: true, linkVersion: row?.link_version ?? 0 });
 });
 
 // PUBLIC: GET /invoices/dl/:token — verify the signed token + stream the R2 PDF.

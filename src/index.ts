@@ -4,6 +4,7 @@ import { budgetCronLogic } from "./cron/budgetAlert";
 import { d1BackupLogic } from "./cron/d1Backup";
 import { inboundEmailLogic } from "./email/inbound";
 import { currentPeriod, pruneOldUsage } from "./lib/smartScan";
+import { pruneCrashReports } from "./routes/crashReports";
 
 /**
  * Prune smart_scan_usage rows older than ~2 months to avoid unbounded table growth.
@@ -22,8 +23,10 @@ async function pruneSmartScanUsage(db: D1Database, now: number): Promise<void> {
 const scheduled: ExportedHandlerScheduledHandler<Env> = (_event, env, ctx) => {
   const now = Date.now();
   ctx.waitUntil(budgetCronLogic(env.DB, env, now));
-  ctx.waitUntil(d1BackupLogic(env.DB, env.BACKUPS, now));
+  ctx.waitUntil(d1BackupLogic(env.DB, env.BACKUPS, now, env.BACKUP_ENCRYPTION_KEY));
   ctx.waitUntil(pruneSmartScanUsage(env.DB, now));
+  // M3: retention prune of the server-only crash_reports telemetry table.
+  ctx.waitUntil(pruneCrashReports(env.DB, now));
 };
 
 /**

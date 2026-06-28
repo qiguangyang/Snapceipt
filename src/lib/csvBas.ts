@@ -86,7 +86,7 @@ export async function buildBasCsv(input: BuildBasCsvInput): Promise<string> {
     const fields = [
       r.txn_date,
       csvField(r.merchant),
-      r.cat_key,
+      csvField(r.cat_key),
       dollars(r.amount_cents),
       r.gst_cents == null ? "" : dollars(r.gst_cents),
       r.deductible_pct == null ? "" : String(r.deductible_pct),
@@ -94,7 +94,7 @@ export async function buildBasCsv(input: BuildBasCsvInput): Promise<string> {
       r.note == null ? "" : csvField(r.note),
       String(r.gst_free),
       String(r.capital),
-      r.gst_source == null ? "" : r.gst_source,
+      r.gst_source == null ? "" : csvField(r.gst_source),
       basLabels(r),
       receiptUrl,
     ];

@@ -104,7 +104,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
     .map((li) => {
       const lineAmount = li.quantity * li.unitPriceCents;
       return `<tr>
-        <td class="qty">${li.quantity}</td>
+        <td class="qty">${esc(String(li.quantity))}</td>
         <td>${esc(li.description)}</td>
         <td class="num">${amount(li.unitPriceCents)}</td>
         <td class="num">${dollars(lineAmount)}</td>

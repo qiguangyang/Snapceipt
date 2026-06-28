@@ -58,8 +58,9 @@ export async function verifyDownloadToken(
  * access token and the download token, so no token can be replayed across surfaces.
  */
 export const QUOTE_LINK_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
-const QUOTE_LINK_ISSUER = "snapceipt-quote";
-const QUOTE_LINK_AUDIENCE = "snapceipt-quote-link";
+// Exported so tests can mint a legacy (pre-`v`-claim) token to prove backward compat.
+export const QUOTE_LINK_ISSUER = "snapceipt-quote";
+export const QUOTE_LINK_AUDIENCE = "snapceipt-quote-link";
 
 /** Sign a quote-link token. Carries `v` = the quote's link_version at mint time so the
  *  public route can reject links from before a revoke/re-issue. `ttlSeconds` defaults to
@@ -110,18 +111,21 @@ export async function verifyQuoteLinkToken(
  * tokens, so no token can be replayed across surfaces.
  */
 export const INVOICE_LINK_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
-const INVOICE_LINK_ISSUER = "snapceipt-invoice";
-const INVOICE_LINK_AUDIENCE = "snapceipt-invoice-link";
+// Exported so tests can mint a legacy (pre-`v`-claim) token to prove backward compat.
+export const INVOICE_LINK_ISSUER = "snapceipt-invoice";
+export const INVOICE_LINK_AUDIENCE = "snapceipt-invoice-link";
 
-/** Sign an invoice-link token (iid + uid). `ttlSeconds` defaults to 30 days; a negative value
- *  lets tests mint an already-expired token. */
+/** Sign an invoice-link token. Carries `v` = the invoice's link_version at mint time so the
+ *  public route can reject links from before a revoke/re-issue (mirrors the quote-link token).
+ *  `ttlSeconds` defaults to 30 days; a negative value lets tests mint an already-expired token. */
 export async function signInvoiceLinkToken(
   signingKey: string,
   invoiceId: string,
   userId: string,
+  linkVersion: number = 0,
   ttlSeconds: number = INVOICE_LINK_TTL_SECONDS,
 ): Promise<string> {
-  return new SignJWT({ iid: invoiceId, uid: userId })
+  return new SignJWT({ iid: invoiceId, uid: userId, v: linkVersion })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setIssuer(INVOICE_LINK_ISSUER)
     .setAudience(INVOICE_LINK_AUDIENCE)
@@ -130,11 +134,13 @@ export async function signInvoiceLinkToken(
     .sign(keyBytes(signingKey));
 }
 
-/** Verify an invoice-link token. Throws on any failure — the route maps a throw to 403. */
+/** Verify an invoice-link token. Throws on any failure — the route maps a throw to 403.
+ *  `version` defaults to 0 for legacy tokens minted before the `v` claim existed (those stay
+ *  valid until an explicit revoke bumps the invoice past version 0). */
 export async function verifyInvoiceLinkToken(
   signingKey: string,
   token: string,
-): Promise<{ invoiceId: string; userId: string }> {
+): Promise<{ invoiceId: string; userId: string; version: number }> {
   const { payload } = await jwtVerify(token, keyBytes(signingKey), {
     issuer: INVOICE_LINK_ISSUER,
     audience: INVOICE_LINK_AUDIENCE,
@@ -142,8 +148,9 @@ export async function verifyInvoiceLinkToken(
   });
   const iid = (payload as { iid?: unknown }).iid;
   const uid = (payload as { uid?: unknown }).uid;
+  const v = (payload as { v?: unknown }).v;
   if (typeof iid !== "string" || iid.length === 0 || typeof uid !== "string" || uid.length === 0) {
     throw new Error("invoice-link token missing iid/uid claim");
   }
-  return { invoiceId: iid, userId: uid };
+  return { invoiceId: iid, userId: uid, version: typeof v === "number" ? v : 0 };
 }

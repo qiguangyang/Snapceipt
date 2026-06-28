@@ -88,11 +88,13 @@ describe("rateLimit middleware", () => {
   });
 
   it("EXEMPTS /auth/password/login from the per-email send cap (failed logins don't burn it)", async () => {
-    // 12 password-login attempts for the SAME email, each from a distinct IP. password/login is
+    // 9 password-login attempts for the SAME email, each from a distinct IP. password/login is
     // exempt from the 8/email/hr SEND cap, so none are 429 — they 401 on bad credentials. If it
-    // counted toward the email cap, the 9th would be RATE_LIMITED.
+    // counted toward the 8/email send cap, the 9th would be RATE_LIMITED. (Stops at 9: the
+    // SEPARATE per-email failed-login lockout (L1) trips at the 10th failure — covered in
+    // test/auth-security.test.ts.)
     const email = "pwloginexempt@example.com";
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 9; i++) {
       const res = await SELF.fetch("https://api.test/auth/password/login", {
         method: "POST",
         headers: { "content-type": "application/json", "cf-connecting-ip": `198.51.100.${i + 1}` },
@@ -111,7 +113,9 @@ describe("rateLimit middleware", () => {
     vi.spyOn(emailModule, "sendSignInCode").mockResolvedValue(undefined);
     const email = "fumbler@example.com";
     const ip = "203.0.113.99";
-    for (let i = 0; i < 10; i++) {
+    // 9 attempts: stay under the L1 per-email failed-login lockout (trips at the 10th); the
+    // point here is that password failures don't block the later OTP code request.
+    for (let i = 0; i < 9; i++) {
       const login = await SELF.fetch("https://api.test/auth/password/login", {
         method: "POST",
         headers: { "content-type": "application/json", "cf-connecting-ip": ip },

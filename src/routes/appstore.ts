@@ -44,8 +44,11 @@ appstoreRoutes.post("/notifications", validate("json", notificationBody), async 
       trustAnchorPEM: c.env.APPLE_TRUST_ANCHOR_PEM,
     });
   } catch (err) {
+    // Log the internal verifier reason server-side; do NOT echo it back (avoid
+    // leaking verifier internals to an unauthenticated webhook poster).
     const reason = err instanceof AppleJwsError ? err.message : "unverifiable notification";
-    return c.json({ ok: false, error: "SIGNATURE_INVALID", reason }, 401);
+    console.warn("appstore notification verification failed", { reason, requestId: c.var.requestId });
+    return c.json({ ok: false, error: "SIGNATURE_INVALID" }, 401);
   }
 
   // Fix 4: reject notifications with no/empty originalTransactionId — these cannot

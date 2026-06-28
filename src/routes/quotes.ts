@@ -60,9 +60,14 @@ interface ProfileRow {
   logo_r2_key: string | null;
 }
 
-/** R2 object → data-URI (base64), or null when no key / object missing. */
-export async function logoDataUri(env: Env, key: string | null): Promise<string | null> {
+/** R2 object → data-URI (base64), or null when no key / object missing.
+ * `logo_r2_key` is client-settable via sync, so we only ever read an object under
+ * the caller's OWN profile-logo prefix (<userId>/profiles/...; see profile.ts) — a key
+ * pointing at another tenant's object is treated as "no logo" (defense-in-depth against
+ * cross-tenant read). */
+export async function logoDataUri(env: Env, key: string | null, userId: string): Promise<string | null> {
   if (!key) return null;
+  if (!key.startsWith(`${userId}/profiles/`)) return null;
   const obj = await env.RECEIPTS.get(key);
   if (!obj) return null;
   const bytes = new Uint8Array(await obj.arrayBuffer());
@@ -144,7 +149,7 @@ export async function loadQuoteForRender(
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
-    logoDataUri: await logoDataUri(env, profile.logo_r2_key),
+    logoDataUri: await logoDataUri(env, profile.logo_r2_key, userId),
     appUrl: APP_URL,
     status: quote.status,
     // token is injected by the /q/:token route (it knows the verified token).

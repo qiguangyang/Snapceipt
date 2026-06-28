@@ -82,7 +82,7 @@ export async function buildExportCsv(input: BuildCsvInput): Promise<string> {
     const fields = [
       r.txn_date,
       csvField(r.merchant),
-      r.cat_key,
+      csvField(r.cat_key),
       dollars(r.amount_cents),
       r.gst_cents == null ? "" : dollars(r.gst_cents),
       r.deductible_pct == null ? "" : String(r.deductible_pct),

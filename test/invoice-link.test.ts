@@ -106,7 +106,7 @@ describe("GET /i/:token (public HTML tax invoice)", () => {
   it("403 for an expired token", async () => {
     const { userId } = await seedAuthed();
     const { invoiceId } = await seedInvoice(userId);
-    const token = await signInvoiceLinkToken(env.JWT_SIGNING_KEY, invoiceId, userId, -10);
+    const token = await signInvoiceLinkToken(env.JWT_SIGNING_KEY, invoiceId, userId, 0, -10); // version 0, ttl -10s
     const res = await SELF.fetch(`${BASE}/i/${token}`);
     expect(res.status).toBe(403);
   });
