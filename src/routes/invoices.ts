@@ -178,7 +178,7 @@ export async function loadInvoiceForRender(
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
-    logoDataUri: await logoDataUri(env, profile.logo_r2_key),
+    logoDataUri: await logoDataUri(env, profile.logo_r2_key, userId),
     appUrl: APP_URL,
   };
 }

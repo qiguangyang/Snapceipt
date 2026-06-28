@@ -58,8 +58,10 @@ subscriptionRoutes.post("/", validate("json", purchaseBody), async (c) => {
       trustAnchorPEM: c.env.APPLE_TRUST_ANCHOR_PEM,
     });
   } catch (err) {
+    // Log the internal verifier reason server-side; return only the generic code.
     const reason = err instanceof AppleJwsError ? err.message : "unverifiable transaction";
-    return c.json({ ok: false, error: "SIGNATURE_INVALID", reason }, 401);
+    console.warn("subscription transaction verification failed", { reason, requestId: c.var.requestId });
+    return c.json({ ok: false, error: "SIGNATURE_INVALID" }, 401);
   }
 
   // 2. The transaction must be for OUR app and one of our Pro products. These come

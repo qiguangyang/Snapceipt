@@ -37,7 +37,12 @@ app.use("*", requestId());
 registerErrorHandler(app);
 
 app.use("*", logger());
-app.use("*", cors());
+// Least-privilege CORS: the native iOS client sends no Origin (CORS does not apply
+// to it), and the public /q and /i pages are same-origin server-rendered HTML, so no
+// browser client needs cross-origin XHR access. Restrict ACAO to the known web origins
+// instead of reflecting "*" — a non-listed Origin gets no ACAO header (browser blocks
+// the cross-origin read). Credentials stay off (bearer tokens are never browser cookies).
+app.use("*", cors({ origin: ["https://snapceipt.cc", "https://www.snapceipt.cc"] }));
 
 // Rate limit the auth bootstrap BEFORE auth verification. authMiddleware's
 // allowlist skips all of /auth/*, so this limiter is the only gate there; it
