@@ -41,7 +41,7 @@ That last one matters more than people expect. A receipt from a hardware store t
 
 Here's where many sole traders worry unnecessarily. The ATO's substantiation rule for work-related expenses is this: if your total claim is more than $300, you must keep written evidence — a receipt or invoice — for the whole amount, not just the part above $300. If your total work-related claim is $300 or less, you still need records showing how you worked out the claim, but you don't need to hold receipts for every item. (Note that car, travel allowance and a few other categories have their own special rules.) One important catch, though: that $300 threshold is the work-related-deduction rule for individuals — if you're running a business as a sole trader, there's no de-minimis, so you should keep records for all your business transactions regardless of amount.
 
-The format is up to you. The ATO accepts digital copies of receipts, including photos, provided each is a true and clear reproduction of the original. So a clear photo of a receipt is perfectly acceptable, and you don't need to keep the paper once you have a legible copy — which is a relief given how quickly thermal receipts fade.
+The format is up to you. The ATO accepts digital copies of receipts, including photos, provided each is a true and clear reproduction of the original. So [a clear photo of a receipt is perfectly acceptable](/guides/digital-receipts-ato), and you don't need to keep the paper once you have a legible copy — which is a relief given how quickly thermal receipts fade.
 
 For a deeper dive on the paper-versus-digital question, see [do you need to keep paper receipts](/guides/do-you-need-paper-receipts-ato). And once you've decided to go digital, [organising your receipts for tax](/guides/organise-receipts-for-tax) shows how to build a system you can actually find things in.
 
@@ -49,14 +49,24 @@ For a deeper dive on the paper-versus-digital question, see [do you need to keep
 
 If your business has a GST turnover of $75,000 or more, you must register for GST (you have 21 days from reaching that threshold), and you'll then charge GST on your sales and claim credits for the GST in your purchases. Below $75,000 you can register voluntarily, but you don't have to. Non-profit organisations have a higher $150,000 threshold, and taxi and ride-sourcing drivers must register no matter their turnover.
 
-In Australia, GST is 10% and prices are usually quoted GST-inclusive. On a receipt, the GST is the amount already baked into the total — for a $110 purchase, $10 is GST and $100 is the pre-GST cost. A valid tax invoice for purchases over $82.50 (including GST) is what lets you claim that $10 back as a credit if you're registered. This is exactly why recording the GST on each expense, not just the total, pays off when you complete your BAS.
+In Australia, GST is 10% and prices are usually quoted GST-inclusive. On a receipt, the GST is the amount already baked into the total — for a $110 purchase, $10 is GST and $100 is the pre-GST cost. A valid tax invoice for purchases over $82.50 (including GST) is what lets you claim that $10 back as a credit if you're registered. This is exactly why recording the GST on each expense, not just the total, pays off when you complete your BAS. For a closer look at claiming credits and what a valid tax invoice needs, see [GST on business expenses](/guides/gst-on-business-expenses).
 
 ## A simple monthly routine
 
 The secret to painless expense tracking is doing a little, often, rather than a marathon every quarter:
 
-1. **Capture as you go.** Photograph or save each receipt the moment you get it, while you still remember what it was for. This is where an app like Snapceipt earns its keep — snap the receipt and it reads the merchant, total, GST and category for you, so the record is built without typing.
+1. **Capture as you go.** Photograph or save each receipt the moment you get it, while you still remember what it was for. This is where [tracking receipts on your phone](/guides/track-receipts-on-phone) earns its keep — snap the receipt and an app like Snapceipt reads the merchant, total, GST and category for you, so the record is built without typing.
 2. **Review monthly.** Spend ten minutes once a month checking categories are right and nothing's missing. Small, regular reviews catch errors while they're still easy to fix.
 3. **Export at BAS and tax time.** When your quarterly BAS or annual return rolls around, your records are already complete and categorised — you just export and file.
 
 Tracking business expenses well isn't about working harder; it's about a steady habit and records the ATO will accept. Capture every receipt, note the business purpose, keep your digital copies for five years, and stay on top of GST if you're registered. Do that, and tax time becomes a quiet afternoon instead of a scramble.
+
+## Related guides
+
+- [Expense tracking for sole traders: a practical setup](/guides/expense-tracking-sole-traders)
+- [How to organise receipts for tax](/guides/organise-receipts-for-tax)
+- [The best way to track receipts on your phone](/guides/track-receipts-on-phone)
+- [Best receipt scanner apps in Australia (2026)](/guides/best-receipt-scanner-app-australia)
+- [GST on business expenses, explained simply](/guides/gst-on-business-expenses)
+- [Do you need to keep paper receipts? What the ATO requires](/guides/do-you-need-paper-receipts-ato)
+- [Are photos of receipts valid for tax?](/guides/digital-receipts-ato)
