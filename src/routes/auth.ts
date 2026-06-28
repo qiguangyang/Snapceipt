@@ -66,6 +66,25 @@ const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
 
+// L1 (distributed brute-force): per-EMAIL failed-login lockout, independent of source IP.
+// /auth/password/login is exempt from the per-email rate-limit tier (only the 20/IP/hr cap
+// applies), so a distributed attacker can guess one account's password from many IPs. We
+// keep a failed-attempt counter in KV under `pwl:<sha256(email)>`; once it crosses the
+// threshold within the window, further attempts for that email are rejected (RATE_LIMITED)
+// for a cooldown. A correct password resets the counter. The threshold is high enough that a
+// legitimate user's occasional typos never trip it.
+const PW_LOGIN_MAX_FAILS = 10; // failures before the email is locked
+const PW_LOGIN_LOCKOUT_SECONDS = 15 * 60; // sliding accumulation window == lockout cooldown
+
+// L2 (account-enumeration timing oracle): a fixed, well-formed PBKDF2 hash that no real
+// password matches. When there is no user / no stored hash we verify the candidate password
+// against THIS instead of short-circuiting, so the PBKDF2 work (and therefore the response
+// time) is identical whether or not the account exists. The value is irrelevant — it only
+// needs to be well-formed so verifyPassword runs the full key derivation rather than
+// early-returning on a malformed string. Generated once, offline, with a random salt.
+const DUMMY_PASSWORD_HASH =
+  "pbkdf2$100000$eOcOFhdcpmPVekqaYAEumg==$P54X9iwMbrOsaxgWxj1jDXBNDSJthyTu2wqdKEKoWDc=";
+
 /** Canonical form for email comparison + storage: trimmed + lowercased. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -467,6 +486,22 @@ authRoutes.post("/password/set", requireAuth(), validate("json", passwordSetBody
 authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c) => {
   const { email, password } = c.req.valid("json");
   const normalized = normalizeEmail(email);
+  const emailHash = await sha256Hex(normalized);
+  const lockKey = `pwl:${emailHash}`;
+
+  // L1: per-email lockout check (independent of source IP). If this email is in a cooldown,
+  // reject before doing any DB lookup or PBKDF2 work — this also blunts the CPU cost of an
+  // ongoing distributed guess. Read once here; reused below when counting a failure.
+  const lockNow = nowMs();
+  const lockRaw = await c.env.KV.get(lockKey);
+  const lockState = lockRaw
+    ? (JSON.parse(lockRaw) as { fails: number; lockedUntil: number })
+    : null;
+  if (lockState && lockState.lockedUntil > lockNow) {
+    throw new ApiError("RATE_LIMITED", "Too many failed sign-in attempts. Try again later.", {
+      retryAfter: Math.ceil((lockState.lockedUntil - lockNow) / 1000),
+    });
+  }
 
   const user = await c.env.DB.prepare(
     "SELECT id, email, display_name, password_hash FROM users WHERE email = ? AND deleted_at IS NULL",
@@ -474,9 +509,33 @@ authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c
     .bind(normalized)
     .first<{ id: string; email: string | null; display_name: string | null; password_hash: string | null }>();
 
-  if (!user || !user.password_hash || !(await verifyPassword(password, user.password_hash))) {
+  // L2: ALWAYS run a PBKDF2 verify — against the real hash when present, otherwise against a
+  // fixed dummy — so a missing user / missing password hash costs the same wall-clock time as a
+  // present one and the response can't be used to enumerate accounts by timing. The verify runs
+  // unconditionally here; the `if` below only inspects the precomputed result (no short-circuit
+  // skips the work), and keeps `user` narrowed non-null for the success path.
+  const passwordVerified = await verifyPassword(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+
+  if (!user || !user.password_hash || !passwordVerified) {
+    // L1: count this failure for the email; lock further attempts once it crosses the threshold.
+    const fails = (lockState?.fails ?? 0) + 1;
+    const locked = fails >= PW_LOGIN_MAX_FAILS;
+    const lockedUntil = locked ? lockNow + PW_LOGIN_LOCKOUT_SECONDS * 1000 : 0;
+    // Sliding window: each failure refreshes the TTL, so a sustained attack stays locked while
+    // a few stray typos age out after the window of inactivity.
+    await c.env.KV.put(lockKey, JSON.stringify({ fails, lockedUntil }), {
+      expirationTtl: PW_LOGIN_LOCKOUT_SECONDS,
+    });
+    if (locked) {
+      throw new ApiError("RATE_LIMITED", "Too many failed sign-in attempts. Try again later.", {
+        retryAfter: PW_LOGIN_LOCKOUT_SECONDS,
+      });
+    }
     throw new ApiError("AUTH_INVALID_CREDENTIALS", "Incorrect email or password");
   }
+
+  // L1: correct password → clear the failed-attempt counter for this email.
+  await c.env.KV.delete(lockKey);
 
   const now = nowMs();
   const deviceHeader = c.req.header("X-Device-Id");

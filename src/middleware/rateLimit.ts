@@ -52,12 +52,16 @@ export const RATE_LIMIT_TIERS = {
   inbox: { name: "inbox", limit: 60, windowMs: HOUR_MS, dimension: "user" },
   /** account ops (change email / delete account) — tight per-user tier. */
   account: { name: "account", limit: 60, windowMs: HOUR_MS, dimension: "user" },
+  /** iOS MetricKit crash/hang ingest (M3). Per-IP and FAR tighter than `default` (300/min):
+   *  crash diagnostics are delivered by MetricKit in small batches, so a low per-IP ceiling
+   *  bounds the storage-exhaustion vector (large unpruned rows) without dropping real reports. */
+  crash: { name: "crash", limit: 10, windowMs: MINUTE_MS, dimension: "ip" },
   /** every other protected route. */
   default: { name: "default", limit: 300, windowMs: MINUTE_MS, dimension: "user" },
 } as const satisfies Record<string, RateLimitTier>;
 
 /** The factory's selectable route classes. */
-export type RateLimitKind = "auth" | "sync" | "extract" | "export" | "quotes" | "inbox" | "account" | "default";
+export type RateLimitKind = "auth" | "sync" | "extract" | "export" | "quotes" | "inbox" | "account" | "crash" | "default";
 
 type RateLimitCtx = {
   req: { header: (n: string) => string | undefined };
@@ -173,7 +177,9 @@ export function rateLimit(kind: RateLimitKind): MiddlewareHandler<AppEnv> {
                 ? RATE_LIMIT_TIERS.inbox
                 : kind === "account"
                   ? RATE_LIMIT_TIERS.account
-                  : RATE_LIMIT_TIERS.default;
+                  : kind === "crash"
+                    ? RATE_LIMIT_TIERS.crash
+                    : RATE_LIMIT_TIERS.default;
     const identity = clientKeyForRoute(c, tier);
     const reset = await consume(kv, tier, identity, now);
     if (reset !== null) reject(reset);

@@ -33,6 +33,26 @@ async function overInboundRateLimit(kv: KVNamespace, token: string, now: number)
   return false;
 }
 
+/** I2 — alias-discovery throttle. FAILED alias lookups (unknown / unresolvable r.<token>) are
+ *  counted in a GLOBAL fixed window; once the budget is spent, further misses are bounced as
+ *  rate_limited so an attacker can't brute-force valid aliases by probing many tokens. Global
+ *  (not per-sender) because the From address is trivially spoofable — a per-sender key would be
+ *  bypassed by rotating it. SAFE: a VALID alias resolves and never reaches this path, so
+ *  legitimate forwards are never throttled by it. */
+const ALIAS_MISS_LIMIT = 30;
+const ALIAS_MISS_WINDOW_MS = 60 * 60 * 1000;
+
+/** Returns true when the global failed-lookup budget for the current window is exhausted.
+ *  Counts the miss (one KV increment) only while still under the cap. */
+async function overAliasMissRateLimit(kv: KVNamespace, now: number): Promise<boolean> {
+  const bucket = Math.floor(now / ALIAS_MISS_WINDOW_MS);
+  const key = `rl:inbound-miss:${bucket}`;
+  const current = Number((await kv.get(key)) ?? "0");
+  if (current >= ALIAS_MISS_LIMIT) return true;
+  await kv.put(key, String(current + 1), { expirationTtl: Math.ceil(ALIAS_MISS_WINDOW_MS / 1000) + 60 });
+  return false;
+}
+
 /** The shape the email() wrapper hands to the pure core. */
 export interface InboundMessage {
   to: string;
@@ -132,11 +152,20 @@ async function logInbound(
  * on a terminal outcome, so a mid-flight crash safely reprocesses on redelivery.
  */
 export async function inboundEmailLogic(env: Env, msg: InboundMessage, now: number): Promise<InboundResult> {
-  // 1. Resolve the alias -> owner.
+  // 1. Resolve the alias -> owner. A FAILED lookup (no token, or a token that doesn't resolve)
+  //    is an alias-discovery probe: count it against the global miss budget (I2) and, once that
+  //    budget is spent, bounce further misses as rate_limited so brute-forcing valid aliases is
+  //    throttled. A valid alias resolves below and never touches the miss limiter.
   const token = tokenFromRecipient(msg.to);
-  if (!token) return { status: "rejected", reason: "unknown_inbox" };
+  if (!token) {
+    if (await overAliasMissRateLimit(env.KV, now)) return { status: "rejected", reason: "rate_limited" };
+    return { status: "rejected", reason: "unknown_inbox" };
+  }
   const owner = await resolveInboxToken(env.DB, token);
-  if (!owner) return { status: "rejected", reason: "unknown_inbox" };
+  if (!owner) {
+    if (await overAliasMissRateLimit(env.KV, now)) return { status: "rejected", reason: "rate_limited" };
+    return { status: "rejected", reason: "unknown_inbox" };
+  }
 
   // 1b. Pro gate: email-in is a Pro-only feature. Bounce a free owner BEFORE any
   // dedup/image/R2/AI work so a free user's mail has ZERO side effects (no stored image,

@@ -62,6 +62,43 @@ function normalize(v: unknown): string | number | null {
   return v as string | number;
 }
 
+/**
+ * M2 (security): domain columns that MUST hold a safe integer when present. The
+ * push route persists payload values verbatim (normalize() only maps bool->0/1),
+ * so without this a client could store arbitrary markup in a numeric column —
+ * e.g. a line item's `quantity` / `unit_price_cents` — which later renders into
+ * invoice/quote PDFs + CSV exports (stored XSS). A column is guarded if it is a
+ * line-item count (`quantity` / `sort_order`) or a money column (`*_cents`). A
+ * present, non-null value that is not a safe integer rejects the mutation;
+ * absent / null values are left untouched (those are valid optional fields).
+ *
+ * NB: this is a targeted guard rather than wiring entitySchemaFor() at apply
+ * time — the strict per-entity schemas each require `type: z.literal(...)`, but
+ * the real iOS encoder omits the `type` key (see the contract regression test in
+ * sync-push.test.ts), so validating payloads against them would 400 every real
+ * device push. `quoteLineItem` also has no specialized schema at all.
+ */
+function isGuardedIntegerColumn(col: string): boolean {
+  return col === "quantity" || col === "sort_order" || col.endsWith("_cents");
+}
+
+/**
+ * L4 (security): child entityType -> { payload field carrying its parent id, the
+ * parent's table }. Before upserting a child we look the parent up by id ALONE
+ * (not user-scoped) and reject ONLY if it EXISTS under a different user_id
+ * (cross-tenant attach — the child's NOT NULL FK references the parent id, so a
+ * known/guessed foreign parent id would otherwise insert cleanly). An ABSENT
+ * parent is allowed: legitimate out-of-order sync (the FK or a later parent sync
+ * reconciles it). Table names are hardcoded here (never user input → safe to
+ * interpolate, same as the SYNCABLE_TABLES registry).
+ */
+const CHILD_PARENT_REF: Record<string, { field: string; table: string }> = {
+  lineItem: { field: "transactionId", table: "transactions" },
+  quoteLineItem: { field: "quoteId", table: "quotes" },
+  invoiceLineItem: { field: "invoiceId", table: "invoices" },
+  payment: { field: "invoiceId", table: "invoices" },
+};
+
 syncRoutes.post("/push", validate("json", pushBodySchema), async (c) => {
   // S4: writes are gated on a still-live session so a signed-out / revoked device can't
   // keep mutating data during the <=15-min access-token window. (Reads /pull are left
@@ -212,6 +249,47 @@ async function applyMutation(
         mutationId: m.mutationId,
         status: "rejected",
         reason: "FORBIDDEN",
+        entity: null,
+      });
+    }
+  }
+
+  // (5c) L4 — child-entity parent ownership: an upsert of a lineItem / quoteLineItem /
+  // invoiceLineItem / payment must not attach to ANOTHER user's parent row. Look the
+  // parent up by id alone; reject (FORBIDDEN) only if it exists under a different
+  // user_id. An absent parent is allowed (out-of-order sync — FK / later sync handles it).
+  const parentRef = CHILD_PARENT_REF[m.entityType];
+  if (parentRef) {
+    const parentId = payload[parentRef.field];
+    if (parentId != null) {
+      const parent = await db
+        .prepare(`SELECT user_id FROM ${parentRef.table} WHERE id = ?`)
+        .bind(parentId)
+        .first<{ user_id: string }>();
+      if (parent && parent.user_id !== userId) {
+        return recordAndReturn(db, userId, deviceId, m, {
+          mutationId: m.mutationId,
+          status: "rejected",
+          reason: "FORBIDDEN",
+          entity: null,
+        });
+      }
+    }
+  }
+
+  // (5d) M2 — reject non-integer values for guarded numeric columns (quantity,
+  // sort_order, *_cents). normalize() would otherwise persist arbitrary markup
+  // verbatim in a numeric column → stored XSS when it later renders into invoice/
+  // quote PDFs + CSV exports. Present-but-null / absent values are left untouched.
+  for (const [camel, col] of Object.entries(meta.columns)) {
+    if (!(camel in payload)) continue;
+    const v = payload[camel];
+    if (v == null) continue;
+    if (isGuardedIntegerColumn(col) && !Number.isSafeInteger(v)) {
+      return recordAndReturn(db, userId, deviceId, m, {
+        mutationId: m.mutationId,
+        status: "rejected",
+        reason: "VALIDATION_FAILED",
         entity: null,
       });
     }
