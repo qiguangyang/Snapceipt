@@ -1,0 +1,12 @@
+-- 0018_invoice_link_version.sql — revocable public invoice links (parity with quotes 0013).
+-- The public /i/:token page renders the invoice live from current DB state (incl. business
+-- bank details + client PII) and the signed link is long-lived, with no way to revoke a
+-- leaked link short of rotating the global JWT key. Add a per-invoice version counter: the
+-- link token carries the version it was minted at, and the public route serves the invoice
+-- only when the token version matches the invoice's current link_version. Bumping
+-- link_version (POST /invoices/:id/link/revoke) invalidates every previously-minted link.
+-- Pure ADD COLUMN with a constant default (non-rewriting in SQLite/D1). Existing links
+-- carry no version claim → treated as version 0 → still valid until an explicit revoke.
+-- (quotes.link_version already exists via migration 0013; this migration only adds the
+--  matching column to invoices.)
+ALTER TABLE invoices ADD COLUMN link_version INTEGER NOT NULL DEFAULT 0;
