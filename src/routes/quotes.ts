@@ -62,11 +62,12 @@ interface ProfileRow {
 
 /** R2 object → data-URI (base64), or null when no key / object missing.
  * `logo_r2_key` is client-settable via sync, so we only ever read an object under
- * the caller's OWN per-user prefix (u/<userId>/...) — a key pointing at another
- * tenant's object is treated as "no logo" (defense-in-depth against cross-tenant read). */
+ * the caller's OWN profile-logo prefix (<userId>/profiles/...; see profile.ts) — a key
+ * pointing at another tenant's object is treated as "no logo" (defense-in-depth against
+ * cross-tenant read). */
 export async function logoDataUri(env: Env, key: string | null, userId: string): Promise<string | null> {
   if (!key) return null;
-  if (!key.startsWith(`u/${userId}/`)) return null;
+  if (!key.startsWith(`${userId}/profiles/`)) return null;
   const obj = await env.RECEIPTS.get(key);
   if (!obj) return null;
   const bytes = new Uint8Array(await obj.arrayBuffer());

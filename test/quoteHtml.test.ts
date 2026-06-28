@@ -33,6 +33,16 @@ function data(overrides: Partial<QuoteHtmlData> = {}): QuoteHtmlData {
 }
 
 describe("renderQuoteHtml", () => {
+  it("escapes a malicious line-item quantity (XSS guard, M1)", () => {
+    // quantity is typed number but read from D1, where /sync/push can store a string;
+    // the renderer must escape it at the sink.
+    const html = renderQuoteHtml(
+      data({ lineItems: [{ description: "x", quantity: "<img src=x onerror=alert(1)>" as unknown as number, unitPriceCents: 100 }] }),
+    );
+    expect(html).not.toContain("<img src=x onerror=alert(1)>");
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+  });
+
   it("renders a full HTML document with the business header fields", () => {
     const html = renderQuoteHtml(data());
     expect(html.startsWith("<!doctype html>")).toBe(true);

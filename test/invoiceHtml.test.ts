@@ -32,6 +32,14 @@ function data(overrides: Partial<InvoiceHtmlData> = {}): InvoiceHtmlData {
 }
 
 describe("renderInvoiceHtml", () => {
+  it("escapes a malicious line-item quantity (XSS guard, M1)", () => {
+    const html = renderInvoiceHtml(
+      data({ lineItems: [{ description: "x", quantity: "<img src=x onerror=alert(1)>" as unknown as number, unitPriceCents: 100 }] }),
+    );
+    expect(html).not.toContain("<img src=x onerror=alert(1)>");
+    expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+  });
+
   it("renders a full TAX INVOICE document with the business header", () => {
     const html = renderInvoiceHtml(data());
     expect(html.startsWith("<!doctype html>")).toBe(true);
