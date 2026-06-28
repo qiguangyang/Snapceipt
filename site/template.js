@@ -62,4 +62,43 @@ ${FOOTER}
 `;
 }
 
+export function renderIndex(pages) {
+  const pillar = pages.find((p) => p.role === "pillar");
+  const spokes = pages.filter((p) => p.role === "spoke");
+  const ordered = pillar ? [pillar, ...spokes] : spokes;
+  const items = ordered.map((p) =>
+    `      <li><a href="/guides/${p.slug}">${esc(p.title)}</a><p>${esc(p.description)}</p></li>`).join("\n");
+  return `<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guides — Snapceipt</title>
+<meta name="description" content="Practical guides to tracking receipts, expenses and GST in Australia.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="${SITE}/guides">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Guides — Snapceipt">
+<meta property="og:url" content="${SITE}/guides">
+<meta property="og:image" content="${SITE}/assets/og-default.png">
+${FONT_LINKS}
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="wrap">
+${NAV}
+  <section class="prose article">
+    <div class="kicker">Guides</div>
+    <h1>Receipt &amp; expense guides</h1>
+    <ul class="guideList">
+${items}
+    </ul>
+  </section>
+</div>
+${FOOTER}
+</body>
+</html>
+`;
+}
+
 export { SITE, APP_URL, esc };
