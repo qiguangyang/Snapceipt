@@ -20,7 +20,7 @@ describe("jwt", () => {
     expect(claims.did).toBe("d-1");
     expect(claims.iss).toBe("snapceipt");
     expect(claims.aud).toBe("snapceipt-ios");
-    expect(claims.exp - claims.iat).toBe(900); // 15 min TTL
+    expect(claims.exp - claims.iat).toBe(600); // 10 min TTL
   });
 
   it("rejects a token signed with a different key (signature failure)", async () => {

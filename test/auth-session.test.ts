@@ -54,7 +54,7 @@ describe("POST /auth/refresh", () => {
       expiresIn: number;
       user: { id: string; email: string; displayName: string };
     };
-    expect(body.expiresIn).toBe(900);
+    expect(body.expiresIn).toBe(600);
     expect(body.accessToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
     // Rotated: new refresh token differs from the one we sent.
     expect(body.refreshToken).not.toBe(refreshToken);

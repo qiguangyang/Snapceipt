@@ -50,7 +50,7 @@ describe("sessions", () => {
     // Canonical Contracts: issueSession returns { accessToken, refreshToken, expiresIn, sessionId, family }.
     const { accessToken, expiresIn, sessionId } = await issueSession(env.DB, issueArgs());
     expect(accessToken).toBeTruthy();
-    expect(expiresIn).toBe(900);
+    expect(expiresIn).toBe(600);
 
     const claims = await verifyAccess(env.JWT_SIGNING_KEY, accessToken);
     expect(claims.sub).toBe(USER_ID);

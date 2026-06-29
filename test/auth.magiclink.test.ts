@@ -167,7 +167,7 @@ describe("POST /auth/magic-link/verify", () => {
     };
     // Success bodies are unwrapped (no { error } wrapper).
     expect(body.error).toBeUndefined();
-    expect(body.expiresIn).toBe(900);
+    expect(body.expiresIn).toBe(600);
     expect(body.accessToken.split(".")).toHaveLength(3); // JWT
     expect(body.refreshToken.length).toBeGreaterThanOrEqual(40);
     expect(body.user.email).toBe("liam@example.com");

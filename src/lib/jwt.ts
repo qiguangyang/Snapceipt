@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 
-export const ACCESS_TTL_SECONDS = 900; // 15 minutes
+export const ACCESS_TTL_SECONDS = 600; // 10 minutes (lowered from 15 to shrink the post-revocation window; L3)
 const ISSUER = "snapceipt";
 const AUDIENCE = "snapceipt-ios";
 

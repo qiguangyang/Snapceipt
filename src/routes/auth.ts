@@ -6,7 +6,7 @@ import type { AppEnv } from "../env";
 import { ApiError } from "../lib/errors";
 import { uuidv7 } from "../lib/ids";
 import { nowMs } from "../lib/time";
-import { hashToken, signAccess } from "../lib/jwt";
+import { hashToken, signAccess, ACCESS_TTL_SECONDS } from "../lib/jwt";
 import {
   issueSession,
   findSessionByRefreshHash,
@@ -269,7 +269,7 @@ authRoutes.post(
     return c.json({
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
-      expiresIn: 900,
+      expiresIn: ACCESS_TTL_SECONDS,
       user: { id: user.id, email: user.email, displayName: user.display_name },
     });
   },
@@ -443,7 +443,7 @@ authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
   return c.json({
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
-    expiresIn: 900,
+    expiresIn: ACCESS_TTL_SECONDS,
     user: { id: user.id, email: user.email, displayName: user.display_name },
   });
 });
@@ -575,7 +575,7 @@ authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c
   return c.json({
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
-    expiresIn: 900,
+    expiresIn: ACCESS_TTL_SECONDS,
     user: { id: user.id, email: user.email, displayName: user.display_name },
   });
 });
@@ -720,7 +720,7 @@ authRoutes.post("/apple", validate("json", appleBody), async (c) => {
   return c.json({
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
-    expiresIn: 900,
+    expiresIn: ACCESS_TTL_SECONDS,
     user: { id: user.id, email: user.email, displayName: user.display_name },
   });
 });
@@ -779,7 +779,7 @@ authRoutes.post("/refresh", validate("json", refreshBody), async (c) => {
     return c.json({
       accessToken,
       refreshToken: rotated.refreshToken,
-      expiresIn: 900,
+      expiresIn: ACCESS_TTL_SECONDS,
       user: { id: user.id, email: user.email, displayName: user.display_name },
     });
   }

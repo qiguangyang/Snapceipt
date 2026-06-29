@@ -44,21 +44,21 @@ async function verifyBearer(c: Parameters<MiddlewareHandler<AppEnv>>[0]): Promis
   c.set("deviceId", claims.did);
   c.set("sessionId", claims.sid);
 
-  // TODO(security L3): an access token stays valid for up to its ~15-min TTL after sign-out /
-  // device-revoke, because this middleware verifies the JWT purely cryptographically and does
-  // not consult session liveness. DEFERRED this pass (not forced) because every safe lever is
-  // out of reach here without regressions:
+  // TODO(security L3): an access token stays valid for up to its ~10-min TTL (lowered from 15;
+  // ACCESS_TTL_SECONDS in jwt.ts) after sign-out / device-revoke, because this middleware verifies
+  // the JWT purely cryptographically and does not consult session liveness. The TTL drop is a
+  // PARTIAL mitigation (shrinks the window); full closure still needs a liveness check here:
   //  - Centralizing `isSessionLive(DB, claims.sid, now)` here would 401 a token whose session
   //    row is absent/revoked. That breaks currently-green auth tests by design: authmw.test.ts
   //    signs tokens with synthetic session ids (e.g. "s-9") and expects 200, and
   //    devices-revoke.test.ts asserts /auth/me still 200s right after the session is revoked
   //    (the device merely drops out of the list). It also adds a D1 read to EVERY request.
-  //  - Shortening the access TTL lives in src/lib/jwt.ts (ACCESS_TTL_SECONDS), which is outside
-  //    this change's scope.
+  //  - Lowering the access TTL (DONE: 15->10 min in src/lib/jwt.ts) shrinks the window but does
+  //    not eliminate it.
   // The blast radius is already bounded: the highest-value state-changing routes (account
   // delete, sync push) call isSessionLive() explicitly (src/routes/account.ts, src/routes/sync.ts),
-  // turning revocation into an immediate kill-switch there. Revisit by either lowering the TTL or
-  // centralizing the liveness check together with updating those two tests.
+  // turning revocation into an immediate kill-switch there. Full closure: centralize the
+  // liveness check here AND update those two tests (authmw.test.ts, devices-revoke.test.ts).
 }
 
 /**
