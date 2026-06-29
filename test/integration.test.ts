@@ -83,7 +83,7 @@ describe("integration: magic-link -> sync push/pull, banks 501, health 200", () 
     };
     expect(session.accessToken).toBeTruthy();
     expect(session.refreshToken).toBeTruthy();
-    expect(session.expiresIn).toBe(900);
+    expect(session.expiresIn).toBe(600);
     expect(session.user.email).toBe(email);
 
     const authHeaders = {

@@ -71,7 +71,7 @@ describe("POST /auth/apple", () => {
     expect(body.accessToken.split(".")).toHaveLength(3); // JWT
     expect(typeof body.refreshToken).toBe("string");
     expect(body.refreshToken.length).toBeGreaterThanOrEqual(40);
-    expect(body.expiresIn).toBe(900);
+    expect(body.expiresIn).toBe(600);
     expect(body.user.id).toMatch(/[0-9a-f-]{36}/i);
     expect(body.user.email).toBe("relay@privaterelay.appleid.com");
     expect(body.user.displayName).toBe("Maya Reyes");

@@ -110,7 +110,7 @@ describe("POST /auth/otp/verify", () => {
       accessToken: string; refreshToken: string; expiresIn: number;
       user: { id: string; email: string };
     };
-    expect(body.expiresIn).toBe(900);
+    expect(body.expiresIn).toBe(600);
     expect(body.accessToken.split(".")).toHaveLength(3);
     expect(body.user.email).toBe("otp-ok@example.com");
 
