@@ -60,14 +60,14 @@ final class ScreenshotTourUITests: UITestCase {
         // flow: RootView gates onboarding on `profileRows.isEmpty` (RootView.swift:32),
         // so inserting the first profile re-renders STRAIGHT into the shell before
         // OnboardingView can advance to its .camera step. The if-guard below is
-        // best-effort (same "Not now" literal OnboardingUITests drives,
-        // PermissionPrimingView.swift:104) and currently always skips — making the
-        // priming reachable would be a flow change (out of polish guardrails), so
-        // the missing shot is reported as a deferred coverage gap instead.
+        // best-effort (same "Continue" literal OnboardingUITests drives on the
+        // priming screen) and currently always skips — making the priming reachable
+        // would be a flow change (out of polish guardrails), so the missing shot is
+        // reported as a deferred coverage gap instead.
         let nameField = app.textFields[AccessibilityID.onboardingName]
         if nameField.waitForExistence(timeout: 2) { nameField.tap(); nameField.typeText("Studio North\n") }
         app.buttons[AccessibilityID.onboardingCreate].firstMatch.tap()
-        if app.buttons["Not now"].waitForExistence(timeout: 6) {   // no a11y id — literal text
+        if app.buttons["Continue"].waitForExistence(timeout: 6) {   // no a11y id — literal text
             shoot(app, "permission-priming-camera")
         }
     }

@@ -9,6 +9,11 @@ class UITestCase: XCTestCase {
         super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
+        // Every UI test wires the no-op permission requester so onboarding never raises a
+        // real system camera/notifications alert. The priming screen now always advances
+        // into the OS prompt (no "Not now" skip — App Store guideline 5.1.1(iv)); launch
+        // helpers append to this array, so the flag survives.
+        app.launchArguments = ["-uiTestSkipPermissions"]
     }
 
     override func tearDown() {

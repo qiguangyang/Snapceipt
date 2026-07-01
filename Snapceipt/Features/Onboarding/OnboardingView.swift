@@ -44,7 +44,8 @@ struct OnboardingView: View {
     /// Called once the first profile exists and permissions have been primed.
     let onFinished: () -> Void
 #if DEBUG
-    var requester: PermissionRequesting = AppLaunch.current.useStub ? NoopPermissionRequester() : LivePermissionRequester()
+    var requester: PermissionRequesting = (AppLaunch.current.useStub || AppLaunch.current.skipPermissions)
+        ? NoopPermissionRequester() : LivePermissionRequester()
 #else
     var requester: PermissionRequesting = LivePermissionRequester()
 #endif

@@ -13,11 +13,12 @@ final class OnboardingUITests: UITestCase {
         app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
         app.buttons[AccessibilityID.onboardingCreate].tap()
 
-        // Advance the two permission-priming screens (camera, notifications). Under the
-        // stub the requester is a no-op, so tapping "Not now" just advances — no system alert.
+        // Advance the two permission-priming screens (camera, notifications). The screens
+        // now have a single neutral "Continue" CTA (no "Not now" skip); under the no-op
+        // requester tapping it just advances — no system alert.
         for _ in 0..<2 {
-            let notNow = app.buttons["Not now"]
-            if notNow.waitForExistence(timeout: 6) { notNow.tap() }
+            let cont = app.buttons["Continue"]
+            if cont.waitForExistence(timeout: 6) { cont.tap() }
         }
 
         XCTAssertTrue(

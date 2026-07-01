@@ -67,8 +67,10 @@ final class SyncFailureUITests: UITestCase {
             name.tap(); name.typeText("Requeue Co")
             app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
             app.buttons[AccessibilityID.onboardingCreate].tap()
-            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
-            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+            // Two neutral "Continue" taps advance the camera + notifications primes (no
+            // "Not now" skip); the -uiTestSkipPermissions no-op requester means no alert.
+            if app.buttons["Continue"].waitForExistence(timeout: 5) { app.buttons["Continue"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
         }
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
                       "Did not reach the live shell")

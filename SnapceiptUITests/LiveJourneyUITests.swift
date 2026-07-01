@@ -55,10 +55,10 @@ final class LiveJourneyUITests: UITestCase {
         app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
         app.buttons[AccessibilityID.onboardingCreate].tap()
 
-        // Permission primes: two literal "Not now" taps (matches OnboardingUITests).
-        let notNow = app.buttons["Not now"]
-        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
-        if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+        // Permission primes: two neutral "Continue" taps (matches OnboardingUITests).
+        let cont = app.buttons["Continue"]
+        if cont.waitForExistence(timeout: 5) { cont.tap() }
+        if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
 
         // Landed in the shell: the tab bar container exists.
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
@@ -75,8 +75,8 @@ final class LiveJourneyUITests: UITestCase {
             app.textFields[AccessibilityID.onboardingName].typeText("Drain Co")
             app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
             app.buttons[AccessibilityID.onboardingCreate].tap()
-            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
-            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 5) { app.buttons["Continue"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
         }
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
                       "Did not reach the live shell")
@@ -132,8 +132,8 @@ final class LiveJourneyUITests: UITestCase {
             name.tap(); name.typeText("Persist Co")
             app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
             app.buttons[AccessibilityID.onboardingCreate].tap()
-            if app.buttons["Not now"].waitForExistence(timeout: 5) { app.buttons["Not now"].tap() }
-            if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 5) { app.buttons["Continue"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
         }
         XCTAssertTrue(app.otherElements[AccessibilityID.shellTabBar].waitForExistence(timeout: 15),
                       "Did not reach the shell")
