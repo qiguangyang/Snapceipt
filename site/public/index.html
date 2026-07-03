@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=Schibsted+Grotesk:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <div class="wrap">
@@ -43,14 +44,76 @@
       </div>
       <div class="tagline">Snap it. Sort it. Sorted.</div>
     </div>
-    <div class="device"><div class="app">
-      <div class="h-head"><div class="h-hi">Good afternoon,</div><div class="h-name">Maya</div></div>
-      <div class="h-balance"><div class="l">This month · net</div><div class="v">$2,480.20</div><div class="sub">↑ 18 receipts captured</div></div>
-      <div class="h-sec">Recent</div>
-      <div class="h-row"><div class="h-ic">🛒</div><div><div class="m">Woolworths Metro</div><div class="d">Today · Groceries</div></div><div class="amt">$48.20</div></div>
-      <div class="h-row"><div class="h-ic">📎</div><div><div class="m">Officeworks</div><div class="d">12 Jun · Office</div></div><div class="amt">$129.00</div></div>
-      <div class="h-row"><div class="h-ic">⛽</div><div><div class="m">Caltex</div><div class="d">11 Jun · Fuel</div></div><div class="amt">$72.10</div></div>
-      <div class="tabbar"><span class="ti on"><span class="b"></span>Home</span><span class="ti"><span class="b"></span>Activity</span><span class="fab">＋</span><span class="ti"><span class="b"></span>Reports</span><span class="ti"><span class="b"></span>Profile</span></div>
+    <div class="phone-wrap"><div class="phone" id="heroPhone">
+      <div class="island"></div>
+      <div class="status"><div class="t">9:41</div><div class="sig">
+        <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx=".7" fill="currentColor"/><rect x="4.8" y="5" width="3.2" height="7" rx=".7" fill="currentColor"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx=".7" fill="currentColor"/><rect x="14.4" y="0" width="3.2" height="12" rx=".7" fill="currentColor"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill="currentColor"/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill="currentColor"/><circle cx="8.5" cy="10.5" r="1.5" fill="currentColor"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="currentColor" stroke-opacity=".35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill="currentColor" fill-opacity=".4"/></svg>
+      </div></div>
+
+      <div class="pscreen"><div class="home-scroll">
+        <div class="h-top">
+          <div class="who">
+            <div class="h-av">SN</div>
+            <div>
+              <div class="h-lab">Active profile</div>
+              <div class="h-name">Studio North <span class="chev"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></div>
+            </div>
+          </div>
+          <div class="h-bell"><svg class="ic" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 10a5.5 5.5 0 0 1 11 0c0 5 2 6.5 2 6.5H4.5s2-1.5 2-6.5ZM9.5 19.5a2.6 2.6 0 0 0 5 0"/></svg><span class="dot"></span></div>
+        </div>
+
+        <div class="h-sum">
+          <div class="blob b1"></div><div class="blob b2"></div>
+          <div class="row"><span class="l">Net this month · May</span><span class="pill">business</span></div>
+          <div class="net num">$3,878</div>
+          <div class="tiles">
+            <div class="tile"><div class="k"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg> Income</div><div class="v num">$5,050</div></div>
+            <div class="tile"><div class="k"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg> Expenses</div><div class="v num">$1,172</div></div>
+          </div>
+        </div>
+
+        <button class="h-cta">
+          <div class="body">
+            <div class="badge"><svg class="ic" width="14" height="14" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#39B0A4"/></svg><span>AI auto-sort</span></div>
+            <div class="t">Snap a receipt</div>
+            <div class="s">We'll read the total, GST &amp; category for you.</div>
+          </div>
+          <div class="art"><div class="dots"></div><div class="cam"><svg class="ic" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5A2 2 0 0 1 5.5 6.5h1.7l1-1.7a1 1 0 0 1 .9-.5h5.8a1 1 0 0 1 .9.5l1 1.7h1.7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8.5ZM12 17a3.7 3.7 0 1 0 0-7.4 3.7 3.7 0 0 0 0 7.4Z"/></svg></div></div>
+        </button>
+
+        <div class="h-qa">
+          <div class="qa"><div class="box"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7l4.5 4.5v12a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1ZM13 3.5V8h4.5M9 13h6M9 16.5h4"/></svg></div><div class="lab">Create Quote</div></div>
+          <div class="qa"><div class="box"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div><div class="lab">Add Manually</div></div>
+          <div class="qa"><div class="box"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><div class="lab">Reports</div></div>
+          <div class="qa"><div class="box"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4L13.6 21 12 19.6 10.4 21 8.2 19.6 6 21V3ZM9 8h6M9 12h6M9 16h3"/></svg></div><div class="lab">Receipts</div></div>
+        </div>
+
+        <div class="card h-ded">
+          <div class="hd"><span class="ttl">Deductible · FY26</span><span class="trk"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1F9D6B" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 5 6v5.5c0 4.4 3 7.5 7 9 4-1.5 7-4.6 7-9V6l-7-2.5ZM9 12l2 2 4-4"/></svg> Tracked</span></div>
+          <div class="bud"><div class="r"><span class="lb">Software &amp; subscriptions</span><span class="am num">$576 <span style="color:var(--ink3)">/ $800</span></span></div><div class="track"><i style="width:72%;background:#7B5BD6"></i></div></div>
+          <div class="bud"><div class="r"><span class="lb">Vehicle &amp; travel</span><span class="am num over">$735 <span style="color:var(--ink3)">/ $650</span></span></div><div class="track"><i style="width:100%;background:var(--alert)"></i></div></div>
+          <div class="bud"><div class="r"><span class="lb">Meals (50% rule)</span><span class="am num">$142 <span style="color:var(--ink3)">/ $300</span></span></div><div class="track"><i style="width:47%;background:var(--income)"></i></div></div>
+        </div>
+
+        <div class="h-recent"><span class="ttl">Recent activity</span><span class="all">See all <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span></div>
+        <div class="card h-list">
+          <div class="txn"><div class="cic" style="background:#FBEADF"><svg class="ic" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#E8602C" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h12v4a6 6 0 0 1-12 0V8ZM17 9h2.5a2 2 0 0 1 0 4H17M5 20h12"/></svg></div><div class="mid"><div class="m">The Grounds of Alexandria</div><div class="d">28 May <span class="ai"><svg class="ic" width="11" height="11" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#0E7C72"/></svg> AI</span></div></div><div class="amt num">−$42.50</div></div>
+          <div class="txn"><div class="cic" style="background:#EBE5F8"><svg class="ic" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#7B5BD6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM4 9h16M4 15h16M8 5v14M16 5v14"/></svg></div><div class="mid"><div class="m">Apple — Final Cut Pro</div><div class="d">27 May <span class="ai"><svg class="ic" width="11" height="11" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#0E7C72"/></svg> AI</span></div></div><div class="amt num">−$499.00</div></div>
+          <div class="txn"><div class="cic" style="background:#E2ECF6"><svg class="ic" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#2F6FB0" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V6a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v14M4 20h11M14 9h2.5a1.5 1.5 0 0 1 1.5 1.5V16a1.5 1.5 0 0 0 3 0V8l-2.5-2.5M7 8h5"/></svg></div><div class="mid"><div class="m">BP Service Station</div><div class="d">26 May <span class="ai"><svg class="ic" width="11" height="11" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#0E7C72"/></svg> AI</span></div></div><div class="amt num">−$88.20</div></div>
+          <div class="txn"><div class="cic" style="background:#DEF3E9"><svg class="ic" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#1F9D6B" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div><div class="mid"><div class="m">Studio retainer — Northwind</div><div class="d">25 May</div></div><div class="amt num inc">+$4,200</div></div>
+        </div>
+      </div>
+
+      <div class="tabbar"><div class="grad"></div><div class="bar">
+        <div class="ti on"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.6 12 4l9 6.6M5.5 9.2V19a1 1 0 0 0 1 1H10v-5h4v5h3.5a1 1 0 0 0 1-1V9.2"/></svg><span>Home</span></div>
+        <div class="ti"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4L13.6 21 12 19.6 10.4 21 8.2 19.6 6 21V3ZM9 8h6M9 12h6M9 16h3"/></svg><span>Activity</span></div>
+        <div class="fab"><svg class="ic" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5A2 2 0 0 1 5.5 6.5h1.7l1-1.7a1 1 0 0 1 .9-.5h5.8a1 1 0 0 1 .9.5l1 1.7h1.7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8.5ZM12 17a3.7 3.7 0 1 0 0-7.4 3.7 3.7 0 0 0 0 7.4Z"/></svg></div>
+        <div class="ti"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reports</span></div>
+        <div class="ti"><svg class="ic" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12.6a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2ZM4.6 20a7.5 7.5 0 0 1 14.8 0"/></svg><span>Profile</span></div>
+      </div></div>
+      <div class="homeind"></div>
     </div></div>
   </header>
 
@@ -60,50 +123,255 @@
     <h2>From snap to sorted in seconds.</h2>
     <p class="intro">Watch a receipt go from photo to fully categorised — GST and all — without a single keystroke.</p>
     <div class="demoStage">
-      <div class="device" id="demoDevice" data-scene="0" aria-hidden="true"><div class="app"><div class="scenes">
+      <div class="phone-wrap"><div class="phone" id="snapPhone" data-scene="0" aria-hidden="true">
+        <div class="island"></div>
+        <div class="status"><div class="t">9:41</div><div class="sig">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx=".7" fill="currentColor"/><rect x="4.8" y="5" width="3.2" height="7" rx=".7" fill="currentColor"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx=".7" fill="currentColor"/><rect x="14.4" y="0" width="3.2" height="12" rx=".7" fill="currentColor"/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill="currentColor"/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill="currentColor"/><circle cx="8.5" cy="10.5" r="1.5" fill="currentColor"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="currentColor" stroke-opacity=".35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill="currentColor" fill-opacity=".4"/></svg>
+        </div></div>
+        <div class="pscreen">
 
-        <!-- scene 0: home -->
-        <div class="scene s0">
-          <div class="h-head"><div class="h-hi">Good afternoon,</div><div class="h-name">Maya</div></div>
-          <div class="h-balance"><div class="l">This month · net</div><div class="v">$2,432.00</div><div class="sub">Tap ＋ to add a receipt</div></div>
-          <div class="h-sec">Recent</div>
-          <div class="h-row"><div class="h-ic">📎</div><div><div class="m">Officeworks</div><div class="d">12 Jun · Office</div></div><div class="amt">$129.00</div></div>
-          <div class="h-row"><div class="h-ic">⛽</div><div><div class="m">Caltex</div><div class="d">11 Jun · Fuel</div></div><div class="amt">$72.10</div></div>
-          <div class="tabbar"><span class="ti on"><span class="b"></span>Home</span><span class="ti"><span class="b"></span>Activity</span><span class="fab">＋</span><span class="ti"><span class="b"></span>Reports</span><span class="ti"><span class="b"></span>Profile</span></div>
-          <div class="tapring"></div>
-        </div>
-
-        <!-- scene 1: camera scan -->
-        <div class="scene s1"><div class="cam">
-          <div class="receiptImg"><div class="ln t"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln s"></div><div class="ln"></div><div class="ln s"></div></div>
-          <div class="scanline"></div>
-          <div class="camLabel">Reading receipt<span class="dots"></span></div>
+        <!-- scene 0: camera -->
+        <div class="pscene ps0"><div class="cam">
+          <div class="feed"></div><div class="grain"></div>
+          <div class="paper"><div class="receipt">
+            <div class="rh">THE GROUNDS</div><div class="rs">OF ALEXANDRIA · SYDNEY</div>
+            <div class="rd"></div>
+            <div class="rl"><span>Flat White ×2</span><span>9.00</span></div>
+            <div class="rl"><span>Big Brekkie</span><span>24.00</span></div>
+            <div class="rl"><span>Sourdough</span><span>9.50</span></div>
+            <div class="rd"></div>
+            <div class="rg"><span>GST incl.</span><span>3.86</span></div>
+            <div class="rt"><span>TOTAL</span><span>$42.50</span></div>
+            <div class="rf">28 MAY 2026 · 09:41 · CARD •••• 1009</div>
+          </div></div>
+          <div class="ctrls">
+            <div class="cbtn"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+            <div class="mode"><i></i> business</div>
+            <div class="cbtn"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13h6l-1 8 8-10h-6l1-8Z"/></svg></div>
+          </div>
+          <div class="frame"><b class="tl"></b><b class="tr"></b><b class="bl"></b><b class="br"></b></div>
+          <div class="hint">Line up your receipt — we'll auto-capture</div>
+          <div class="bottom">
+            <div class="side"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v13H4zM4 15l4-4 4 4 3-3 5 5M9 9.5a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6Z"/></svg></div>
+            <div class="shutter"><i></i></div>
+            <div class="side"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7l4.5 4.5v12a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1ZM13 3.5V8h4.5M9 13h6M9 16.5h4"/></svg></div>
+          </div>
         </div></div>
 
-        <!-- scene 2: extracted -->
-        <div class="scene s2"><div class="ex">
-          <div class="top">Woolworths Metro</div><div class="topd">14 Jun 2026</div>
-          <div class="exField"><span class="k">Merchant</span><span class="v">Woolworths Metro <span class="chk">✓</span></span></div>
-          <div class="exField"><span class="k">Total</span><span class="v">$48.20 <span class="chk">✓</span></span></div>
-          <div class="exField"><span class="k">GST</span><span class="v">$3.11 <span class="chk">✓</span></span></div>
-          <div class="exField"><span class="k">Category</span><span class="v">Groceries <span class="chk">✓</span></span></div>
-          <div class="exField"><span class="k">Tax</span><span class="v"><span class="gstpill">GST read from receipt</span></span></div>
+        <!-- scene 1: scan -->
+        <div class="pscene ps1"><div class="scan">
+          <div class="paper"><div class="receipt">
+            <div class="rh">THE GROUNDS</div><div class="rs">OF ALEXANDRIA · SYDNEY</div>
+            <div class="rd"></div>
+            <div class="rl"><span>Flat White ×2</span><span>9.00</span></div>
+            <div class="rl"><span>Big Brekkie</span><span>24.00</span></div>
+            <div class="rl"><span>Sourdough</span><span>9.50</span></div>
+            <div class="rd"></div>
+            <div class="rg"><span>GST incl.</span><span>3.86</span></div>
+            <div class="rt"><span>TOTAL</span><span>$42.50</span></div>
+          </div><div class="line"></div><div class="glow"></div></div>
+          <div class="head"><svg class="ic" width="20" height="20" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#39B0A4"/></svg> <b>Reading your receipt…</b></div>
+          <div class="fields">
+            <div class="fld on"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39B0A4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Merchant</div>
+            <div class="fld on"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39B0A4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Date</div>
+            <div class="fld on"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39B0A4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> GST</div>
+            <div class="fld on"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39B0A4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Total</div>
+            <div class="fld on"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39B0A4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Category</div>
+          </div>
+        </div></div>
+
+        <!-- scene 2: review -->
+        <div class="pscene ps2"><div class="rev">
+          <div class="top">
+            <div class="sq"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+            <div class="h">Review receipt</div>
+            <div class="sq"><svg class="ic" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"/></svg></div>
+          </div>
+          <div class="body">
+            <div class="thumb">
+              <div class="tw"><div class="sc"><div class="receipt">
+                <div class="rh">THE GROUNDS</div><div class="rs">OF ALEXANDRIA · SYDNEY</div>
+                <div class="rd"></div>
+                <div class="rl"><span>Flat White ×2</span><span>9.00</span></div>
+                <div class="rl"><span>Big Brekkie</span><span>24.00</span></div>
+                <div class="rl"><span>Sourdough</span><span>9.50</span></div>
+                <div class="rd"></div>
+                <div class="rt"><span>TOTAL</span><span>$42.50</span></div>
+              </div></div></div>
+              <div>
+                <div class="k">Total detected</div>
+                <div class="tot num">$42.50</div>
+                <div class="gst"><svg class="ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1F9D6B" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> incl. $3.86 GST</div>
+              </div>
+            </div>
+            <div class="ai">
+              <div class="r"><svg class="ic" width="18" height="18" viewBox="0 0 24 24"><path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6 12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" fill="#0E7C72"/></svg><b>AI categorised this for you</b><span class="match">98% match</span></div>
+              <p>Looks like a <b>client coffee meeting</b> — filed under <b>Business · Meals</b>, claimable at <b>50%</b>.</p>
+            </div>
+            <div class="card det">
+              <div class="row"><div class="fl"><div class="k">Merchant</div><div class="v">The Grounds</div></div><div class="fl"><div class="k">Date</div><div class="v">28 May 2026</div></div></div>
+              <div class="row cat"><div class="fl"><div class="k">Category</div><div class="catv"><div class="cic" style="background:#FBEADF"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#E8602C" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h12v4a6 6 0 0 1-12 0V8ZM17 9h2.5a2 2 0 0 1 0 4H17M5 20h12"/></svg></div><span class="cl">Meals &amp; Coffee</span></div></div><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div>
+              <div class="row"><div class="fl"><div class="k">Payment</div><div class="v">Amex Business</div></div><div class="fl"><div class="k">Tax</div><div class="v">Client meeting</div><div class="sub">Deductible 50%</div></div></div>
+            </div>
+            <div class="toggle">
+              <div class="lbl">Assign to profile</div>
+              <div class="seg biz"><div class="knob"></div>
+                <div class="opt"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H18a1 1 0 0 1 1 1v1.5M4 7.5V18a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-3.5M4 7.5h14.5M16 11.5h3.5v3H16a1.5 1.5 0 0 1 0-3Z"/></svg> Personal</div>
+                <div class="opt on"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15M14 20V9h4a1 1 0 0 1 1 1v10M4 20h16M8 8h3M8 12h3M8 16h3"/></svg> Business</div>
+              </div>
+            </div>
+            <div class="chips">
+              <div class="chip"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M5.5 16.5v2M18.5 16.5v2M4.5 16.5l1.2-5a2 2 0 0 1 1.9-1.4h8.8a2 2 0 0 1 1.9 1.4l1.2 5M4.5 16.5h15M7.5 13.5h2M14.5 13.5h2"/></svg> Add to mileage</div>
+              <div class="chip"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5M10.5 7.5 12 6a3.5 3.5 0 0 1 5 5l-1.5 1.5M13.5 16.5 12 18a3.5 3.5 0 0 1-5-5l1.5-1.5"/></svg> Match to bank</div>
+            </div>
+          </div>
+          <div class="savebar"><div class="bigbtn"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Save receipt</div></div>
         </div></div>
 
         <!-- scene 3: saved -->
-        <div class="scene s3"><div class="ok">
-          <div class="okc">✓</div>
-          <h3>Sorted!</h3>
-          <p>Saved, categorised and synced.<br>Ready for BAS and tax time.</p>
-          <div class="okmini"><div class="h-ic">🛒</div><div><div class="m" style="font-size:14px;font-weight:600">Woolworths Metro</div><div class="d" style="font-size:11.5px;color:var(--ink3)">Groceries · GST $3.11</div></div><div class="amt" style="margin-left:auto;font-family:'Schibsted Grotesk';font-weight:700">$48.20</div></div>
+        <div class="pscene ps3"><div class="win">
+          <span class="confetti" style="left:8%;background:#0E7C72;animation-delay:0s"></span>
+          <span class="confetti" style="left:16%;background:#1F9D6B;animation-delay:.12s"></span>
+          <span class="confetti" style="left:26%;background:#7B5BD6;animation-delay:.06s"></span>
+          <span class="confetti" style="left:36%;background:#C99A22;animation-delay:.18s"></span>
+          <span class="confetti" style="left:46%;background:#2F6FB0;animation-delay:.03s"></span>
+          <span class="confetti" style="left:56%;background:#0E7C72;animation-delay:.15s"></span>
+          <span class="confetti" style="left:66%;background:#1F9D6B;animation-delay:.09s"></span>
+          <span class="confetti" style="left:76%;background:#7B5BD6;animation-delay:.21s"></span>
+          <span class="confetti" style="left:86%;background:#C99A22;animation-delay:.04s"></span>
+          <span class="confetti" style="left:92%;background:#2F6FB0;animation-delay:.16s"></span>
+          <div class="badge">
+            <div class="ring"></div>
+            <div class="disc"><svg width="50" height="50" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <h3>Receipt saved!</h3>
+          <p>$42.50 added to <b>Business</b> expenses,<br>and tagged <b>50% deductible</b>.</p>
+          <div class="acts">
+            <div class="bigbtn"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5A2 2 0 0 1 5.5 6.5h1.7l1-1.7a1 1 0 0 1 .9-.5h5.8a1 1 0 0 1 .9.5l1 1.7h1.7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8.5ZM12 17a3.7 3.7 0 1 0 0-7.4 3.7 3.7 0 0 0 0 7.4Z"/></svg> Snap another</div>
+            <div class="ghostbtn">Done</div>
+          </div>
         </div></div>
 
-      </div></div></div>
+        </div>
+        <div class="homeind"></div>
+      </div></div>
 
       <div class="demoSteps">
         <div class="dStep" data-step="0"><div class="dn">1</div><div><h4>Snap</h4><p>Point your camera at any receipt — paper or digital.</p></div></div>
         <div class="dStep" data-step="1"><div class="dn">2</div><div><h4>Snapceipt reads it</h4><p>Merchant, total, GST and category, pulled automatically.</p></div></div>
         <div class="dStep" data-step="2"><div class="dn">3</div><div><h4>Sorted for tax</h4><p>Filed, synced and BAS-ready — no typing.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AUTO-PLAY DEMO 2 · QUOTES & INVOICES ============ -->
+  <section class="demoSec" id="demo-invoice">
+    <div class="kicker">For business owners</div>
+    <h2>Quote it. Invoice it. Paid.</h2>
+    <p class="intro">Running a business? Send a client a polished, GST-ready quote, turn it into a tax invoice in a tap, and track who's paid — all from your phone.</p>
+    <div class="demoStage">
+      <div class="phone-wrap"><div class="phone" id="quotePhone" data-scene="0" aria-hidden="true">
+        <div class="island"></div>
+        <div class="status"><div class="t">9:41</div><div class="sig">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx=".7" fill="currentColor"/><rect x="4.8" y="5" width="3.2" height="7" rx=".7" fill="currentColor"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx=".7" fill="currentColor"/><rect x="14.4" y="0" width="3.2" height="12" rx=".7" fill="currentColor"/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill="currentColor"/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill="currentColor"/><circle cx="8.5" cy="10.5" r="1.5" fill="currentColor"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="currentColor" stroke-opacity=".35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill="currentColor" fill-opacity=".4"/></svg>
+        </div></div>
+        <div class="pscreen">
+
+        <!-- scene 0: build a quote -->
+        <div class="pscene ps0"><div class="q">
+          <div class="top"><div class="sq"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></div><div class="h">New quote</div><div class="no">SN-0042</div></div>
+          <div class="body">
+            <div class="sect">Bill to</div>
+            <div class="card client">
+              <div class="av">NW</div>
+              <div style="flex:1;min-width:0"><div class="nm">Northwind Studio</div><div class="em">accounts@northwind.co</div></div>
+              <svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+            </div>
+            <div class="items-hd"><span class="sect">Line items</span><span class="add"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Add</span></div>
+            <div class="card items">
+              <div class="li"><div class="ld"><div class="d1">Brand identity — discovery</div><div class="d2">1 × $1,200</div></div><span class="la num">$1,200</span><span class="lx"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span></div>
+              <div class="li"><div class="ld"><div class="d1">Logo &amp; visual system</div><div class="d2">1 × $3,400</div></div><span class="la num">$3,400</span><span class="lx"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span></div>
+              <div class="li"><div class="ld"><div class="d1">Brand guidelines document</div><div class="d2">1 × $900</div></div><span class="la num">$900</span><span class="lx"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span></div>
+            </div>
+            <div class="card totals">
+              <div class="tr"><span class="tl">Subtotal</span><span class="tv num">$5,500.00</span></div>
+              <div class="tr"><span class="tl">GST (10%)</span><div class="gstwrap"><span class="tv num">$550.00</span><div class="sw"><i></i></div></div></div>
+              <div class="grand"><span class="gl">Total</span><span class="gv num">$6,050.00</span></div>
+            </div>
+            <div class="note"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A99F93" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 7.6h.01"/></svg><p>Valid for 14 days. Accepted quotes convert straight into an invoice.</p></div>
+          </div>
+          <div class="sendbar">
+            <div class="sq"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7l4.5 4.5v12a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1ZM13 3.5V8h4.5M9 13h6M9 16.5h4"/></svg></div>
+            <div class="bigbtn"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8.5 7.5 12 4l3.5 3.5M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg> Send quote</div>
+          </div>
+        </div></div>
+
+        <!-- scene 1: send the quote (share sheet) -->
+        <div class="pscene ps1"><div class="sheet-scene">
+          <div class="sheet-pdf">
+            <div class="pic"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h7l4.5 4.5v12a1 1 0 0 1-1 1h-10.5a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1ZM13 3.5V8h4.5M9 13h6M9 16.5h4"/></svg></div>
+            <div><div class="pn">Quote SN-0042 · Northwind</div><div class="psub">$6,050 · GST incl.</div></div>
+          </div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="st">Send quote to client</div>
+            <div class="srow"><span class="si"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16v11H4zM4 7l8 6 8-6"/></svg></span>Email</div>
+            <div class="srow"><span class="si"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg></span>Messages</div>
+            <div class="srow"><span class="si"><svg class="ic" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6B6258" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5M10.5 7.5 12 6a3.5 3.5 0 0 1 5 5l-1.5 1.5M13.5 16.5 12 18a3.5 3.5 0 0 1-5-5l1.5-1.5"/></svg></span>Copy link</div>
+          </div>
+        </div></div>
+
+        <!-- scene 2: convert to a tax invoice -->
+        <div class="pscene ps2"><div class="inv">
+          <div class="conv"><svg class="ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0A5950" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19.5 7"/></svg> Quote accepted — converted to invoice</div>
+          <div class="paper">
+            <div class="biz">Studio North</div>
+            <div class="abn">ABN 12 345 678 901</div>
+            <div class="meta"><span class="tag">TAX INVOICE</span><span class="num">INV-0042</span></div>
+            <div class="to">Bill to · <b>Northwind Studio</b></div>
+            <div class="ln"><span>Brand identity — discovery</span><span class="lv">$1,200</span></div>
+            <div class="ln"><span>Logo &amp; visual system</span><span class="lv">$3,400</span></div>
+            <div class="ln"><span>Brand guidelines document</span><span class="lv">$900</span></div>
+            <div class="ln sub"><span>GST (10%)</span><span class="lv">$550</span></div>
+            <div class="ln tot"><span>Total due</span><span class="lv">$6,050</span></div>
+            <div class="due">Due in 14 days</div>
+          </div>
+        </div></div>
+
+        <!-- scene 3: paid -->
+        <div class="pscene ps3"><div class="win">
+          <span class="confetti" style="left:8%;background:#0E7C72;animation-delay:0s"></span>
+          <span class="confetti" style="left:16%;background:#1F9D6B;animation-delay:.12s"></span>
+          <span class="confetti" style="left:26%;background:#7B5BD6;animation-delay:.06s"></span>
+          <span class="confetti" style="left:36%;background:#C99A22;animation-delay:.18s"></span>
+          <span class="confetti" style="left:46%;background:#2F6FB0;animation-delay:.03s"></span>
+          <span class="confetti" style="left:56%;background:#0E7C72;animation-delay:.15s"></span>
+          <span class="confetti" style="left:66%;background:#1F9D6B;animation-delay:.09s"></span>
+          <span class="confetti" style="left:76%;background:#7B5BD6;animation-delay:.21s"></span>
+          <span class="confetti" style="left:86%;background:#C99A22;animation-delay:.04s"></span>
+          <span class="confetti" style="left:92%;background:#2F6FB0;animation-delay:.16s"></span>
+          <div class="badge">
+            <div class="ring"></div>
+            <div class="disc rounded"><svg width="50" height="50" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <h3>Paid!</h3>
+          <p>INV-0042 marked paid — <b>$6,050</b><br>recorded as income, ready for tax.</p>
+          <div class="mini"><div class="cic"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E7C72" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6H18a1 1 0 0 1 1 1v1.5M4 7.5V18a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-3.5M4 7.5h14.5M16 11.5h3.5v3H16a1.5 1.5 0 0 1 0-3Z"/></svg></div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">Northwind Studio</div><div style="font-size:11.5px;color:var(--ink3)">INV-0042 · Income</div></div><div class="num" style="font-weight:700;font-size:15px">$6,050</div></div>
+        </div></div>
+
+        </div>
+        <div class="homeind"></div>
+      </div></div>
+
+      <div class="demoSteps">
+        <div class="dStep" data-step="0"><div class="dn">1</div><div><h4>Build the quote</h4><p>Add your client and line items — GST is calculated for you.</p></div></div>
+        <div class="dStep" data-step="1"><div class="dn">2</div><div><h4>Send it</h4><p>Share the quote as a polished PDF with your client.</p></div></div>
+        <div class="dStep" data-step="2"><div class="dn">3</div><div><h4>Convert to invoice</h4><p>They're in? Turn the quote into a tax invoice in a tap.</p></div></div>
+        <div class="dStep" data-step="3"><div class="dn">4</div><div><h4>Get paid</h4><p>Mark it paid and it's logged as income, ready for tax.</p></div></div>
       </div>
     </div>
   </section>
@@ -188,21 +456,23 @@
   var nav=document.getElementById('nav');
   addEventListener('scroll',function(){ nav.classList.toggle('scrolled', scrollY>8); });
   (function(){
-    var dev=document.getElementById('demoDevice'); if(!dev) return;
-    var steps=document.querySelectorAll('.dStep');
-    var sceneToStep=[0,0,1,2], durations=[2600,2200,2800,2400];
-    var scene=0,timer=null,running=false;
-    function render(){ dev.setAttribute('data-scene',scene); var st=sceneToStep[scene];
-      steps.forEach(function(s){ s.classList.toggle('on', +s.dataset.step===st); }); }
-    function tick(){ scene=(scene+1)%4; render(); timer=setTimeout(tick,durations[scene]); }
-    function start(){ if(running)return; running=true; render(); timer=setTimeout(tick,durations[scene]); }
-    function stop(){ running=false; clearTimeout(timer); }
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reduce){ scene=2; render(); return; }
-    render();
-    if('IntersectionObserver' in window){
-      new IntersectionObserver(function(es){ es.forEach(function(e){ e.isIntersecting?start():stop(); }); },{threshold:.3}).observe(dev);
-    } else { start(); }
+    function initDemo(dev, steps, sceneToStep, durations, reduceScene){
+      if(!dev) return;
+      var n=sceneToStep.length, scene=0, timer=null, running=false;
+      function render(){ dev.setAttribute('data-scene',scene); var st=sceneToStep[scene];
+        steps.forEach(function(s){ s.classList.toggle('on', +s.dataset.step===st); }); }
+      function tick(){ scene=(scene+1)%n; render(); timer=setTimeout(tick,durations[scene]); }
+      function start(){ if(running)return; running=true; render(); timer=setTimeout(tick,durations[scene]); }
+      function stop(){ running=false; clearTimeout(timer); }
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if(reduce){ scene=reduceScene; render(); return; }
+      render();
+      if('IntersectionObserver' in window){
+        new IntersectionObserver(function(es){ es.forEach(function(e){ e.isIntersecting?start():stop(); }); },{threshold:.3}).observe(dev);
+      } else { start(); }
+    }
+    initDemo(document.getElementById('snapPhone'),  document.querySelectorAll('#demo .dStep'),         [0,1,1,2], [2600,3200,3400,2800], 2);
+    initDemo(document.getElementById('quotePhone'), document.querySelectorAll('#demo-invoice .dStep'), [0,1,2,3], [3400,2600,3200,2800], 0);
   })();
 </script>
 </body>
