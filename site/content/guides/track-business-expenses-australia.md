@@ -4,7 +4,7 @@ description: "A practical, plain-English guide to tracking business expenses in 
 slug: track-business-expenses-australia
 role: pillar
 keywords: [track business expenses, business expenses australia, sole trader expenses, ATO records]
-related: [organise-receipts-for-tax, do-you-need-paper-receipts-ato]
+related: [organise-receipts-for-tax, do-you-need-paper-receipts-ato, bas-due-dates-and-how-to-lodge, sole-trader-tax-deductions-checklist]
 updated: 2026-06-28
 faq:
   - q: "How long do I need to keep business records in Australia?"

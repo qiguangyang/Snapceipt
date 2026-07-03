@@ -6,6 +6,15 @@ role: spoke
 keywords: ["digital receipts ATO","photo of receipt tax","are digital receipts valid"]
 related: ["do-you-need-paper-receipts-ato","organise-receipts-for-tax"]
 updated: 2026-06-29
+faq:
+  - q: "Can I throw away the paper receipt after taking a photo?"
+    a: "Yes. The ATO accepts a clear photo or scan as your record, so once you've captured a legible, complete copy you can bin the paper original. The only condition is that your image is a true and clear reproduction of the receipt."
+  - q: "What is the ATO's 'true and clear reproduction' rule for digital receipts?"
+    a: "It means the digital copy you keep must be a faithful, legible copy of the original — readable, complete rather than cropped or edited, and in English if the expense was incurred in Australia. If your photo meets that standard, you are not required to keep the paper version at all."
+  - q: "Do faded thermal receipts still count for a tax deduction?"
+    a: "A receipt only counts if it is still legible, and a faded thermal receipt that has turned into a blank grey rectangle is effectively no receipt at all. Because thermal paper can fade within months, the safest move is to photograph it the day you get it while the print is still crisp. You need to be able to produce readable records for five years."
+  - q: "Can I claim an expense from a receipt written in a foreign language?"
+    a: "Yes, if you incurred the expense overseas the receipt can be in that country's language. However, the ATO can ask for a certified translation if it ever reviews your claim, so keep a note of what the expense was for. Receipts for expenses incurred in Australia should be in English."
 ---
 
 You bought something for the business, the paper receipt is sitting in your wallet slowly turning into mush, and you're wondering: can I just take a photo and bin the paper? It's one of the most common questions sole traders ask at tax time, and the good news is short.

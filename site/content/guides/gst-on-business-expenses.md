@@ -4,8 +4,17 @@ description: "How GST works on business expenses in Australia — claiming GST c
 slug: gst-on-business-expenses
 role: spoke
 keywords: ["GST on expenses","GST credits","tax invoice","business GST"]
-related: ["track-business-expenses-australia","expense-tracking-sole-traders"]
+related: ["track-business-expenses-australia","expense-tracking-sole-traders","valid-tax-invoice-requirements-australia","bas-due-dates-and-how-to-lodge"]
 updated: 2026-06-29
+faq:
+  - q: "Do I need a tax invoice to claim GST on a small purchase?"
+    a: "To claim a GST credit on a purchase costing more than $82.50 (including GST), you must hold a valid tax invoice. For purchases of $82.50 or less, a receipt is enough and you don't need a full tax invoice, though you should still keep proof."
+  - q: "How do I work out the GST included in a price in Australia?"
+    a: "GST is 10% and is already baked into most Australian prices, so you find the GST by dividing the total by 11. For example, $110 divided by 11 is $10 of GST, because the GST is exactly one-eleventh of a GST-inclusive total."
+  - q: "Can I claim GST credits if I'm not registered for GST?"
+    a: "No — you can only claim GST credits if you're registered for GST. If you're a sole trader under the threshold and haven't registered, you simply pay the GST-inclusive price and can't claim the 10% back. The full expense may still be deductible on your income tax, which is a separate matter."
+  - q: "What details does a valid tax invoice need to show?"
+    a: "For purchases under $1,000, a tax invoice must show that it's intended to be a tax invoice, the seller's identity and ABN, the date issued, a brief description of what was bought, and the GST amount (either shown separately or a note that the price includes GST). For purchases of $1,000 or more, it also needs the buyer's identity or ABN. If your supplier hasn't given you one, you can ask, and they have 28 days to provide it."
 ---
 
 GST trips up a lot of people running a small business in Australia, mostly because the word gets used loosely. You'll hear "I'll claim the GST back" and "I need to add GST to that" in the same breath, as if they're the same thing. They're not. Here's how GST actually works on the money you spend, in plain English, with no jargon you have to look up.

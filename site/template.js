@@ -21,11 +21,23 @@ const FOOTER = `<footer class="footer"><div class="inner">
   <a class="logo" style="font-size:18px" href="/">Snap<b>ceipt</b></a>
   <a href="/guides">Guides</a><a href="/pricing">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a>
   <a href="mailto:support@snapceipt.cc">support@snapceipt.cc</a>
-  <span class="sp">© 2026 Snapceipt · Made in Australia 🇦🇺</span>
+  <span class="sp">© 2026 Snapceipt — a Techsider Pty Ltd app · Made in Australia 🇦🇺</span>
 </div></footer>`;
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Format a frontmatter `updated` value (Date or "YYYY-MM-DD") to a readable AU date.
+function prettyDate(u) {
+  const d = u instanceof Date ? u : new Date(String(u) + "T00:00:00");
+  return d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function isoDay(u) {
+  if (!u) return "";
+  if (u instanceof Date) return u.toISOString().slice(0, 10);
+  return String(u).slice(0, 10);
 }
 
 function jsonLd(page, url) {
@@ -41,7 +53,7 @@ function jsonLd(page, url) {
     "@context": "https://schema.org", "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: SITE },
-      { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE}/guides` },
+      { "@type": "ListItem", position: 2, name: "Guides", item: `${SITE}/guides/` },
       { "@type": "ListItem", position: 3, name: page.title, item: url },
     ],
   };
@@ -67,12 +79,20 @@ export default function renderPage(page) {
 <meta name="description" content="${esc(page.description)}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="${url}">
+<meta name="apple-itunes-app" content="app-id=6778894594">
 <meta property="og:type" content="article">
+<meta property="og:site_name" content="Snapceipt">
+<meta property="og:locale" content="en_AU">
 <meta property="og:title" content="${esc(page.title)}">
 <meta property="og:description" content="${esc(page.description)}">
 <meta property="og:url" content="${url}">
 <meta property="og:image" content="${SITE}/assets/og-default.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="${isoDay(page.updated)}">
+<meta property="article:modified_time" content="${isoDay(page.updated)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${SITE}/assets/og-default.png">
 ${FONT_LINKS}
 <link rel="stylesheet" href="/site.css">
 ${schema}
@@ -83,7 +103,13 @@ ${NAV}
   <article class="prose article">
     <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> › <a href="/guides">Guides</a> › <span>${esc(page.title)}</span></nav>
     <h1>${esc(page.title)}</h1>
+    <p class="updated"><time datetime="${isoDay(page.updated)}">Last updated ${prettyDate(page.updated)}</time></p>
     ${page.bodyHtml}
+    ${page.relatedResolved && page.relatedResolved.length
+      ? `<nav class="related" aria-label="Related guides"><h2>Related guides</h2><ul>${page.relatedResolved
+          .map((r) => `<li><a href="/guides/${r.slug}">${esc(r.title)}</a></li>`)
+          .join("")}</ul></nav>`
+      : ""}
   </article>
 </div>
 ${FOOTER}
@@ -103,16 +129,33 @@ export function renderIndex(pages) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Guides — Snapceipt</title>
-<meta name="description" content="Practical guides to tracking receipts, expenses and GST in Australia.">
+<title>Receipt &amp; Expense Guides for Australia — Snapceipt</title>
+<meta name="description" content="Plain-English guides to tracking receipts, expenses, GST and BAS in Australia — for sole traders, freelancers and households.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="canonical" href="${SITE}/guides">
+<link rel="canonical" href="${SITE}/guides/">
+<meta name="apple-itunes-app" content="app-id=6778894594">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Guides — Snapceipt">
-<meta property="og:url" content="${SITE}/guides">
+<meta property="og:site_name" content="Snapceipt">
+<meta property="og:locale" content="en_AU">
+<meta property="og:title" content="Receipt &amp; Expense Guides for Australia — Snapceipt">
+<meta property="og:description" content="Plain-English guides to tracking receipts, expenses, GST and BAS in Australia — for sole traders, freelancers and households.">
+<meta property="og:url" content="${SITE}/guides/">
 <meta property="og:image" content="${SITE}/assets/og-default.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${SITE}/assets/og-default.png">
 ${FONT_LINKS}
 <link rel="stylesheet" href="/site.css">
+<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org", "@type": "CollectionPage",
+    name: "Receipt & Expense Guides for Australia", url: `${SITE}/guides/`, inLanguage: "en-AU",
+    isPartOf: { "@type": "WebSite", name: "Snapceipt", url: `${SITE}/` },
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: ordered.map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${SITE}/guides/${p.slug}`, name: p.title })),
+    },
+  }).replace(/</g, "\\u003c")}</script>
 </head>
 <body>
 <div class="wrap">

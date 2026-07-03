@@ -6,6 +6,15 @@ role: spoke
 keywords: ["track receipts on phone","receipt scanner app","scan receipts"]
 related: ["track-business-expenses-australia","best-receipt-scanner-app-australia"]
 updated: 2026-06-29
+faq:
+  - q: "What should I do if my thermal receipt has faded?"
+    a: "Thermal till receipts from cafes, fuel stations and hardware stores are printed with heat and can fade to a blank grey strip within months. The fix is to photograph the receipt straight away while the ink is still clear, rather than filing the paper and hoping it lasts. The ATO accepts an image of a paper record as long as it's a true and clear reproduction of the original, so a legible photo taken on the day preserves your proof even after the paper fades."
+  - q: "How do I keep receipts for online purchases?"
+    a: "For online purchases there's no paper to snap, so save or screenshot the email confirmation the moment it lands, while you still remember what it was for. Capturing it right away means you're not sitting down in July trying to reconstruct a year of spending from a fuzzy bank statement. Storing that screenshot in the same app as your photographed paper receipts keeps every expense, physical or digital, in one searchable place."
+  - q: "Can a receipt scanner app read the GST on my receipts automatically?"
+    a: "Yes — the better apps use OCR and a bit of AI to pull out the merchant name, date, total, GST amount and a sensible category from a single photo, so you don't type anything. That per-receipt GST line matters more than people realise: if you're registered and lodging a BAS, it's what makes your quarterly GST figures add up instead of being a guess. A plain photo in your camera roll can't do this, which is what separates a real receipt app from a glorified photo folder."
+  - q: "What happens to my receipts if I lose my phone?"
+    a: "If your receipts are only stored on the device, a lost or cracked phone means they're gone. That's why cloud sync is non-negotiable for tracking receipts digitally — once everything is backed up, losing your phone is an inconvenience rather than a disaster. You simply sign in on a new device and your full, searchable receipt history is right there."
 ---
 
 If you run a small business or just want your tax return to be less of a scramble, the single best habit you can build is tracking receipts on your phone. The phone is already in your pocket every time you pay for something, so the friction is almost zero. Here is the easy way to do it, and what separates a good receipt app from a glorified photo folder.

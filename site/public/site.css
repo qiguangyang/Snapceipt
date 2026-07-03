@@ -243,6 +243,14 @@ tbody tr:last-child td{border-bottom:none;}
 
 /* ---- guides / long-form articles ---- */
 .crumbs{font-size:13px;color:var(--ink3);margin:28px 0 8px;}
+.article .updated{font-size:13px;color:var(--ink3);margin:-10px 0 22px;font-weight:500;}
+.article .related{margin:44px 0 0;border-top:1px solid var(--line);padding-top:22px;}
+.article .related h2{font-family:Fraunces;font-weight:600;font-size:20px;margin:0 0 10px;}
+.article .related ul{list-style:none;padding:0;margin:0;}
+.article .related li{padding:7px 0;border-bottom:1px solid var(--line2);}
+.article .related li:last-child{border-bottom:none;}
+.article .related li a{color:var(--terra2);font-weight:600;text-decoration:none;font-size:16px;}
+.article .related li a:hover{text-decoration:underline;}
 .crumbs a{color:var(--ink2);text-decoration:none;}
 .crumbs a:hover{color:var(--ink);}
 .article{padding-bottom:64px;}

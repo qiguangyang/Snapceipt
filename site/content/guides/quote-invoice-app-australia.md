@@ -4,8 +4,17 @@ description: "Create professional quotes and invoices in Snapceipt — GST-ready
 slug: quote-invoice-app-australia
 role: spoke
 keywords: ["quote invoice app australia","invoicing app sole trader","create invoice GST"]
-related: ["track-business-expenses-australia","best-receipt-scanner-app-australia"]
+related: ["track-business-expenses-australia","best-receipt-scanner-app-australia","valid-tax-invoice-requirements-australia"]
 updated: 2026-06-29
+faq:
+  - q: "What details does a valid tax invoice need in Australia?"
+    a: "For sales of $82.50 or more (including GST), the ATO requires a tax invoice to show the words \"tax invoice\", your business identity and ABN, the date it was issued, a description of what was sold, and the GST amount or a statement that the total includes GST. Snapceipt's invoices carry your ABN, the \"Tax invoice\" heading and a clear GST breakdown, so the document meets that format. Quotes are separate and don't need to meet the tax-invoice rules."
+  - q: "Do I record invoice income when it's issued or when it's paid?"
+    a: "In Snapceipt, income is recognised when you issue the invoice, not when the money lands, so your reports reflect what you've billed. That lines up with the accruals method; if you've registered to report GST on a cash basis, you'd instead account for it when payment is received. Check which basis you're on with the ATO so your BAS figures match."
+  - q: "Can my customer pay online through the invoice or quote link?"
+    a: "No — the tokenised link and PDF are for viewing only, with no built-in accept-or-pay portal or card processing. Your bank details appear as plain text on the document for a manual transfer, and you record the payment yourself once it arrives. Snapceipt then tracks each invoice as unpaid, part-paid, paid or overdue."
+  - q: "How long is a quote valid for before it expires?"
+    a: "A quote should state a validity period so your price isn't open-ended, and in Snapceipt new quotes default to 28 days, which you can change before sending. When the client accepts, converting the quote copies every line item, the client details and your GST settings straight into a draft invoice, so you never re-key anything. The original quote is then marked \"invoiced\" and linked to the new record."
 ---
 
 Most invoicing apps treat quotes and invoices as a world unto themselves — a separate tool, a separate login, a separate place your numbers live. But if you're a sole trader, your income and your expenses are two halves of the same job, and both end up on the same BAS. Snapceipt's quotes and invoices are built on exactly that idea: it's one app that reads your receipts *and* raises your quotes and invoices, so the whole picture sits in one place. This guide walks through how the feature works, who it's for, and why it's a genuinely strong fit for Australian sole traders and small businesses.
