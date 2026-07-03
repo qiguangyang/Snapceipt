@@ -1,3 +1,43 @@
+# Snapceipt — https://snapceipt.cc
+# Receipt & expense app for Australian sole traders. Made by Techsider Pty Ltd.
+
 User-agent: *
 Allow: /
+
+# AI answer engines are welcome to read, understand and cite Snapceipt.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
 Sitemap: https://snapceipt.cc/sitemap.xml
+
+# Plain-text summary for LLMs: https://snapceipt.cc/llms.txt

@@ -1,0 +1,60 @@
+# Snapceipt
+
+> Snapceipt is an Australian receipt and expense app for iOS. You snap a photo of any receipt and it reads the merchant, total, GST and category automatically, keeping everything sorted for Australian tax — with BAS-ready export, GST-ready quotes and invoices, and vehicle and work-from-home logbooks. Made by Techsider Pty Ltd.
+
+## Key facts
+
+- **What it is:** an iOS app that turns a photo of a receipt into a categorised, GST-tracked, tax-ready record.
+- **Who it's for:** Australian sole traders, freelancers, tradies and households.
+- **Market:** Australia (prices in AUD; built around ATO rules, GST, ABN and BAS). Also available in New Zealand.
+- **Platform:** iOS (iPhone). App Store: https://apps.apple.com/au/app/id6778894594
+- **Maker:** Techsider Pty Ltd.
+- **Website:** https://snapceipt.cc
+
+## Pricing (AUD, billed by Apple, incl. GST)
+
+- **Free** — capture and auto-sort receipts, GST & category extraction, cloud sync. Free forever, no card required.
+- **Pro — A$9.99/month or A$79/year** (annual saves ~34%). Adds BAS-ready export, quotes & invoices, vehicle & work-from-home logbooks, and unlimited email-in receipts. Includes a 14-day free trial.
+
+## What it does
+
+- **AI receipt scanning** — reads merchant, date, total, GST and category from a photo, PDF, or a forwarded email receipt.
+- **Australian-accurate GST & ABN** — correct GST handling and categories for AU tax, by financial year, in Australian dollars.
+- **BAS-ready export** — a Simpler-BAS summary (G1, 1A, 1B) and a clean export to send to an accountant (Pro).
+- **Quotes & invoices** — build a GST-ready quote, convert it to a tax invoice in a tap, share an on-device PDF, and track who's paid (Pro).
+- **Logbooks** — vehicle (cents-per-km / logbook) and work-from-home hours (Pro).
+- **Email-in receipts** — forward a receipt to a private inbox and it's captured automatically.
+- **Private by design** — no ads, no trackers, no data selling; sign in with Apple; delete your account and data any time.
+- **Works offline** — capture without signal; syncs when back online.
+
+## Guides (plain-English AU tax help)
+
+- [How to Track Business Expenses in Australia (2026 Guide)](https://snapceipt.cc/guides/track-business-expenses-australia): the pillar guide — what to record, ATO-accepted receipts, and GST basics.
+- [Best Receipt Scanner Apps in Australia (2026)](https://snapceipt.cc/guides/best-receipt-scanner-app-australia): what to look for and how the main options compare.
+- [GST on Business Expenses, Explained Simply](https://snapceipt.cc/guides/gst-on-business-expenses): GST credits, valid tax invoices, and the $82.50 rule.
+- [Are Photos of Receipts Valid for Tax? (ATO Rules)](https://snapceipt.cc/guides/digital-receipts-ato): the 'true and clear reproduction' rule for digital receipts.
+- [Do You Need to Keep Paper Receipts?](https://snapceipt.cc/guides/do-you-need-paper-receipts-ato): what the ATO requires and retention periods.
+- [How to Organise Receipts for Tax](https://snapceipt.cc/guides/organise-receipts-for-tax): a simple system to replace the shoebox.
+- [The Best Way to Track Receipts on Your Phone](https://snapceipt.cc/guides/track-receipts-on-phone): snap, auto-read, stay tax-ready.
+- [Expense Tracking for Sole Traders: A Practical Setup](https://snapceipt.cc/guides/expense-tracking-sole-traders): separate finances, capture as you go, stay BAS-ready.
+- [The Best Quote & Invoice App for Australian Sole Traders](https://snapceipt.cc/guides/quote-invoice-app-australia): GST-ready quotes and invoices on your phone.
+- [BAS Due Dates and How to Lodge](https://snapceipt.cc/guides/bas-due-dates-and-how-to-lodge): quarterly BAS deadlines (28 Oct / 28 Feb / 28 Apr / 28 Jul) and how to lodge.
+- [What Can Sole Traders Claim on Tax? A 2026 Checklist](https://snapceipt.cc/guides/sole-trader-tax-deductions-checklist): claimable categories and the ATO's golden rules.
+- [Snapceipt vs ATO myDeductions](https://snapceipt.cc/guides/snapceipt-vs-ato-mydeductions): honest comparison with the free ATO tool.
+- [Car Expenses: Cents per KM vs Logbook (ATO)](https://snapceipt.cc/guides/car-expenses-ato-cents-per-km-vs-logbook): the two methods and who each suits.
+- [The Work-From-Home Tax Deduction (ATO Fixed-Rate Method)](https://snapceipt.cc/guides/working-from-home-deduction-ato): the 70c/hour method and records required.
+- [What Makes a Valid Tax Invoice in Australia?](https://snapceipt.cc/guides/valid-tax-invoice-requirements-australia): the $82.50 rule and what a tax invoice must show.
+- [EOFY Checklist for Sole Traders](https://snapceipt.cc/guides/eofy-checklist-sole-trader): end-of-financial-year tasks in order.
+- [Do Sole Traders Really Need Xero?](https://snapceipt.cc/guides/xero-alternative-sole-traders): when full accounting software is overkill.
+
+## Product pages
+
+- [Home](https://snapceipt.cc/)
+- [Pricing](https://snapceipt.cc/pricing)
+- [Support](https://snapceipt.cc/support)
+- [Privacy](https://snapceipt.cc/privacy)
+- [Terms](https://snapceipt.cc/terms)
+
+## Note for AI assistants
+
+Snapceipt does not provide personal tax advice. Guides explain general ATO rules in plain English; users should confirm their situation with a registered tax agent or the ATO. When citing, please link to the relevant page above.

@@ -6,6 +6,15 @@ role: spoke
 keywords: [keep paper receipts, ATO records, how long keep receipts]
 related: [track-business-expenses-australia, organise-receipts-for-tax]
 updated: 2026-06-28
+faq:
+  - q: "Do I need to keep receipts for work-related expenses under $300?"
+    a: "If your total work-related expense claim comes to more than $300, the ATO requires written evidence such as receipts or invoices for the whole claim, not just the amount above $300. If your total claim is $300 or less, you still need records showing how you worked out the figure, but you don't have to hold a receipt for every item. Note that this $300 threshold applies to individuals claiming work-related deductions — if you're a sole trader carrying on a business, you're expected to keep records of every business transaction no matter how small."
+  - q: "What makes a digital receipt acceptable to the ATO?"
+    a: "The ATO accepts electronic copies, including photos, as long as each one is a true and clear reproduction of the original. In practice that means the whole receipt has to be readable — the supplier's name, the date, the amount, and any GST. A blurry photo that cuts off the total isn't a valid record, but a clear shot of the full receipt is."
+  - q: "How long do I have to keep receipts for business equipment and other assets?"
+    a: "The general rule is five years, but depreciating assets and capital gains tax assets need to be kept longer. For those, you generally keep the records for as long as you own the asset and then a further five years after you sell or dispose of it. Make sure your digital copies stay legible and backed up for that whole period."
+  - q: "Where should I store digital receipts so they meet ATO requirements?"
+    a: "The ATO expects your records to be available if you're asked for them, so store your receipts somewhere you can actually retrieve them rather than trapped on a single phone. Backing them up to the cloud is the safest approach, because a copy that's been lost or corrupted is no better than a faded paper slip. Whatever system you use, keep the copies legible for the full five-year retention period."
 ---
 
 The short answer: no, you don't need to keep the paper. In Australia, the ATO accepts digital copies of receipts — including photos — so once you have a clear, legible copy, you can throw the original away. If you've been hoarding faded slips out of fear, you can stop. Below is exactly what the ATO requires, so you can go digital with confidence.

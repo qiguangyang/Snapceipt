@@ -7,7 +7,14 @@ import renderPage, { renderIndex, CTA_HTML } from "./template.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const TOP_LEVEL = ["/", "/pricing", "/privacy", "/terms", "/support", "/guides"];
+const TOP_LEVEL = ["/", "/pricing", "/privacy", "/terms", "/support", "/guides/"];
+
+// Format a frontmatter `updated` value (Date or string) to a W3C YYYY-MM-DD date.
+function isoDay(u) {
+  if (!u) return null;
+  if (u instanceof Date) return u.toISOString().slice(0, 10);
+  return String(u).slice(0, 10);
+}
 
 export async function build({ contentDir, outDir, publicDir }) {
   const mdFiles = (await readdir(contentDir)).filter((f) => f.endsWith(".md")).sort();
@@ -40,17 +47,25 @@ export async function build({ contentDir, outDir, publicDir }) {
     }
   }
 
+  // Resolve related slugs to {slug, title} so the template can render an internal-link block.
+  const titleBySlug = Object.fromEntries(pages.map((p) => [p.slug, p.title]));
+  for (const p of pages) {
+    p.relatedResolved = (p.related || []).filter((r) => titleBySlug[r]).map((r) => ({ slug: r, title: titleBySlug[r] }));
+  }
+
   await mkdir(outDir, { recursive: true });
   for (const page of pages) {
     await writeFile(path.join(outDir, `${page.slug}.html`), renderPage(page), "utf8");
   }
   await writeFile(path.join(outDir, "index.html"), renderIndex(pages), "utf8");
 
-  // Sitemap: top-level pages + every guide.
+  // Sitemap: top-level pages + every guide (guides carry <lastmod>).
   if (publicDir) {
-    const guideUrls = pages.map((p) => `https://snapceipt.cc/guides/${p.slug}`);
-    const allUrls = [...TOP_LEVEL.map((u) => `https://snapceipt.cc${u === "/" ? "/" : u}`), ...guideUrls];
-    const body = allUrls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n");
+    const latest = pages.map((p) => isoDay(p.updated)).filter(Boolean).sort().at(-1) || null;
+    const topUrls = TOP_LEVEL.map((u) => ({ loc: `https://snapceipt.cc${u === "/" ? "/" : u}`, lastmod: latest }));
+    const guideUrls = pages.map((p) => ({ loc: `https://snapceipt.cc/guides/${p.slug}`, lastmod: isoDay(p.updated) }));
+    const all = [...topUrls, ...guideUrls];
+    const body = all.map((u) => `  <url><loc>${u.loc}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}</url>`).join("\n");
     const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
     await writeFile(path.join(publicDir, "sitemap.xml"), xml, "utf8");
   }

@@ -6,6 +6,15 @@ role: spoke
 keywords: [organise receipts for tax, receipt organisation, digital receipts]
 related: [track-business-expenses-australia, do-you-need-paper-receipts-ato]
 updated: 2026-06-28
+faq:
+  - q: "What categories should I use to organise business receipts for tax?"
+    a: "Sort each receipt into the categories the ATO and your BAS actually use, such as travel, tools and equipment, office supplies, phone and internet, software subscriptions, motor vehicle, and professional services. Settle on a short list early and stick to it rather than inventing new buckets as you go, since a handful of clear categories that map to your BAS labels is far easier to total than twenty overlapping ones. If you're registered for GST, record the GST amount against each receipt so you can add up your input tax credits without re-opening every record later."
+  - q: "How do I record an expense that's part business and part personal?"
+    a: "Claim only the business portion and note the business-use percentage against the expense while the details are still fresh. For example, if you use your phone 60% for work, record that split at the time rather than guessing at tax time. Keeping the receipt and the percentage together makes the claim easy to justify if the ATO ever asks."
+  - q: "Where should I store my digital receipts so I don't lose them?"
+    a: "Back your receipts up to the cloud rather than leaving them solely on one phone that could be lost, dropped, or upgraded, so the records outlast any single device. The ATO expects you to keep records for five years, so your storage needs to last at least that long. Cloud sync also means your receipts are available wherever you are, which helps if your accountant asks for something while you're away from your desk."
+  - q: "Can I still claim an expense if the paper receipt has faded?"
+    a: "A blank, faded receipt is no evidence at all, which is why thermal EFTPOS and till receipts should be photographed or saved as soon as you get them. If you captured a clear digital copy before it faded, that copy is a valid record the ATO accepts as a true and clear reproduction of the original, so you're covered. The safeguard is to capture each receipt at the point of purchase rather than letting slips sit in a drawer or a hot car."
 ---
 
 Almost everyone has a version of the shoebox: a drawer, a glovebox, or a bulging envelope stuffed with receipts you'll "sort out later". The trouble is that later usually arrives the night before your BAS is due, the thermal receipts have faded to blank slips, and half of them are missing. There's a better way — and it doesn't take an accounting degree. This guide lays out a simple system to organise receipts for tax in Australia so you can find any receipt in seconds.

@@ -4,8 +4,17 @@ description: "A practical expense-tracking setup for Australian sole traders —
 slug: expense-tracking-sole-traders
 role: spoke
 keywords: ["expense tracking sole trader","sole trader expenses","ABN expenses"]
-related: ["track-business-expenses-australia","track-receipts-on-phone"]
+related: ["track-business-expenses-australia","track-receipts-on-phone","sole-trader-tax-deductions-checklist"]
 updated: 2026-06-29
+faq:
+  - q: "Do sole traders need a separate business bank account?"
+    a: "No — unlike a company, a sole trader isn't legally required to have a separate business bank account. A dedicated account and card is still worth it, because every transaction on that statement becomes a clear candidate for a deduction with an obvious home for its receipt. Pay yourself by transferring business income to your personal account rather than spending it directly."
+  - q: "Can I claim part of my phone and internet bill as a sole trader?"
+    a: "Yes, but only for the portion that relates to earning your income. If your phone is 70% work and 30% personal, you can claim 70% of the cost. It helps to note that work-use split at the time you record the expense, while you still remember it."
+  - q: "Can a sole trader claim GST credits if they're not registered for GST?"
+    a: "No — you can only claim GST credits on purchases once you're registered for GST. Registration becomes compulsory once your turnover reaches $75,000 in a 12-month period, but below that some sole traders register voluntarily so they can claim those credits. Either way, the credit is only worth claiming if the GST on each receipt is captured accurately, since not everything is exactly one-eleventh of the total."
+  - q: "How often should a sole trader update their expense records?"
+    a: "Daily capture does most of the work — snap or forward each receipt at the point of sale so a backlog never forms. Then run a short monthly check: reconcile every transaction against a receipt, correct any wrong categories, and set aside a slice of income for tax. That's roughly twenty minutes a month to keep your books no more than four weeks from being tax-ready."
 ---
 
 When you run a business under your own ABN, there's no payroll team and no bookkeeper quietly tidying things up behind you. The expenses are yours to track, and the cleaner you keep them, the less painful tax time gets — and the more deductions you can actually claim with confidence. The good news is that a solid setup for a sole trader doesn't take much. It takes a few sensible habits, repeated. Here's a practical one you can put in place this week.
