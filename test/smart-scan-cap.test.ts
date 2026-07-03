@@ -18,6 +18,13 @@ import type { AppEnv } from "../src/env";
 import { requestId, registerErrorHandler } from "../src/middleware/error";
 import { extractRoutes } from "../src/routes/extract";
 import { nowMs } from "../src/lib/time";
+import { currentPeriod } from "../src/lib/smartScan";
+
+// The route derives the cap period from `currentPeriod(nowMs())` — the CURRENT UTC month —
+// NOT from `capturedAt`. Derive the same value here so the fixtures track the wall clock.
+// (This test previously froze the period to a hardcoded month and broke on every rollover.)
+const PERIOD = currentPeriod(nowMs());
+const CAPTURED_AT = `${PERIOD}-15`;
 
 function appWith(envOverrides: Record<string, unknown>, userId = "u-cap-test") {
   const app = new Hono<AppEnv>();
@@ -90,12 +97,12 @@ describe("POST /extract — capped branch (free user at cap)", () => {
     await env.DB.prepare("INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)")
       .bind(userId, "cap@e.com", t, t).run();
     // Seed usage at cap (30).
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 30, ?)")
+    await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 30, ?)`)
       .bind(userId, t).run();
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB }, userId);
-    // POST with a capturedAt in 2026-06 so currentPeriod matches.
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    // capturedAt only sets the receipt's default date; the cap period is the CURRENT month.
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -117,7 +124,7 @@ describe("POST /extract — capped branch (free user at cap)", () => {
     expect(body.meta.smartScan.plan).toBe("free");
 
     // Count must NOT have been incremented.
-    const row = await env.DB.prepare("SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '2026-06'")
+    const row = await env.DB.prepare(`SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '${PERIOD}'`)
       .bind(userId).first<{ count: number }>();
     expect(row!.count).toBe(30);
   });
@@ -127,11 +134,11 @@ describe("POST /extract — capped branch (free user at cap)", () => {
     const t = nowMs();
     await env.DB.prepare("INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)")
       .bind(userId, "cap2@e.com", t, t).run();
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 2, ?)")
+    await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 2, ?)`)
       .bind(userId, t).run();
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB, SMART_SCAN_CAP_FREE: "2" }, userId);
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -150,15 +157,15 @@ describe("POST /extract — pro plan cap", () => {
     await env.DB.prepare("INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'pro', ?, ?)")
       .bind(userId, "pro@e.com", t, t).run();
     // Set usage just below the default free cap (30) but far below pro cap (1000).
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 5, ?)")
+    await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 5, ?)`)
       .bind(userId, t).run();
 
     // We verify the cap value is 1000 by hitting the capped scenario with usage=1000.
-    await env.DB.prepare("UPDATE smart_scan_usage SET count = 1000 WHERE user_id = ? AND period = '2026-06'")
+    await env.DB.prepare(`UPDATE smart_scan_usage SET count = 1000 WHERE user_id = ? AND period = '${PERIOD}'`)
       .bind(userId).run();
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB }, userId);
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -177,11 +184,11 @@ describe("POST /extract — no user row (new/deleted user)", () => {
     const userId = "u-no-row";
     const t = nowMs();
     // Seed usage at cap=30 so we get capped response (proves plan='free' was read).
-    await env.DB.prepare("INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 30, ?)")
+    await env.DB.prepare(`INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 30, ?)`)
       .bind(userId, t).run();
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB }, userId);
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -202,7 +209,7 @@ describe("POST /extract — under cap, Gemini extraction succeeds", () => {
       "INSERT INTO users (id, email, email_verified, plan, created_at, updated_at) VALUES (?, ?, 1, 'free', ?, ?)",
     ).bind(userId, "under@e.com", t, t).run();
     await env.DB.prepare(
-      "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 3, ?)",
+      `INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 3, ?)`,
     ).bind(userId, t).run();
 
     globalThis.fetch = mockGemini({
@@ -211,7 +218,7 @@ describe("POST /extract — under cap, Gemini extraction succeeds", () => {
     });
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB }, userId);
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -230,7 +237,7 @@ describe("POST /extract — under cap, Gemini extraction succeeds", () => {
     expect(body.meta.smartScan.used).toBe(4);
     expect(body.meta.smartScan.plan).toBe("free");
     const row = await env.DB.prepare(
-      "SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '2026-06'",
+      `SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '${PERIOD}'`,
     ).bind(userId).first<{ count: number }>();
     expect(row!.count).toBe(4);
   });
@@ -248,7 +255,7 @@ describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)",
       .bind(userId, "outage@e.com", t, t)
       .run();
     await env.DB.prepare(
-      "INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '2026-06', 3, ?)",
+      `INSERT INTO smart_scan_usage (user_id, period, count, updated_at) VALUES (?, '${PERIOD}', 3, ?)`,
     )
       .bind(userId, t)
       .run();
@@ -262,7 +269,7 @@ describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)",
     })) as unknown as typeof fetch;
 
     const app = appWith({ GEMINI_API_KEY: "g-dummy", DB: env.DB }, userId);
-    const res = await app.request("/extract?source=scan&capturedAt=2026-06-15", {
+    const res = await app.request(`/extract?source=scan&capturedAt=${CAPTURED_AT}`, {
       method: "POST",
       headers: POST_HEADERS,
       body: IMAGE_BODY,
@@ -279,7 +286,7 @@ describe("POST /extract — LLM outage does NOT burn a smart-scan slot (Fix 1)",
 
     // Verify directly in DB that the counter was not incremented.
     const row = await env.DB.prepare(
-      "SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '2026-06'",
+      `SELECT count FROM smart_scan_usage WHERE user_id = ? AND period = '${PERIOD}'`,
     )
       .bind(userId)
       .first<{ count: number }>();

@@ -27,12 +27,6 @@ enum PermissionKind: Equatable {
         case .notifications: return "bell.badge.fill"
         }
     }
-    var allowTitle: String {
-        switch self {
-        case .camera: return "Allow camera access"
-        case .notifications: return "Turn on notifications"
-        }
-    }
 }
 
 /// Abstraction over the system permission prompts so the UI is injectable + buildable in previews.
@@ -59,8 +53,11 @@ struct LivePermissionRequester: PermissionRequesting {
     }
 }
 
-/// Rationale + "Allow" CTA for a single permission. Tapping Allow runs the injected
-/// requester then advances via `onContinue`; "Not now" skips straight to `onContinue`.
+/// Rationale + a neutral "Continue" CTA for a single permission. Tapping Continue runs
+/// the injected requester (which shows the real system prompt) then advances via
+/// `onContinue`. There is deliberately NO skip/exit button: App Store review guideline
+/// 5.1.1(iv) requires the priming screen to always proceed to the system permission
+/// request — the user makes their allow/deny choice in the OS prompt itself.
 struct PermissionPrimingView: View {
     let kind: PermissionKind
     let requester: PermissionRequesting
@@ -97,23 +94,17 @@ struct PermissionPrimingView: View {
 
             Spacer(minLength: 0)
 
-            VStack(spacing: 12) {
-                Button(action: allow) {
-                    Text(kind.allowTitle)
-                        .font(.ui(16, .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .disabled(busy)
-
-                Button(action: onContinue) {
-                    Text("Not now")
-                        .font(.ui(15, .semibold))
-                        .foregroundStyle(Palette.ink2)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                }
+            // A single neutral CTA that always advances into the system permission prompt.
+            // No skip/exit button — App Store guideline 5.1.1(iv) forbids a pre-prompt
+            // message that lets the user dismiss without reaching the OS prompt.
+            Button(action: allow) {
+                Text("Continue")
+                    .font(.ui(16, .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(accent.base, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            .disabled(busy)
             .padding(.horizontal, 22)
             .padding(.bottom, 28)
         }

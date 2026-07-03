@@ -45,6 +45,12 @@ struct AppLaunch {
     /// `VNDocumentCameraViewController` (unsupported in the simulator) — so the import
     /// affordance on the camera stage is hermetically inspectable. DEBUG-only.
     let captureCamera: Bool
+    /// Test seam (`-uiTestSkipPermissions`): wire the NO-OP permission requester in
+    /// onboarding even on the non-stub (live) path, so a UI test never triggers a real
+    /// system camera/notifications alert it can't dismiss (the priming screen now always
+    /// advances into the OS prompt — there is no "Not now" skip). Set for every UI test by
+    /// `UITestCase.setUp`. DEBUG-only; the shipped app always uses the live requester.
+    let skipPermissions: Bool
     let apiBaseURLOverride: URL?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments,
@@ -65,6 +71,7 @@ struct AppLaunch {
         pushReject = arguments.contains("-uiTestPushReject")
         pushStall = arguments.contains("-uiTestPushStall")
         captureCamera = arguments.contains("-uiTestCaptureCamera")
+        skipPermissions = arguments.contains("-uiTestSkipPermissions")
         apiBaseURLOverride = environment["API_BASE_URL"].flatMap(URL.init(string:))
     }
 
