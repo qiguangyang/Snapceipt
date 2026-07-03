@@ -1,1 +1,3 @@
-First public release of Snapceipt. Snap receipts from Australia, New Zealand, the US and Canada; track GST and expenses; and get BAS-ready for Australian tax.
+Fixed a minor display issue on the receipt-scanning screen.
+
+Thanks for using Snapceipt!

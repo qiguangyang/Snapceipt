@@ -133,4 +133,30 @@ platform :ios do
       }
     )
   end
+
+  desc "Submit an UPDATE for review: attach an already-uploaded build + push metadata, NO rebuild"
+  # Usage: SUBMIT_VERSION=1.0.1 SUBMIT_BUILD=64 bundle exec fastlane submit_update
+  # The appStoreVersion for SUBMIT_VERSION must already exist (create it first). deliver
+  # attaches the build, uploads name/subtitle/keywords/release-notes from ./metadata, submits.
+  lane :submit_update do
+    api_key = asc_api_key
+    upload_to_app_store(
+      api_key: api_key,
+      app_version: ENV.fetch("SUBMIT_VERSION"),
+      build_number: ENV.fetch("SUBMIT_BUILD"),
+      skip_binary_upload: true,   # binary already uploaded via `beta`
+      skip_screenshots: true,     # unchanged from the live version
+      skip_metadata: false,       # push name/subtitle/keywords/release_notes from ./metadata
+      metadata_path: "./metadata",
+      submit_for_review: true,
+      reset_ratings: false,
+      run_precheck_before_submit: true,
+      precheck_include_in_app_purchases: false,
+      force: true,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false
+      }
+    )
+  end
 end
