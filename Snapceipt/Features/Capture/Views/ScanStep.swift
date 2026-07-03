@@ -36,7 +36,11 @@ struct ScanStep: View {
             scanBody
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(backdrop)
+        // Fill the WHOLE screen — including the top-notch and bottom home-indicator safe
+        // areas — with the dark backdrop, so CaptureFlow's cream base can't bleed through
+        // as a strip at the edges. Only the color ignores the safe area; the content
+        // (close button, receipt, chips) still respects it.
+        .background { backdrop.ignoresSafeArea() }
         .onAppear { animate() }
     }
 
