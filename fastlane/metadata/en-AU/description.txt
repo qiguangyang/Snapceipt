@@ -12,6 +12,8 @@ WHY SNAPCEIPT
 • Email receipts in — forward digital receipts and they land in the right profile.
 • Private by design — no ads, no third-party trackers, and we never sell your data.
 
+Snapceipt is co-developed with Hannah Xia, a CPA Australia member, so its GST and BAS handling reflects real Australian tax practice.
+
 Your data is encrypted in transit and at rest. Delete your account and data any time from Account → Delete Account.
 
 Questions? Email support@snapceipt.cc.
