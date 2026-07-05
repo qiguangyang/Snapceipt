@@ -1,1 +1,1 @@
-Snap a receipt — Snapceipt reads the merchant, total, GST and category instantly. Sorted for tax time, made in Australia. Now with quotes & invoices.
+Co-developed with Hannah Xia (CPA Australia member). Snap a receipt — Snapceipt reads the merchant, total, GST & category instantly. Now with quotes & invoices.

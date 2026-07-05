@@ -123,6 +123,8 @@ h1 em{font-style:italic;color:var(--terra);}
 /* trust band */
 .band{background:var(--ink);color:#f3ede5;border-radius:26px;padding:46px;margin:8px 0;text-align:center;}
 .band h2{font-family:Fraunces;font-weight:500;font-size:32px;color:#fff;}
+.band p{max-width:640px;margin:14px auto 0;color:#d9cfc2;font-size:16px;line-height:1.55;}
+.band p b{color:#fff;font-weight:600;}
 .bullets{display:flex;flex-wrap:wrap;gap:14px 34px;justify-content:center;margin-top:24px;font-size:15.5px;}
 .bullets b{color:#fff;}
 
