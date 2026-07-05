@@ -1,3 +1,4 @@
-Fixed a minor display issue on the receipt-scanning screen.
+• Share receipts straight from other apps — send a receipt or invoice to Snapceipt from Mail, Files, Photos, or any share sheet.
+• Small refinements and fixes.
 
 Thanks for using Snapceipt!

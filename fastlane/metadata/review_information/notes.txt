@@ -1,10 +1,12 @@
-Snapceipt is an Australian (AUD / 10% GST) receipt + expense tracker. Receipt scanning, manual entry, mileage, work-from-home logging and reports are free. Quotes, Invoices and Email-in are Pro features, unlocked by an auto-renewing Apple In-App Purchase subscription.
+Snapceipt is an Australian (AUD / 10% GST) receipt + expense tracker. Receipt scanning, manual entry, mileage, work-from-home logging, reports, and sharing receipts from other apps are all free. Quotes, Invoices and Email-in are Pro features, unlocked by an auto-renewing Apple In-App Purchase subscription.
 
-SIGNING IN (demo account in demo_user.txt / demo_password.txt):
-1. On the landing screen tap "Sign in" then "Continue with email".
-2. Enter the demo email + password above.
-3. On a first sign-in from a new device the app emails a 6-digit verification code (new-device two-factor). For THIS demo account, enter the verification code 123456 to complete sign-in (you do not need the emailed code).
-The demo account is Pro-entitled, so Quotes, Invoices and Email-in are all reviewable. Sign in with Apple is also supported.
+SIGNING IN (no demo account needed):
+- Easiest: on the landing screen tap "Sign in with Apple" and authenticate with your own Apple ID. This signs you in immediately — no verification code required.
+- Or tap "Sign in with Email" to register with your own email address; the app sends a 6-digit verification code to that address to complete sign-up.
+
+NEW IN THIS VERSION (1.1.0): Share receipts straight from other apps — from Mail, Files, Photos or any share sheet, choose Snapceipt to import a receipt or invoice. This is a free feature, testable on any account.
+
+REVIEWING PRO FEATURES: To review Quotes, Invoices and Email-in, start the subscription — it is an auto-renewing Apple In-App Purchase and is free to purchase in the App Review sandbox.
 
 PERMISSIONS / DATA:
 - Camera + Photos: to capture/import receipt images.
