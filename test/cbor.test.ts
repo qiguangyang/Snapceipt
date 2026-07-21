@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import { decodeCbor, b64uToBytes, bytesToB64u, bytesToHex } from "../src/lib/cbor";
+
+describe("decodeCbor", () => {
+  it("decodes a small map with byte/text/int values", () => {
+    // {"fmt":"a","c":1,"b":h'0102'}  (CBOR)
+    // a3            map(3)
+    //   63 66 6d 74 text(3)="fmt"
+    //   61 61       text(1)="a"
+    //   61 63       text(1)="c"
+    //   01          uint=1
+    //   61 62       text(1)="b"
+    //   42 01 02    bytes(2)=0x0102
+    // (Brief's original literal "a3636662746161616301616249420102" was corrupted:
+    //  'm' 0x6d -> 0x62 gave key "fbt", and a spurious 0x49 byte string header;
+    //  it neither decodes to the documented object nor is valid CBOR. Corrected here.)
+    const hex = "a363666d7461616163016162420102";
+    const bytes = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+    const obj = decodeCbor(bytes) as Record<string, unknown>;
+    expect(obj.fmt).toBe("a");
+    expect(obj.c).toBe(1);
+    expect(obj.b).toEqual(new Uint8Array([1, 2]));
+  });
+  it("round-trips base64url", () => {
+    const b = new Uint8Array([0, 255, 16, 32]);
+    expect(b64uToBytes(bytesToB64u(b))).toEqual(b);
+  });
+
+  // --- extra hardening cases (App Attest depends on these) ---
+
+  it("decodes a 2-byte length uint header (info 25)", () => {
+    // 0x19 = maj 0 (uint), info 25 -> read 2 bytes; 0x01 0x00 = (1<<8)|0 = 256
+    const bytes = new Uint8Array([0x19, 0x01, 0x00]);
+    expect(decodeCbor(bytes)).toBe(256);
+  });
+
+  it("decodes a nested map inside a map (attStmt shape)", () => {
+    // {"a": {"b": h'ff'}}
+    // a1        map(1)
+    //   61 61   text(1)="a"
+    //   a1      map(1)
+    //     61 62 text(1)="b"
+    //     41 ff bytes(1)=0xff
+    const hex = "a16161a1616241ff";
+    const bytes = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+    const obj = decodeCbor(bytes) as { a: { b: Uint8Array } };
+    expect(obj.a.b).toEqual(new Uint8Array([255]));
+  });
+
+  it("bytesToHex encodes low bytes with padding", () => {
+    expect(bytesToHex(new Uint8Array([0, 1, 255]))).toBe("0001ff");
+  });
+});
