@@ -102,6 +102,17 @@ export type Env = {
    * affected and the password is still required. Remove after approval.
    */
   REVIEW_DEMO_EMAIL?: string;
+  /**
+   * App Attest enforcement mode for the six auth-bootstrap entry endpoints:
+   *  - "off"          (default when unset): attestation ignored.
+   *  - "soft"         : verify assertion if present, log validity, never reject.
+   *  - "enforce-new"  : reject un-attested/invalid ONLY when X-App-Build >= ATTEST_MIN_BUILD.
+   *  - "enforce-all"  : reject all un-attested auth-bootstrap requests.
+   * Dev/E2E stay "off".
+   */
+  ATTEST_MODE?: "off" | "soft" | "enforce-new" | "enforce-all";
+  /** First app build (CFBundleVersion) that ships App Attest; used by "enforce-new". Numeric string. */
+  ATTEST_MIN_BUILD?: string;
 };
 
 /**

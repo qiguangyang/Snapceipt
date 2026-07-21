@@ -35,7 +35,8 @@
     // The iOS app's real bundle id — SIWA verifies identityToken.aud against this.
     // Tests pin their own value in vitest.config.ts; this var is prod-only.
     "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
-    "DEEPSEEK_MODEL": "deepseek-v4-flash"
+    "DEEPSEEK_MODEL": "deepseek-v4-flash",
+    "ATTEST_MODE": "off"
   },
   // ───────────────────────────────────────────────────────────────────────────
   // STAGING environment (`wrangler deploy --env staging`). A FULL mirror of prod on
@@ -81,7 +82,8 @@
       ],
       "vars": {
         "APPLE_BUNDLE_ID": "app.snapceipt.Snapceipt",
-        "DEEPSEEK_MODEL": "deepseek-v4-flash"
+        "DEEPSEEK_MODEL": "deepseek-v4-flash",
+        "ATTEST_MODE": "off"
       }
     }
   }
