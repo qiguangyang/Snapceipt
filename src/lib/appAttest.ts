@@ -15,7 +15,7 @@
 
 import "reflect-metadata"; // tsyringe (peculiar's DI) needs the reflect polyfill
 import * as x509 from "@peculiar/x509";
-import { decodeCbor, b64uToBytes, bytesToB64u } from "./cbor";
+import { decodeCbor, b64uToBytes } from "./cbor";
 
 // Bind peculiar to the runtime WebCrypto (workerd / Node both expose `crypto`).
 x509.cryptoProvider.set(crypto as unknown as Crypto);
@@ -152,7 +152,8 @@ function readU32BE(b: Uint8Array, off: number): number {
 }
 
 export interface AttestationResult {
-  /** base64url of SHA-256(EC public-key point) — the App Attest key identifier. */
+  /** The App Attest key identifier: the client's VERBATIM X-Attest-Key-Id (Apple's standard
+   *  base64 of SHA-256(EC public-key point)), stored so later assertion lookups match. */
   keyId: string;
   /** Leaf cert SubjectPublicKeyInfo DER — importable via crypto.subtle.importKey("spki", ...). */
   publicKeyDer: Uint8Array;
@@ -257,14 +258,20 @@ export async function verifyAttestation(args: {
   const ecPoint = publicKeyDer.subarray(publicKeyDer.length - 65);
   const keyIdBytes = await sha256(ecPoint);
   if (!eq(keyIdBytes, credentialId)) throw new AppAttestError("attest: keyId != credentialId");
-  const keyId = bytesToB64u(keyIdBytes);
-  // Constant-time compare of the derived keyId string against the client-declared one.
-  const derivedKeyIdBytes = new TextEncoder().encode(keyId);
-  const claimedKeyIdBytes = new TextEncoder().encode(args.keyId);
-  if (!eq(derivedKeyIdBytes, claimedKeyIdBytes)) throw new AppAttestError("attest: keyId != client keyId");
+  // keyIdBytes = SHA256(ecPoint) already computed and checked === credentialId above.
+  // Apple returns keyId as STANDARD base64; compare by DECODED BYTES (b64uToBytes accepts both
+  // base64 and base64url) and STORE the client's verbatim string so later assertion lookups
+  // (keyed on the same client-sent X-Attest-Key-Id) match.
+  let clientKeyIdBytes: Uint8Array;
+  try {
+    clientKeyIdBytes = b64uToBytes(args.keyId);
+  } catch {
+    throw new AppAttestError("attest: keyId not base64");
+  }
+  if (!eq(clientKeyIdBytes, keyIdBytes)) throw new AppAttestError("attest: keyId != public key hash");
 
   // 10. Return the trusted key material for storage (Task 5 verifies assertions against it).
-  return { keyId, publicKeyDer, signCount: 0, aaguid };
+  return { keyId: args.keyId, publicKeyDer, signCount: 0, aaguid };
 }
 
 /**

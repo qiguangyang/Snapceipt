@@ -26,6 +26,26 @@ describe("decodeCbor", () => {
     expect(b64uToBytes(bytesToB64u(b))).toEqual(b);
   });
 
+  it("b64uToBytes is encoding-agnostic: standard base64 and base64url decode to the SAME bytes", () => {
+    // Apple's DCAppAttestService.generateKey() returns the keyId as STANDARD base64 (padded,
+    // may contain +/); the iOS client sends it verbatim in X-Attest-Key-Id. verifyAttestation
+    // now compares keyIds by DECODED BYTES, so b64uToBytes MUST accept both encodings. Prove it
+    // for a fixed 32-byte array whose two encodings genuinely differ.
+    const bytes = new Uint8Array(32).fill(0xfb); // 0xfb×3 → "+/v7" (standard) / "-_v7" (base64url)
+    let bin = "";
+    for (const x of bytes) bin += String.fromCharCode(x);
+    const standard = btoa(bin); // padded standard base64 (contains + and /)
+    const url = bytesToB64u(bytes); // base64url, unpadded (- and _, no =)
+    // The two encodings really are different strings — otherwise the test would be vacuous.
+    expect(standard).not.toBe(url);
+    expect(standard).toContain("+");
+    expect(standard).toContain("/");
+    expect(standard.endsWith("=")).toBe(true); // padded
+    // BOTH forms decode back to the identical original bytes.
+    expect(b64uToBytes(standard)).toEqual(bytes);
+    expect(b64uToBytes(url)).toEqual(bytes);
+  });
+
   // --- extra hardening cases (App Attest depends on these) ---
 
   it("decodes a 2-byte length uint header (info 25)", () => {

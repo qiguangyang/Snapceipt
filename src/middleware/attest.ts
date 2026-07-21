@@ -26,8 +26,9 @@ export type AttestMode = "off" | "soft" | "enforce-new" | "enforce-all";
  *  - `off`         → always pass (the middleware also early-returns before any verify).
  *  - attested      → always pass (a valid assertion satisfies every mode).
  *  - `soft`        → pass (observe-only; the caller logs the miss).
- *  - `enforce-new` → reject ONLY when `build >= minBuild`; older/unknown installs are
- *                    exempt. A missing build is 0, which is `< ` any real minBuild, so exempt.
+ *  - `enforce-new` → reject ONLY when a REAL floor is set (`minBuild > 0`) AND `build >= minBuild`;
+ *                    older/unknown installs are exempt. FAIL SAFE: with `ATTEST_MIN_BUILD` unset
+ *                    (minBuild 0) NOTHING is enforced, so a config slip can't lock out every client.
  *  - `enforce-all` → reject.
  */
 export function attestDecision(
@@ -39,7 +40,10 @@ export function attestDecision(
   if (mode === "off") return "pass";
   if (attested) return "pass";
   if (mode === "soft") return "pass";
-  if (mode === "enforce-new") return build >= minBuild ? "reject" : "pass";
+  // Fail safe: only enforce when a real floor is configured (minBuild > 0). With ATTEST_MIN_BUILD
+  // unset (minBuild 0), `0 >= 0` would otherwise reject EVERY un-attested request — a total outage
+  // from a config slip. Guard on minBuild > 0 so an unset floor enforces nothing.
+  if (mode === "enforce-new") return minBuild > 0 && build >= minBuild ? "reject" : "pass";
   return "reject"; // enforce-all
 }
 

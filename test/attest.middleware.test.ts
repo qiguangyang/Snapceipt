@@ -16,61 +16,64 @@ afterEach(() => vi.restoreAllMocks());
 // ────────────────────────────────────────────────────────────────────────────
 // PART 1 — attestDecision: the PURE enforcement core, tested EXHAUSTIVELY.
 //
-// Every mode × attested{true,false} × build{<min, ==min, >min, ==0}, with the
-// expected pass/reject hard-coded (NOT recomputed from the implementation, so the
-// table can't drift into circularity). minBuild is fixed at 70. This is the
-// deterministic, worker-free coverage of the security gate's logic.
+// [mode, attested, build, minBuild, expected]. Expected is hard-coded (NOT
+// recomputed from the implementation, so the table can't drift into circularity).
+// Most rows fix minBuild at 70 and sweep build {<min, ==min, >min, ==0}; the two
+// enforce-new rows with minBuild=0 pin the fail-safe mass-lockout guard — an UNSET
+// floor (minBuild<=0) must NEVER enforce, even for a high build. Worker-free,
+// deterministic coverage of the security gate's logic.
 // ────────────────────────────────────────────────────────────────────────────
 describe("attestDecision (pure)", () => {
-  const MIN = 70;
-  const cases: Array<[AttestMode, boolean, number, "pass" | "reject"]> = [
+  const cases: Array<[AttestMode, boolean, number, number, "pass" | "reject"]> = [
     // off — attestation disabled; always pass.
-    ["off", true, 60, "pass"],
-    ["off", true, 70, "pass"],
-    ["off", true, 80, "pass"],
-    ["off", true, 0, "pass"],
-    ["off", false, 60, "pass"],
-    ["off", false, 70, "pass"],
-    ["off", false, 80, "pass"],
-    ["off", false, 0, "pass"],
+    ["off", true, 60, 70, "pass"],
+    ["off", true, 70, 70, "pass"],
+    ["off", true, 80, 70, "pass"],
+    ["off", true, 0, 70, "pass"],
+    ["off", false, 60, 70, "pass"],
+    ["off", false, 70, 70, "pass"],
+    ["off", false, 80, 70, "pass"],
+    ["off", false, 0, 70, "pass"],
     // soft — observe-only; always pass.
-    ["soft", true, 60, "pass"],
-    ["soft", true, 70, "pass"],
-    ["soft", true, 80, "pass"],
-    ["soft", true, 0, "pass"],
-    ["soft", false, 60, "pass"],
-    ["soft", false, 70, "pass"],
-    ["soft", false, 80, "pass"],
-    ["soft", false, 0, "pass"],
-    // enforce-new — attested always passes; un-attested rejects iff build >= min.
-    ["enforce-new", true, 60, "pass"],
-    ["enforce-new", true, 70, "pass"],
-    ["enforce-new", true, 80, "pass"],
-    ["enforce-new", true, 0, "pass"],
-    ["enforce-new", false, 60, "pass"], // older build → exempt
-    ["enforce-new", false, 70, "reject"], // at the floor → enforced
-    ["enforce-new", false, 80, "reject"], // above the floor → enforced
-    ["enforce-new", false, 0, "pass"], // missing build (0) → exempt
+    ["soft", true, 60, 70, "pass"],
+    ["soft", true, 70, 70, "pass"],
+    ["soft", true, 80, 70, "pass"],
+    ["soft", true, 0, 70, "pass"],
+    ["soft", false, 60, 70, "pass"],
+    ["soft", false, 70, 70, "pass"],
+    ["soft", false, 80, 70, "pass"],
+    ["soft", false, 0, 70, "pass"],
+    // enforce-new — attested always passes; un-attested rejects iff a REAL floor is set AND build >= floor.
+    ["enforce-new", true, 60, 70, "pass"],
+    ["enforce-new", true, 70, 70, "pass"],
+    ["enforce-new", true, 80, 70, "pass"],
+    ["enforce-new", true, 0, 70, "pass"],
+    ["enforce-new", false, 60, 70, "pass"], // older build → exempt
+    ["enforce-new", false, 70, 70, "reject"], // at the floor → enforced
+    ["enforce-new", false, 80, 70, "reject"], // above the floor → enforced
+    ["enforce-new", false, 0, 70, "pass"], // missing build (0) → exempt
+    ["enforce-new", false, 0, 0, "pass"], // NO floor set (minBuild 0) → never enforce (mass-lockout guard)
+    ["enforce-new", false, 100, 0, "pass"], // NO floor set → even a high build is exempt
     // enforce-all — attested passes; every un-attested request rejects.
-    ["enforce-all", true, 60, "pass"],
-    ["enforce-all", true, 70, "pass"],
-    ["enforce-all", true, 80, "pass"],
-    ["enforce-all", true, 0, "pass"],
-    ["enforce-all", false, 60, "reject"],
-    ["enforce-all", false, 70, "reject"],
-    ["enforce-all", false, 80, "reject"],
-    ["enforce-all", false, 0, "reject"],
+    ["enforce-all", true, 60, 70, "pass"],
+    ["enforce-all", true, 70, 70, "pass"],
+    ["enforce-all", true, 80, 70, "pass"],
+    ["enforce-all", true, 0, 70, "pass"],
+    ["enforce-all", false, 60, 70, "reject"],
+    ["enforce-all", false, 70, 70, "reject"],
+    ["enforce-all", false, 80, 70, "reject"],
+    ["enforce-all", false, 0, 70, "reject"],
   ];
 
   it.each(cases)(
-    "mode=%s attested=%s build=%d → %s",
-    (mode, attested, build, expected) => {
-      expect(attestDecision(mode, attested, build, MIN)).toBe(expected);
+    "mode=%s attested=%s build=%d minBuild=%d → %s",
+    (mode, attested, build, minBuild, expected) => {
+      expect(attestDecision(mode, attested, build, minBuild)).toBe(expected);
     },
   );
 
-  it("covers all 32 mode×attested×build combinations", () => {
-    expect(cases).toHaveLength(32);
+  it("covers all mode×attested×build combinations plus the unset-floor guard", () => {
+    expect(cases).toHaveLength(34);
   });
 });
 

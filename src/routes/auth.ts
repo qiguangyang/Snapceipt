@@ -312,7 +312,9 @@ authRoutes.post(
 /** Mint a 6-digit code, store ONLY its sha256 in KV under `oc:<sha256(email)>` (600s TTL,
  *  {codeHash, email, attempts, expiresAtMs}), and email it (background send; E2E does a
  *  best-effort sync send). Returns the plaintext code so an E2E caller can echo it. Shared by
- *  /otp/request and the new-device MFA path of /password/login. */
+ *  /otp/request and the new-device MFA path of /password/login. The per-address daily send cap
+ *  (`OTP_SEND_DAILY_CAP`, via allowOtpSend) is applied at this seam: past the cap the email SEND
+ *  is skipped while the KV code + 202 response are unchanged (no enumeration). */
 async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<string> {
   const code = sixDigitCode();
   const codeHash = await sha256Hex(code);

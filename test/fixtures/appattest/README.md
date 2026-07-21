@@ -11,7 +11,7 @@ What CANNOT be produced in CI / on the Simulator is a **genuine Apple attestatio
 
 1. Run an internal **development**-environment build (`Snapceipt.entitlements` → `appattest-environment = development`) on a real iPhone against a Worker that has the `/attest/*` routes deployed.
 2. In `AppAttestor` (or via a temporary log), capture one **attestation** exchange and one **assertion** exchange:
-   - `attestation.json`: `{ "attestationB64u": "<base64url of the attestation object>", "challenge": "<the challenge string from GET /attest/challenge>", "keyId": "<the base64url keyId>" }`
+   - `attestation.json`: `{ "attestationB64u": "<base64url of the attestation object>", "challenge": "<the challenge string from GET /attest/challenge>", "keyId": "<the base64 keyId (as returned by DCAppAttestService.generateKey — standard base64, sent verbatim)>" }`
    - `assertion.json`: `{ "assertionB64u": "<base64url assertion>", "challenge": "<challenge>", "body": "<the exact request body bytes, base64>", "publicKeyDer": "<base64 of the leaf SPKI DER returned by /attest/verify>", "storedSignCount": 0 }`
 3. Drop both files in this directory.
 
