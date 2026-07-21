@@ -45,6 +45,10 @@ export const PURGE_ORDER = [
 // batch (nothing references them; they must go before the profiles they point at).
 export const PROFILE_SCOPED_PURGE_TABLES = ["invoice_counters"] as const;
 
+// Device-scoped user data (keyed by device_id, no user_id column): purge via a device subquery,
+// and BEFORE `devices` is deleted in PURGE_ORDER.
+export const DEVICE_SCOPED_PURGE_TABLES = ["attest_keys"] as const;
+
 function normalizeEmail(e: string): string {
   return e.trim().toLowerCase();
 }
@@ -153,6 +157,12 @@ accountRoutes.delete("/account", async (c) => {
   //    profile-scoped delete. It runs first: nothing references it, and it must be gone
   //    before the profiles it points at are deleted.
   await c.env.DB.batch([
+    // Device-scoped tables (keyed by device_id) must be purged BEFORE `devices` is
+    // deleted in PURGE_ORDER, since they resolve via a `SELECT id FROM devices` subquery.
+    ...DEVICE_SCOPED_PURGE_TABLES.map((t) =>
+      c.env.DB
+        .prepare(`DELETE FROM ${t} WHERE device_id IN (SELECT id FROM devices WHERE user_id = ?)`)
+        .bind(userId)),
     ...PROFILE_SCOPED_PURGE_TABLES.map((t) =>
       c.env.DB
         .prepare(`DELETE FROM ${t} WHERE profile_id IN (SELECT id FROM profiles WHERE user_id = ?)`)

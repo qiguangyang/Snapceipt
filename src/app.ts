@@ -7,6 +7,7 @@ import { authMiddleware } from "./middleware/auth";
 import { rateLimit } from "./middleware/rateLimit";
 import { miscRoutes } from "./routes/misc";
 import { authRoutes } from "./routes/auth";
+import { attestRoutes } from "./routes/attest";
 import { deviceRoutes } from "./routes/devices";
 import { syncRoutes } from "./routes/sync";
 import { imageRoutes } from "./routes/images";
@@ -49,6 +50,10 @@ app.use("*", cors({ origin: ["https://snapceipt.cc", "https://www.snapceipt.cc"]
 // enforces 10/IP/hr (apple + refresh) plus 3/email/hr (magic-link). Order on
 // /auth/*: requestId -> rateLimit("auth") -> routes.
 app.use("/auth/*", rateLimit("auth"));
+// App Attest bootstrap (challenge + attestation verify) sits alongside /auth/*:
+// it is in the PUBLIC_PATHS allowlist (no bearer token), so this limiter is the
+// only gate in front of it. Reuse the "auth" tier (IP-keyed here, no userId).
+app.use("/attest/*", rateLimit("auth"));
 
 // Bearer auth, applied once globally. isPublic() internally lets /health,
 // /auth/* and /banks through, so a single wildcard mount is correct and avoids
@@ -111,6 +116,8 @@ app.use("/crash-reports", rateLimit("default"));
 // Public + placeholder routes.
 // /auth/* is in the public-path allowlist (auth middleware skips it).
 app.route("/auth", authRoutes);
+// Public: App Attest challenge + attestation verify (via PUBLIC_PATHS).
+app.route("/attest", attestRoutes);
 // Protected: /devices/* is not in PUBLIC_PATHS, so authMiddleware guards it and
 // the handlers read c.var.userId.
 app.route("/devices", deviceRoutes);

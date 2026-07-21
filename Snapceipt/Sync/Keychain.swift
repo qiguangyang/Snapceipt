@@ -7,6 +7,11 @@ enum KeychainKey: String, CaseIterable, Sendable {
     case accessToken
     case refreshToken
     case deviceId
+    /// The DeviceCheck App Attest key identifier (Base64), persisted once after the
+    /// backend verifies the attestation. Its presence marks the key as already attested
+    /// (App Attest keys can be attested only once), so a relaunch reuses it for
+    /// assertions rather than re-attesting. See `AppAttestor`.
+    case appAttestKeyId
 }
 
 /// Thin, typed wrapper over the Security framework's generic-password items.

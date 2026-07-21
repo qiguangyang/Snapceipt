@@ -17,6 +17,7 @@ import {
 import { sendMagicLinkEmail, sendSignInCode } from "../lib/email";
 import { verifyAppleIdentityToken } from "../lib/apple";
 import { requireAuth } from "../middleware/auth";
+import { attestMiddleware } from "../middleware/attest";
 import { hashPassword, verifyPassword } from "../lib/password";
 import {
   appleBody,
@@ -65,6 +66,29 @@ const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 // OTP sign-in code TTL — mirrors the email-change code window (account.ts).
 const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
+
+// Max sign-in code EMAILS delivered to one address per UTC day, across BOTH /otp/request and the
+// /password/login new-device MFA send. Bounds OTP-bombing to a fixed daily ceiling regardless of
+// source IP (keyed by email). On exceed we skip the SEND only — the KV code is still written and
+// the response is still 202, so the response is identical (no account enumeration) and a legit
+// over-requester simply stops receiving mail that day. Tunable.
+const OTP_SEND_DAILY_CAP = 6;
+const OTP_SEND_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Returns true (and increments the counter) when another sign-in code email to this address is
+ *  allowed today; false once the daily cap is reached. Keyed by sha256(email) so it can't be
+ *  bypassed by rotating source IPs. Takes the KV binding directly (not the Hono context) so it
+ *  stays independent of the request-scoped rate-limit tiers and is unit-testable. */
+export async function allowOtpSend(kv: KVNamespace, emailHash: string): Promise<boolean> {
+  const bucket = Math.floor(nowMs() / OTP_SEND_DAY_MS);
+  const key = `rl:otpsend:${emailHash}:${bucket}`;
+  const current = Number((await kv.get(key)) ?? "0");
+  if (current >= OTP_SEND_DAILY_CAP) return false;
+  await kv.put(key, String(current + 1), {
+    expirationTtl: Math.ceil(OTP_SEND_DAY_MS / 1000) + 60, // outlive the bucket
+  });
+  return true;
+}
 
 // L1 (distributed brute-force): per-EMAIL failed-login lockout, independent of source IP.
 // /auth/password/login is exempt from the per-email rate-limit tier (only the 20/IP/hr cap
@@ -119,6 +143,7 @@ function newMagicToken(): string {
  */
 authRoutes.post(
   "/magic-link/request",
+  attestMiddleware(),
   validate("json", magicLinkRequestBody),
   async (c) => {
     const { email, deviceId } = c.req.valid("json");
@@ -185,6 +210,7 @@ authRoutes.post(
  */
 authRoutes.post(
   "/magic-link/verify",
+  attestMiddleware(),
   validate("json", magicLinkVerifyBody),
   async (c) => {
     const { token } = c.req.valid("json");
@@ -286,7 +312,9 @@ authRoutes.post(
 /** Mint a 6-digit code, store ONLY its sha256 in KV under `oc:<sha256(email)>` (600s TTL,
  *  {codeHash, email, attempts, expiresAtMs}), and email it (background send; E2E does a
  *  best-effort sync send). Returns the plaintext code so an E2E caller can echo it. Shared by
- *  /otp/request and the new-device MFA path of /password/login. */
+ *  /otp/request and the new-device MFA path of /password/login. The per-address daily send cap
+ *  (`OTP_SEND_DAILY_CAP`, via allowOtpSend) is applied at this seam: past the cap the email SEND
+ *  is skipped while the KV code + 202 response are unchanged (no enumeration). */
 async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<string> {
   const code = sixDigitCode();
   const codeHash = await sha256Hex(code);
@@ -298,12 +326,13 @@ async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<stri
     { expirationTtl: OTP_TTL_SECONDS },
   );
   if (c.env.E2E_TEST_MODE === "1") {
+    // E2E: always send (best-effort) so the harness can observe the seam; cap does not apply.
     try {
       await sendSignInCode(c.env, { to: normalized, code });
     } catch {
       // E2E-only: ignore the missing/failing local SendEmail binding.
     }
-  } else {
+  } else if (await allowOtpSend(c.env.KV, emailHash)) {
     // Background send (waitUntil) so a slow/failing provider can't block the request.
     c.executionCtx.waitUntil(
       sendSignInCode(c.env, { to: normalized, code }).catch((err) => {
@@ -311,10 +340,11 @@ async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<stri
       }),
     );
   }
+  // else: daily send cap reached — skip the email; KV code + 202 response are unchanged.
   return code;
 }
 
-authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
+authRoutes.post("/otp/request", attestMiddleware(), validate("json", otpRequestBody), async (c) => {
   const { email } = c.req.valid("json");
   const code = await sendOtpCode(c, normalizeEmail(email));
   if (c.env.E2E_TEST_MODE === "1") return c.json({ devCode: code }, 202);
@@ -337,7 +367,7 @@ function constantTimeEqual(a: string, b: string): boolean {
  * a session — the same envelope as /magic-link/verify. Unknown/expired => 401
  * AUTH_INVALID_TOKEN; wrong code => 400 VALIDATION_FAILED until the attempt cap.
  */
-authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
+authRoutes.post("/otp/verify", attestMiddleware(), validate("json", otpVerifyBody), async (c) => {
   const { email, code } = c.req.valid("json");
   const normalized = normalizeEmail(email);
   const emailHash = await sha256Hex(normalized);
@@ -483,7 +513,7 @@ authRoutes.post("/password/set", requireAuth(), validate("json", passwordSetBody
  *    session; the client verifies it via /otp/verify, which trusts the device + issues the
  *    session (second factor on new devices, by default).
  */
-authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c) => {
+authRoutes.post("/password/login", attestMiddleware(), validate("json", passwordLoginBody), async (c) => {
   const { email, password } = c.req.valid("json");
   const normalized = normalizeEmail(email);
   const emailHash = await sha256Hex(normalized);
@@ -634,7 +664,7 @@ authRoutes.get("/magic", (c) => {
  * X-Device-Id device and issue a session. Verification failures surface as
  * 401 AUTH_INVALID_TOKEN.
  */
-authRoutes.post("/apple", validate("json", appleBody), async (c) => {
+authRoutes.post("/apple", attestMiddleware(), validate("json", appleBody), async (c) => {
   const { identityToken, rawNonce, fullName } = c.req.valid("json");
 
   // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
