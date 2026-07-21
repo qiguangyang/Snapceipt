@@ -124,9 +124,10 @@ async function issuedBy(child: x509.X509Certificate, issuer: x509.X509Certificat
  * BYTE-FORMAT ASSUMPTION (real-device confirmation deferred to Task 10): that the
  * FIRST `04 20 ..` occurring after the OID is exactly the nonce OCTET STRING.
  */
-function extractAppAttestNonce(certDer: Uint8Array): Uint8Array {
-  // OID 1.2.840.113635.100.8.2 encoded as DER: 06 0A 2A 86 48 86 F7 63 64 08 02
-  const oid = Uint8Array.from([0x06, 0x0a, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x63, 0x64, 0x08, 0x02]);
+export function extractAppAttestNonce(certDer: Uint8Array): Uint8Array {
+  // OID 1.2.840.113635.100.8.2 encoded as DER: 06 09 2A 86 48 86 F7 63 64 08 02
+  // (the length byte is 0x09 = 9 content bytes: 2a 86 48 86 f7 63 64 08 02).
+  const oid = Uint8Array.from([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x63, 0x64, 0x08, 0x02]);
   let i = -1;
   outer: for (let p = 0; p + oid.length <= certDer.length; p++) {
     for (let k = 0; k < oid.length; k++) if (certDer[p + k] !== oid[k]) continue outer;

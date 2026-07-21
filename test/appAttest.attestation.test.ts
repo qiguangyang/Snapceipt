@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { verifyAttestation, rpIdHash, AppAttestError, APP_ID } from "../src/lib/appAttest";
+import {
+  verifyAttestation,
+  rpIdHash,
+  AppAttestError,
+  APP_ID,
+  extractAppAttestNonce,
+} from "../src/lib/appAttest";
 import { bytesToB64u } from "../src/lib/cbor";
 
 // Negative + structural coverage only. A genuine Apple App Attest attestation blob
@@ -69,4 +75,25 @@ describe("verifyAttestation (negatives + structure)", () => {
   });
 
   it.todo("accepts a captured real-device attestation (Task 10, needs hardware)");
+});
+
+describe("extractAppAttestNonce (DER OID window)", () => {
+  it("extracts the 32-byte nonce after the correctly-encoded 06 09 OID + 04 20 octet string", () => {
+    // A genuine Apple credCert encodes OID 1.2.840.113635.100.8.2 as
+    //   06 09 2a 86 48 86 f7 63 64 08 02   (length byte 0x09 = 9 content bytes).
+    // The buggy verifier scanned for 06 0A ... which never matches → it throws and
+    // rejects EVERY real attestation. This synthetic DER reproduces the real layout.
+    const oidDer = [0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x63, 0x64, 0x08, 0x02];
+    const nonce = [...Array(32).keys()]; // 0x00..0x1f
+    const buf = Uint8Array.from([
+      0x30, 0x81, 0xaa, 0xde, 0xad, 0xbe, 0xef, // filler before the OID
+      ...oidDer,
+      0x30, 0x24, 0xa1, 0x22, // SEQUENCE { [1] ... } wrapper filler after the OID
+      0x04, 0x20, // OCTET STRING, length 32
+      ...nonce,
+      0xca, 0xfe, 0xba, 0xbe, // trailing filler
+    ]);
+    const out = extractAppAttestNonce(buf);
+    expect(out).toEqual(new Uint8Array([...Array(32).keys()]));
+  });
 });
