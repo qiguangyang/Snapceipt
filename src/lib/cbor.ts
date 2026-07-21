@@ -20,8 +20,8 @@ export function bytesToHex(b: Uint8Array): string {
 
 class Reader {
   constructor(public buf: Uint8Array, public pos = 0) {}
-  u8(): number { return this.buf[this.pos++]!; }
-  bytes(n: number): Uint8Array { const s = this.buf.subarray(this.pos, this.pos + n); this.pos += n; return s; }
+  u8(): number { if (this.pos >= this.buf.length) throw new Error("cbor: unexpected end of input"); return this.buf[this.pos++]!; }
+  bytes(n: number): Uint8Array { if (this.pos + n > this.buf.length) throw new Error("cbor: unexpected end of input"); const s = this.buf.subarray(this.pos, this.pos + n); this.pos += n; return s; }
   uint(info: number): number {
     if (info < 24) return info;
     if (info === 24) return this.u8();
@@ -45,7 +45,7 @@ function decodeItem(r: Reader): unknown {
     case 3: return new TextDecoder().decode(r.bytes(r.uint(info)));
     case 4: { const n = r.uint(info); const a: unknown[] = []; for (let i = 0; i < n; i++) a.push(decodeItem(r)); return a; }
     case 5: {
-      const n = r.uint(info); const m: Record<string, unknown> = {};
+      const n = r.uint(info); const m: Record<string, unknown> = Object.create(null);
       for (let i = 0; i < n; i++) { const k = decodeItem(r); m[String(k)] = decodeItem(r); }
       return m;
     }

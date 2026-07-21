@@ -50,4 +50,31 @@ describe("decodeCbor", () => {
   it("bytesToHex encodes low bytes with padding", () => {
     expect(bytesToHex(new Uint8Array([0, 1, 255]))).toBe("0001ff");
   });
+
+  // --- adversarial input (untrusted App Attest blobs) ---
+
+  it("does not pollute Object.prototype via a __proto__ map key", () => {
+    // {"__proto__": {"x": 1}}
+    // a1                     map(1)
+    //   69 5f5f70726f746f5f5f text(9)="__proto__"
+    //   a1                   map(1)
+    //     61 78              text(1)="x"
+    //     01                 uint=1
+    const hex = "a1695f5f70726f746f5f5fa1617801";
+    const bytes = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+    const decoded = decodeCbor(bytes) as Record<string, unknown>;
+
+    // Global prototype must not have been polluted.
+    expect(({} as any).x).toBe(undefined);
+    // The decoded map is a null-prototype object with "__proto__" as an OWN key.
+    expect(Object.getPrototypeOf(decoded)).toBe(null);
+    expect(Object.prototype.hasOwnProperty.call(decoded, "__proto__")).toBe(true);
+    expect(Object.keys(decoded)).toContain("__proto__");
+    expect(decoded["__proto__"]).toEqual(Object.assign(Object.create(null), { x: 1 }));
+  });
+
+  it("throws on a truncated byte-string (declared length exceeds input)", () => {
+    // 0x42 = maj 2 (bytes), info 2 -> read 2 bytes, but only 1 follows.
+    expect(() => decodeCbor(new Uint8Array([0x42, 0x01]))).toThrow();
+  });
 });
