@@ -128,6 +128,8 @@ export type Variables = {
   sessionId: string;
   /** Per-request id for tracing + the error envelope. */
   requestId: string;
+  /** True when a valid App Attest assertion accompanied the request (set by attestMiddleware). */
+  attested?: boolean;
 };
 
 /** Convenience alias for typing `new Hono<AppEnv>()`. */

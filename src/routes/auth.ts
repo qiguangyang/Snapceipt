@@ -17,6 +17,7 @@ import {
 import { sendMagicLinkEmail, sendSignInCode } from "../lib/email";
 import { verifyAppleIdentityToken } from "../lib/apple";
 import { requireAuth } from "../middleware/auth";
+import { attestMiddleware } from "../middleware/attest";
 import { hashPassword, verifyPassword } from "../lib/password";
 import {
   appleBody,
@@ -142,6 +143,7 @@ function newMagicToken(): string {
  */
 authRoutes.post(
   "/magic-link/request",
+  attestMiddleware(),
   validate("json", magicLinkRequestBody),
   async (c) => {
     const { email, deviceId } = c.req.valid("json");
@@ -208,6 +210,7 @@ authRoutes.post(
  */
 authRoutes.post(
   "/magic-link/verify",
+  attestMiddleware(),
   validate("json", magicLinkVerifyBody),
   async (c) => {
     const { token } = c.req.valid("json");
@@ -339,7 +342,7 @@ async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<stri
   return code;
 }
 
-authRoutes.post("/otp/request", validate("json", otpRequestBody), async (c) => {
+authRoutes.post("/otp/request", attestMiddleware(), validate("json", otpRequestBody), async (c) => {
   const { email } = c.req.valid("json");
   const code = await sendOtpCode(c, normalizeEmail(email));
   if (c.env.E2E_TEST_MODE === "1") return c.json({ devCode: code }, 202);
@@ -362,7 +365,7 @@ function constantTimeEqual(a: string, b: string): boolean {
  * a session — the same envelope as /magic-link/verify. Unknown/expired => 401
  * AUTH_INVALID_TOKEN; wrong code => 400 VALIDATION_FAILED until the attempt cap.
  */
-authRoutes.post("/otp/verify", validate("json", otpVerifyBody), async (c) => {
+authRoutes.post("/otp/verify", attestMiddleware(), validate("json", otpVerifyBody), async (c) => {
   const { email, code } = c.req.valid("json");
   const normalized = normalizeEmail(email);
   const emailHash = await sha256Hex(normalized);
@@ -508,7 +511,7 @@ authRoutes.post("/password/set", requireAuth(), validate("json", passwordSetBody
  *    session; the client verifies it via /otp/verify, which trusts the device + issues the
  *    session (second factor on new devices, by default).
  */
-authRoutes.post("/password/login", validate("json", passwordLoginBody), async (c) => {
+authRoutes.post("/password/login", attestMiddleware(), validate("json", passwordLoginBody), async (c) => {
   const { email, password } = c.req.valid("json");
   const normalized = normalizeEmail(email);
   const emailHash = await sha256Hex(normalized);
@@ -659,7 +662,7 @@ authRoutes.get("/magic", (c) => {
  * X-Device-Id device and issue a session. Verification failures surface as
  * 401 AUTH_INVALID_TOKEN.
  */
-authRoutes.post("/apple", validate("json", appleBody), async (c) => {
+authRoutes.post("/apple", attestMiddleware(), validate("json", appleBody), async (c) => {
   const { identityToken, rawNonce, fullName } = c.req.valid("json");
 
   // 1. Verify the Apple identity token (signature, iss, aud, exp, nonce).
