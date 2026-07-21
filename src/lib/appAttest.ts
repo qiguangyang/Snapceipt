@@ -266,3 +266,102 @@ export async function verifyAttestation(args: {
   // 10. Return the trusted key material for storage (Task 5 verifies assertions against it).
   return { keyId, publicKeyDer, signCount: 0, aaguid };
 }
+
+/**
+ * DER-encoded ECDSA signature (`SEQUENCE { INTEGER r, INTEGER s }`) → raw 64-byte
+ * `r || s`, the fixed-width form WebCrypto's `crypto.subtle.verify` expects. Apple
+ * emits assertion signatures in DER; each INTEGER may carry a DER leading-zero pad
+ * (added when the high bit is set) which we strip, then left-pad each half to 32
+ * bytes. For P-256 signatures the SEQUENCE and INTEGER lengths are always short-form
+ * (< 128 bytes), so a 1-byte length read is sufficient.
+ */
+export function derToRawEcdsa(der: Uint8Array): Uint8Array {
+  if (der[0] !== 0x30) throw new AppAttestError("assert: bad DER (not a SEQUENCE)");
+  let p = 2; // skip SEQUENCE tag + short-form length byte
+  if (der[1]! & 0x80) p = 2 + (der[1]! & 0x7f); // (defensive) long-form SEQUENCE length
+  const readInt = (): Uint8Array => {
+    if (der[p] !== 0x02) throw new AppAttestError("assert: bad DER integer");
+    const len = der[p + 1]!;
+    p += 2;
+    let v = der.subarray(p, p + len);
+    p += len;
+    while (v.length > 32 && v[0] === 0) v = v.subarray(1); // strip DER leading-zero pad
+    if (v.length > 32) throw new AppAttestError("assert: DER integer too large for P-256");
+    return v;
+  };
+  const r = readInt();
+  const s = readInt();
+  const out = new Uint8Array(64);
+  out.set(r, 32 - r.length); // left-pad each half to 32 bytes
+  out.set(s, 64 - s.length);
+  return out;
+}
+
+/**
+ * Verify an Apple App Attest ASSERTION and enforce the anti-replay sign counter.
+ *
+ * An assertion is a plain ECDSA-P256 signature (from the previously-attested key) over
+ * `nonce = SHA256(authenticatorData || SHA256(challenge || SHA256(rawBody)))`, wrapped in a
+ * CBOR map `{ signature, authenticatorData }`. We recompute that nonce, verify the signature
+ * against the stored public key, confirm the assertion is bound to OUR app (rpIdHash), and
+ * require the sign counter to strictly increase over what we last stored (replay defense).
+ *
+ * @throws {AppAttestError} on ANY failure — bad shape, rpIdHash mismatch, non-increasing
+ *   counter, or invalid signature. Callers MUST reject the request and NOT advance the
+ *   stored counter on error.
+ */
+export async function verifyAssertion(args: {
+  assertionB64u: string;
+  challenge: string;
+  rawBody: Uint8Array;
+  publicKeyDer: Uint8Array;
+  storedSignCount: number;
+}): Promise<{ newSignCount: number }> {
+  // 1. Decode CBOR and require the two byte-string fields.
+  let obj: unknown;
+  try {
+    obj = decodeCbor(b64uToBytes(args.assertionB64u));
+  } catch (cause) {
+    throw new AppAttestError("assert: assertion is not valid CBOR", { cause });
+  }
+  if (!obj || typeof obj !== "object") throw new AppAttestError("assert: assertion is not a CBOR object");
+  const a = obj as Record<string, unknown>;
+  const sigDer = a.signature;
+  const authData = a.authenticatorData;
+  if (!(sigDer instanceof Uint8Array) || !(authData instanceof Uint8Array)) {
+    throw new AppAttestError("assert: signature/authenticatorData missing or not byte strings");
+  }
+  // authenticatorData = rpIdHash(32) + flags(1) + signCount(4).
+  if (authData.length < 37) throw new AppAttestError("assert: authenticatorData too short");
+
+  // 2. rpIdHash (authData[0..32)) must equal SHA256(APP_ID) — constant-time compare.
+  if (!eq(authData.subarray(0, 32), await rpIdHash())) throw new AppAttestError("assert: rpIdHash mismatch");
+
+  // 3. signCount (authData[33..37), big-endian) must strictly exceed the stored value.
+  const counter = readU32BE(authData, 33);
+  if (counter <= args.storedSignCount) throw new AppAttestError("assert: counter not increasing (replay)");
+
+  // 4. nonce = SHA256(authData || SHA256(challenge || SHA256(rawBody))).
+  const bodyHash = await sha256(args.rawBody);
+  const clientDataHash = await sha256(new TextEncoder().encode(args.challenge), bodyHash);
+  const nonce = await sha256(authData, clientDataHash);
+
+  // 5. Verify the (DER → raw) ECDSA signature over the nonce with the attested key.
+  let key: CryptoKey;
+  try {
+    key = await crypto.subtle.importKey("spki", args.publicKeyDer, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  } catch (cause) {
+    throw new AppAttestError("assert: stored public key is not importable SPKI P-256", { cause });
+  }
+  let ok = false;
+  try {
+    const rawSig = derToRawEcdsa(sigDer);
+    ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, rawSig, nonce);
+  } catch (cause) {
+    throw new AppAttestError("assert: signature could not be verified", { cause });
+  }
+  if (!ok) throw new AppAttestError("assert: signature invalid");
+
+  // 6. Success — return the new counter so the caller can persist it.
+  return { newSignCount: counter };
+}
