@@ -1,7 +1,7 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as emailModule from "../src/lib/email";
-import { RATE_LIMIT_TIERS } from "../src/middleware/rateLimit";
+import { RATE_LIMIT_TIERS, consume } from "../src/middleware/rateLimit";
 import { ERROR } from "../src/lib/errors";
 
 beforeAll(async () => {
@@ -46,11 +46,11 @@ describe("rateLimit middleware", () => {
     expect(typeof body.error.requestId).toBe("string");
   });
 
-  it("enforces the per-email cap (8/hr) on SENDS independently of the IP cap", async () => {
+  it("enforces the per-email cap (4/hr) on SENDS independently of the IP cap", async () => {
     vi.spyOn(emailModule, "sendMagicLinkEmail").mockResolvedValue(undefined);
 
     // Each request uses a DISTINCT IP so the 20/IP/hr ceiling never trips; the
-    // only limit in play is the 8/email/hr cap on a single repeated address.
+    // only limit in play is the 4/email/hr cap on a single repeated address.
     const email = "repeat@example.com";
     const send = (n: number) =>
       SELF.fetch("https://api.test/auth/magic-link/request", {
@@ -59,7 +59,7 @@ describe("rateLimit middleware", () => {
         body: JSON.stringify({ email }),
       });
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       const ok = await send(i);
       expect(ok.status).toBe(202);
     }
@@ -161,5 +161,29 @@ describe("F7 tiers + error codes", () => {
   });
   it("maps GONE to 410", () => {
     expect(ERROR.GONE).toBe(410);
+  });
+});
+
+describe("authIpDay tier", () => {
+  it("blocks the 61st auth op from one IP within a UTC day (across hour buckets)", async () => {
+    const tier = RATE_LIMIT_TIERS.authIpDay;
+    expect(tier.limit).toBe(60);
+    const identity = "ip:203.0.113.99";
+    // All 60 calls must land in the SAME day bucket (floor(now/DAY) constant) while spanning
+    // multiple HOURLY buckets. Anchor `base` to a UTC-day boundary and step 20 min/call: 60 steps
+    // = 20h < 24h, so the day bucket stays constant (the counter reaches 60) yet the calls cross
+    // ~20 different hour buckets. (A >1h step over 60 calls would span 61h and cross day buckets,
+    // so the day counter would never reach 60 — 24h holds at most 24 one-per-hour calls.)
+    const DAY = 24 * 60 * 60 * 1000;
+    const STEP = 20 * 60 * 1000; // 20 min — crosses hour buckets, keeps all 60 inside one day
+    const base = Math.floor(1_700_000_000_000 / DAY) * DAY; // start of a UTC day
+    let last: number | null = 0;
+    for (let i = 0; i < 60; i++) {
+      last = await consume(env.KV, tier, identity, base + i * STEP);
+      expect(last).toBeNull(); // first 60 permitted
+    }
+    const blocked = await consume(env.KV, tier, identity, base + 60 * STEP);
+    expect(blocked).not.toBeNull(); // 61st blocked
+    expect(blocked!).toBeGreaterThan(0);
   });
 });

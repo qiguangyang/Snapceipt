@@ -20,6 +20,7 @@ import { ApiError } from "../lib/errors";
 
 const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type RateLimitTier = {
   /** stable prefix used in the KV key */
@@ -37,9 +38,12 @@ export const RATE_LIMIT_TIERS = {
   /** auth per-IP ceiling (covers request + verify + refresh + apple). 20/hr leaves headroom
    *  now that a code login is request+verify (2 calls) and resends are common. */
   authIp: { name: "auth-ip", limit: 20, windowMs: HOUR_MS, dimension: "ip" },
-  /** per-email cap on the SEND/credential ops (keyed by the request body's email). 8/hr allows
-   *  sign-up + a few resends + a second device. Verify endpoints are EXEMPT (own per-code cap). */
-  authEmail: { name: "auth-email", limit: 8, windowMs: HOUR_MS, dimension: "ip" },
+  /** auth per-IP DAILY ceiling — bounds a single source across the day (the hourly cap trips
+   *  first within any hour; this caps the multi-hour total). */
+  authIpDay: { name: "auth-ip-day", limit: 60, windowMs: DAY_MS, dimension: "ip" },
+  /** per-email cap on SEND ops (keyed by body email). Lowered 8→4 to blunt targeted OTP-bombing;
+   *  a legit sign-up + a couple resends stays under it. Verify endpoints remain EXEMPT. */
+  authEmail: { name: "auth-email", limit: 4, windowMs: HOUR_MS, dimension: "ip" },
   /** hot sync path. */
   sync: { name: "sync", limit: 600, windowMs: HOUR_MS, dimension: "user" },
   /** receipt extraction — calls an external API; keep it tight. */
@@ -85,7 +89,7 @@ export function clientKeyForRoute(c: RateLimitCtx, tier: RateLimitTier): string 
  * Consume one unit against a fixed window. Returns the seconds-to-reset when the
  * limit is exceeded, otherwise null.
  */
-async function consume(
+export async function consume(
   kv: KVNamespace,
   tier: RateLimitTier,
   identity: string,
@@ -128,6 +132,8 @@ export function rateLimit(kind: RateLimitKind): MiddlewareHandler<AppEnv> {
       const ip = clientKeyForRoute(c, RATE_LIMIT_TIERS.authIp);
       const ipReset = await consume(kv, RATE_LIMIT_TIERS.authIp, ip, now);
       if (ipReset !== null) reject(ipReset);
+      const ipDayReset = await consume(kv, RATE_LIMIT_TIERS.authIpDay, ip, now);
+      if (ipDayReset !== null) reject(ipDayReset);
 
       // Per-email cap applies ONLY to the explicit SEND endpoints (.../request — otp/request,
       // magic-link/request), which always email a code/link. EXEMPT:
