@@ -66,6 +66,29 @@ const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
 
+// Max sign-in code EMAILS delivered to one address per UTC day, across BOTH /otp/request and the
+// /password/login new-device MFA send. Bounds OTP-bombing to a fixed daily ceiling regardless of
+// source IP (keyed by email). On exceed we skip the SEND only — the KV code is still written and
+// the response is still 202, so the response is identical (no account enumeration) and a legit
+// over-requester simply stops receiving mail that day. Tunable.
+const OTP_SEND_DAILY_CAP = 6;
+const OTP_SEND_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Returns true (and increments the counter) when another sign-in code email to this address is
+ *  allowed today; false once the daily cap is reached. Keyed by sha256(email) so it can't be
+ *  bypassed by rotating source IPs. Takes the KV binding directly (not the Hono context) so it
+ *  stays independent of the request-scoped rate-limit tiers and is unit-testable. */
+export async function allowOtpSend(kv: KVNamespace, emailHash: string): Promise<boolean> {
+  const bucket = Math.floor(nowMs() / OTP_SEND_DAY_MS);
+  const key = `rl:otpsend:${emailHash}:${bucket}`;
+  const current = Number((await kv.get(key)) ?? "0");
+  if (current >= OTP_SEND_DAILY_CAP) return false;
+  await kv.put(key, String(current + 1), {
+    expirationTtl: Math.ceil(OTP_SEND_DAY_MS / 1000) + 60, // outlive the bucket
+  });
+  return true;
+}
+
 // L1 (distributed brute-force): per-EMAIL failed-login lockout, independent of source IP.
 // /auth/password/login is exempt from the per-email rate-limit tier (only the 20/IP/hr cap
 // applies), so a distributed attacker can guess one account's password from many IPs. We
@@ -298,12 +321,13 @@ async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<stri
     { expirationTtl: OTP_TTL_SECONDS },
   );
   if (c.env.E2E_TEST_MODE === "1") {
+    // E2E: always send (best-effort) so the harness can observe the seam; cap does not apply.
     try {
       await sendSignInCode(c.env, { to: normalized, code });
     } catch {
       // E2E-only: ignore the missing/failing local SendEmail binding.
     }
-  } else {
+  } else if (await allowOtpSend(c.env.KV, emailHash)) {
     // Background send (waitUntil) so a slow/failing provider can't block the request.
     c.executionCtx.waitUntil(
       sendSignInCode(c.env, { to: normalized, code }).catch((err) => {
@@ -311,6 +335,7 @@ async function sendOtpCode(c: Context<AppEnv>, normalized: string): Promise<stri
       }),
     );
   }
+  // else: daily send cap reached — skip the email; KV code + 202 response are unchanged.
   return code;
 }
 
