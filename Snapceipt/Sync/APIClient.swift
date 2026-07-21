@@ -102,6 +102,21 @@ final class LiveAPIClient: APIClient {
     /// in-flight requests can't both spend the rotating refresh token (which the
     /// backend's reuse-detection would treat as a stolen token → spurious logout).
     private let refreshCoordinator = RefreshCoordinator()
+    /// Produces DeviceCheck App Attest headers for the six auth-bootstrap requests. Fails
+    /// OPEN ([:]) on Simulator/unsupported/error, so it never blocks a request on its own.
+    private let attestor: AppAttestor
+
+    /// The unauthenticated auth-bootstrap paths that carry an App Attest assertion. These
+    /// are the only routes attested — NOT `/auth/refresh`, `/auth/signout`, or any
+    /// authenticated route (they ride the bearer). Keep in sync with the six methods above.
+    private static let attestPaths: Set<String> = [
+        "/auth/apple",
+        "/auth/magic-link/request",
+        "/auth/magic-link/verify",
+        "/auth/otp/request",
+        "/auth/password/login",
+        "/auth/otp/verify",
+    ]
 
     init(baseURL: URL, auth: AuthStore, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -109,6 +124,19 @@ final class LiveAPIClient: APIClient {
         self.session = session
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
+        self.attestor = AppAttestor(baseURL: baseURL, deviceId: auth.deviceId)
+    }
+
+    /// True when attestation must be suppressed: the hermetic UI-test stub disables all
+    /// device-dependent behavior. (Under `-uiTestStub` `StubAPIClient` is used, not this
+    /// client, so this is belt-and-suspenders; on the Simulator the attestor already
+    /// fails open.) DEBUG-only seam — compiled out of Release.
+    private var attestationDisabledForTests: Bool {
+        #if DEBUG
+        return AppLaunch.current.useStub
+        #else
+        return false
+        #endif
     }
 
     // MARK: APIClient
@@ -394,15 +422,15 @@ final class LiveAPIClient: APIClient {
         allowRefresh: Bool,
         timeout: TimeInterval? = nil
     ) async throws -> Data {
-        let request = try makeRequest(method, path, query: query, body: body,
-                                      authenticated: authenticated, timeout: timeout)
+        let request = try await makeRequest(method, path, query: query, body: body,
+                                            authenticated: authenticated, timeout: timeout)
         let (data, response) = try await dataResponse(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.transport }
 
         if http.statusCode == 401, allowRefresh, await tryRefresh() {
             // Rebuild with the fresh bearer and retry exactly once.
-            let retry = try makeRequest(method, path, query: query, body: body,
-                                        authenticated: authenticated, timeout: timeout)
+            let retry = try await makeRequest(method, path, query: query, body: body,
+                                              authenticated: authenticated, timeout: timeout)
             let (data2, response2) = try await dataResponse(for: retry)
             guard let http2 = response2 as? HTTPURLResponse else { throw APIError.transport }
             return try validate(data2, http2)
@@ -466,9 +494,9 @@ final class LiveAPIClient: APIClient {
     private func performRefresh() async -> Bool {
         guard let refreshToken = auth.session?.refreshToken else { return false }
         do {
-            let req = try makeRequest("POST", "/auth/refresh", query: [],
-                                      body: RefreshBody(refreshToken: refreshToken),
-                                      authenticated: false)
+            let req = try await makeRequest("POST", "/auth/refresh", query: [],
+                                            body: RefreshBody(refreshToken: refreshToken),
+                                            authenticated: false)
             let (data, response) = try await dataResponse(for: req)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 auth.clear()
@@ -483,7 +511,8 @@ final class LiveAPIClient: APIClient {
         }
     }
 
-    /// Construct a URLRequest with JSON body + auth/device headers.
+    /// Construct a URLRequest with JSON body + auth/device headers. `async` because the
+    /// six auth-bootstrap routes attach App Attest headers computed over the encoded body.
     private func makeRequest<B: Encodable>(
         _ method: String,
         _ path: String,
@@ -491,7 +520,7 @@ final class LiveAPIClient: APIClient {
         body: B?,
         authenticated: Bool,
         timeout: TimeInterval? = nil
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path),
                                        resolvingAgainstBaseURL: false)
         if !query.isEmpty { components?.queryItems = query }
@@ -511,6 +540,15 @@ final class LiveAPIClient: APIClient {
         if let body, !(body is NoBody) {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try encoder.encode(body)
+        }
+        // App Attest: only the six unauthenticated auth-bootstrap routes. The assertion is
+        // computed over the EXACT encoded body the server receives, so it's built after the
+        // body is set. Fails open (empty headers) on Simulator/unsupported/error.
+        if Self.attestPaths.contains(path), !attestationDisabledForTests {
+            let attestHeaders = await attestor.headers(forBody: request.httpBody ?? Data())
+            for (field, value) in attestHeaders {
+                request.setValue(value, forHTTPHeaderField: field)
+            }
         }
         return request
     }

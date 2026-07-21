@@ -14,6 +14,11 @@
 	     the capability lives on the App ID, and StoreKit works without one.
 	     A com.apple.developer.in-app-purchase key fails App Store archive
 	     validation ("not a valid entitlement"), so it is intentionally absent. -->
+	<!-- App Attest: the six auth-bootstrap requests carry a DeviceCheck App Attest
+	     assertion the backend can verify. Dev/TestFlight builds attest against the
+	     `development` environment; Release uses `production` (Snapceipt.Release.entitlements). -->
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>development</string>
 	<key>aps-environment</key>
 	<string>development</string>
 	<!-- Shared container with the Share Extension: it drops receipts shared from other apps

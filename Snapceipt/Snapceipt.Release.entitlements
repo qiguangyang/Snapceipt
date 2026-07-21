@@ -11,6 +11,11 @@
 	     value must match or the archive fails validation. -->
 	<!-- In-App Purchase (StoreKit 2 Pro tier) needs NO entitlement-file key —
 	     it fails App Store archive validation. Intentionally absent. -->
+	<!-- App Attest: App Store builds attest against the `production` environment
+	     (development in Snapceipt.entitlements). Manual signing validates this value
+	     against the match App Store profile, so the App ID must carry the App Attest capability. -->
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>production</string>
 	<key>aps-environment</key>
 	<string>production</string>
 	<!-- Shared container with the Share Extension (see Snapceipt.entitlements). NOTE: a Release
