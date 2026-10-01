@@ -184,3 +184,114 @@ Physical iOS17/current-device upgrade, spoken VoiceOver, actual OS permissions a
 notification delivery/taps (>32/DST/travel included), and two-device behavior remain
 manual release gates. This task neither runs nor labels them passed. Previous full
 UI exit65 and covering success remain separate. No production latency claim.
+
+## Additional authorized fix — B1: earlier document acquires a later client
+
+The user explicitly authorized one additional fix and scoped review after the
+remaining Important B1 finding. This is that targeted fix, not a new whole-branch
+review. Base: `c5b0afb287bc2d53142995a4379ced97bad2a0b6`.
+Implementation head: `e78052030a7797e92aefe960ea0d731d90e7e7bf` (`fix: order pending client dependencies before sync batching`).
+The following evidence-only commit appends this ledger; it changes no production
+or test behavior. All five other addressed review findings remain intact.
+
+### Change and self-review
+
+`SyncEngine.pendingOutbox` now orders the complete pending snapshot before `push`
+splits it into batches of 200. It resolves typed references for quote/invoice/
+follow-up → client and quote/invoice line → its document, only when an actual
+pending upsert of that parent is present. It moves prerequisites ahead of dependents
+and retains the original FIFO order for other rows and multiple operations on the
+same entity. Deduplication still refreshes only payload, retaining mutation ID,
+original baseRev and createdAt. Nothing rewrites queue metadata or document fields.
+
+The traversal uses row indexes, typed entity keys and explicit visiting/emitted
+states. Each pending row appears exactly once; it neither conflates entity types
+nor drops duplicate entity mutations. An iterative stack bounds recursion risk.
+The supported type graph is acyclic by construction; unrecognized reverse fields
+cannot create edges, and visiting-state detection also prevents a malformed cycle
+from hanging traversal. This is ordering, not a second validation implementation:
+omitted/null/non-string references, absent or failed parents, and delete-only parents
+leave normal server validation authoritative. Deletes do not gain dependencies from
+stale payload fields. Earlier operations on a moved parent retain their sequence.
+
+New real-store regression covers both quote and invoice with 0 and 199 unrelated
+preceding mutations (four cases). An existing server document starts unlinked with
+revision 7, then its edit and line are queued. ClientStore creates a later client
+and explicitly links the earlier document via linkExistingDocuments. The scripted
+API applies the same new-client existence rejection boundary as the server and
+asserts the updated document precedes its line. After the fix it receives client,
+updated document and line in that order; batches are [3] or [200, 2]. It sees the
+latest link/contact payload and original revision; mutation IDs/count are unchanged,
+the server-side link/line apply, and the durable outbox drains without failed rows.
+The original create-client/create-dependents/re-edit-parent test still passes,
+including its [200, 5] boundary and both line kinds.
+
+A separate real-engine push test verifies absent/null/unknown/non-string references,
+failed or delete-only parents, irrelevant back-reference fields and delete payloads
+retain FIFO and unchanged wire payloads. Scripted validation rejections remain
+failed in the outbox (alongside the previously failed parent); accepted mutations
+are acknowledged normally. Count and unique mutation-ID checks catch dropped or
+repeated wire mutations. This test passed before and after the fix.
+
+Self-reviewed the narrow diff for identity/revision preservation, complete-snapshot
+ordering before batching, stable unrelated order, parent-before-line order,
+termination and unchanged rejection handling. Corrected one test comment after the
+full run to describe its cross-type back references precisely; no executable code
+changed after full-unit verification. No new UI/backend/entitlement or release work.
+
+### Exact RED/GREEN and integration evidence
+
+Default signing, the explicitly owned simulator, and the existing derived-data
+location are unchanged. No new files require xcodegen in this wave.
+
+Behavioral RED, before the production ordering change:
+```sh
+xcodebuild test -project Snapceipt.xcodeproj -scheme Snapceipt -destination 'platform=iOS Simulator,id=7962C2D3-C7A8-422D-A061-3C90F3D59206' -derivedDataPath /private/tmp/snapceipt-v2-derived -only-testing:SnapceiptTests/ClientWorkspaceFinalFixTests > /private/tmp/final-b1-red.log 2>&1
+```
+Actual exit **65**. **7 tests / 1 suite, 20 issues**, 2.976 seconds, `TEST FAILED`.
+The new association test failed in all four quote/invoice × 0/199 cases. The six
+other functions passed, including all prior five fixes and the new unchanged-
+reference/rejection test. Representative failures:
+- `New client must exist before the association upsert`.
+- `The updated parent must precede its line`.
+- Sent suffix was document/line/client instead of client/document/line.
+- Server document link stayed unset; failed outbox mutation remained stranded.
+No fixture compilation correction or test-oracle weakening was required.
+
+Focused GREEN:
+```sh
+xcodebuild test -project Snapceipt.xcodeproj -scheme Snapceipt -destination 'platform=iOS Simulator,id=7962C2D3-C7A8-422D-A061-3C90F3D59206' -derivedDataPath /private/tmp/snapceipt-v2-derived -only-testing:SnapceiptTests/ClientWorkspaceFinalFixTests > /private/tmp/final-b1-green.log 2>&1
+```
+Actual exit **0**. **7 tests / 1 suite passed**, 3.248 seconds, `TEST SUCCEEDED`.
+New association test passes all four parameterized cases; existing Unicode test
+still passes both cases. No previously addressed finding regressed.
+
+Full iOS unit target, once after focused GREEN:
+```sh
+xcodebuild test -project Snapceipt.xcodeproj -scheme Snapceipt -destination 'platform=iOS Simulator,id=7962C2D3-C7A8-422D-A061-3C90F3D59206' -derivedDataPath /private/tmp/snapceipt-v2-derived -only-testing:SnapceiptTests > /private/tmp/final-b1-units.log 2>&1
+```
+Actual exit **0**. **786 Swift Testing tests / 166 suites passed**, 11.137 seconds,
+plus **4 XCTest tests passed**, `TEST SUCCEEDED`. Existing sync, association,
+CRUD atomicity, repeat/contact, Unicode, catalog currency and acknowledgement tests
+are included. No UI/HTTP/full Worker repeat for unchanged paths.
+
+All three xcode commands returned their actual exits naturally in this wave; no
+diagnostic child or runner was terminated. Logs and xcresults remain available.
+Focused compile retains the baseline AppIntents metadata extraction warning; no
+new compiler warning was reported. `git diff --check` and staged diff check exit 0.
+
+### Changed files and retained boundaries
+
+- `Snapceipt/Sync/SyncEngine.swift`
+- `SnapceiptTests/ClientWorkspaceFinalFixTests.swift`
+- `.superpowers/sdd/2026-10-01-v2-clients-repeat-work/final-fix-report.md` (append)
+- `docs/testing/v2-client-workspace-evidence.md` (same durable append)
+
+No new correctness concern found in self-review. This does not reclassify or close
+the prior unclassified invalid-frame warning, physical iOS17/current-device upgrade,
+spoken VoiceOver, actual OS notification permissions/delivery/taps/DST/travel/>32,
+or two-device release gates. The original full UI failure and subsequent covering
+success remain separate historical outcomes. Prior baseline actor/AppIntents and
+Wrangler warnings remain disclosed. No unrelated Leanology process/listener touched,
+no remote PR/push/merge/deploy/upload/version change, and no subagent or reviewer
+was spawned. A fresh scoped rereview is the controller's next step.
