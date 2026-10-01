@@ -166,4 +166,24 @@ struct SyncEnginePushTests {
         #expect(json?["type"] as? String == "transaction")
         #expect(json?.keys.contains("lastEditedDeviceId") == false) // omitted, not null
     }
+
+    @Test func contextAwareEnqueueProducesPushableOutbox() async throws {
+        let (engine, context, api) = try makeEngine()
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let txn = makeTxn()
+        mutationContext.insert(txn); try mutationContext.save()
+        engine.enqueue(op: "upsert", entityType: .transaction, entity: txn, context: mutationContext)
+        api.pushHandler = { mutations in
+            PushResponse(results: mutations.map { mutation in
+                PushResult(mutationId: mutation.mutationId, status: "applied", reason: nil,
+                           entity: envelope(type: mutation.entityType, id: mutation.entityId, rev: 7, updatedAt: 7777))
+            }, serverTime: 7777)
+        }
+        await engine.push()
+        #expect(api.pushCalls.count == 1 && api.pushCalls[0].count == 1)
+        #expect(api.pushCalls[0][0].entityId == txn.id)
+        #expect(try context.fetch(FetchDescriptor<OutboxMutation>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Transaction>()).first?.rev == 7)
+    }
 }

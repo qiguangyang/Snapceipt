@@ -213,6 +213,21 @@ final class QuoteEditorViewModel {
             context.insert(q)
             return q
         }()
+        let previousFields = (profileId: quote.profileId,
+                              gstRateBp: quote.gstRateBp,
+                              clientId: quote.clientId,
+                              clientName: quote.clientName,
+                              clientEmail: quote.clientEmail,
+                              clientAddress: quote.clientAddress,
+                              clientMobile: quote.clientMobile,
+                              gstEnabled: quote.gstEnabled,
+                              gstInclusive: quote.gstInclusive,
+                              subtotalCents: quote.subtotalCents,
+                              gstCents: quote.gstCents,
+                              totalCents: quote.totalCents,
+                              validUntil: quote.validUntil,
+                              updatedAt: quote.updatedAt)
+        let previousRate = gstRateBp
         quote.profileId = profileId
         // Snapshot the GST rate from the active profile on first save; keep an existing
         // snapshot so a re-save never re-rates an already-sent quote. (spec §2.2/§3)
@@ -233,15 +248,19 @@ final class QuoteEditorViewModel {
         quote.updatedAt = Epoch.nowMs()
 
         let keptIds = Set(lineItems.map(\.id))
+        let previousLineMetadata = lineItems.map { ($0, $0.sortOrder, $0.updatedAt) }
+        var insertedLines: [QuoteLineItem] = []
         for (idx, line) in lineItems.enumerated() {
             line.sortOrder = idx
             line.updatedAt = Epoch.nowMs()
-            if fetchLine(line.id) == nil { context.insert(line) }
+            if fetchLine(line.id) == nil { context.insert(line); insertedLines.append(line) }
         }
         let removed = originalLineIds.subtracting(keptIds)
         var deletedRows: [QuoteLineItem] = []
+        var previousDeletedMetadata: [(QuoteLineItem, Int?, Int)] = []
         for rid in removed {
             if let row = fetchLine(rid) {
+                previousDeletedMetadata.append((row, row.deletedAt, row.updatedAt))
                 row.deletedAt = Epoch.nowMs()
                 row.updatedAt = Epoch.nowMs()
                 deletedRows.append(row)
@@ -249,7 +268,32 @@ final class QuoteEditorViewModel {
         }
         do { try persist(context) }
         catch {
-            context.rollback()
+            // Keep typed line/contact input and unrelated pending edits available for retry.
+            if existing == nil { context.delete(quote) }
+            else {
+                quote.profileId = previousFields.profileId
+                quote.gstRateBp = previousFields.gstRateBp
+                quote.clientId = previousFields.clientId
+                quote.clientName = previousFields.clientName
+                quote.clientEmail = previousFields.clientEmail
+                quote.clientAddress = previousFields.clientAddress
+                quote.clientMobile = previousFields.clientMobile
+                quote.gstEnabled = previousFields.gstEnabled
+                quote.gstInclusive = previousFields.gstInclusive
+                quote.subtotalCents = previousFields.subtotalCents
+                quote.gstCents = previousFields.gstCents
+                quote.totalCents = previousFields.totalCents
+                quote.validUntil = previousFields.validUntil
+                quote.updatedAt = previousFields.updatedAt
+            }
+            gstRateBp = previousRate
+            for line in insertedLines { context.delete(line) }
+            for (line, sortOrder, updatedAt) in previousLineMetadata {
+                line.sortOrder = sortOrder; line.updatedAt = updatedAt
+            }
+            for (line, deletedAt, updatedAt) in previousDeletedMetadata {
+                line.deletedAt = deletedAt; line.updatedAt = updatedAt
+            }
             errorMessage = "Couldn’t save the draft. Try again."
             return false
         }
@@ -374,18 +418,28 @@ final class QuoteEditorViewModel {
     /// and links the quote → invoice (both ways), enqueuing the quote upsert.
     @discardableResult
     func convertToInvoice() -> String? {
-        guard let qid = quoteId, let quote = fetchQuote(qid) else { return nil }
+        errorMessage = nil
+        guard let qid = quoteId else { return nil }
+        // A fresh context reads committed quote/line snapshots, excluding pending editor input.
+        // Its saves (including outbox enqueue) must never save the shared editor context.
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let uid = userId, pid = profileId
+        var quoteDescriptor = FetchDescriptor<Quote>(predicate: #Predicate {
+            $0.id == qid && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+        })
+        quoteDescriptor.fetchLimit = 1
+        guard let quote = try? mutationContext.fetch(quoteDescriptor).first else { return nil }
         if let existing = quote.invoiceId { invoiceId = existing; return existing }
         guard quote.status == QuoteStatus.sent.rawValue || quote.status == QuoteStatus.accepted.rawValue else { return nil }
-        guard validClientLink(quote.clientId, previousId: nil) else {
+        guard validClientLink(quote.clientId, previousId: nil, queryContext: mutationContext) else {
             errorMessage = "Select a live client in this business before creating an invoice."
             return nil
         }
-        let uid = userId
         let descriptor = FetchDescriptor<QuoteLineItem>(
             predicate: #Predicate { $0.quoteId == qid && $0.userId == uid && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)])
-        guard let sourceLines = try? context.fetch(descriptor) else {
+        guard let sourceLines = try? mutationContext.fetch(descriptor) else {
             errorMessage = "Couldn’t load the quote items. Try again."
             return nil
         }
@@ -402,7 +456,7 @@ final class QuoteEditorViewModel {
                               // Snapshot the quote's GST rate onto the invoice so it stays
                               // consistent with the quote it came from (spec §3).
                               gstRateBp: quote.gstRateBp)
-        context.insert(invoice)
+        mutationContext.insert(invoice)
 
         var clonedLines: [InvoiceLineItem] = []
         for (idx, line) in sourceLines.enumerated() {
@@ -411,24 +465,30 @@ final class QuoteEditorViewModel {
                                          unitLabel: line.unitLabel,
                                          quantity: line.quantity, unitPriceCents: line.unitPriceCents,
                                          sortOrder: idx)
-            context.insert(cloned)
+            mutationContext.insert(cloned)
             clonedLines.append(cloned)
         }
 
         quote.invoiceId = invoice.id
         quote.status = QuoteStatus.invoiced.rawValue
         quote.updatedAt = Epoch.nowMs()
-        do { try persist(context) }
+        do { try persist(mutationContext) }
         catch {
-            context.rollback()
             errorMessage = "Couldn’t create the invoice. Try again."
             return nil
         }
 
-        sync.enqueue(op: "upsert", entityType: .invoice, entity: invoice)
-        for line in clonedLines { sync.enqueue(op: "upsert", entityType: .invoiceLineItem, entity: line) }
-        sync.enqueue(op: "upsert", entityType: .quote, entity: quote)
+        sync.enqueue(op: "upsert", entityType: .invoice, entity: invoice, context: mutationContext)
+        for line in clonedLines { sync.enqueue(op: "upsert", entityType: .invoiceLineItem, entity: line, context: mutationContext) }
+        sync.enqueue(op: "upsert", entityType: .quote, entity: quote, context: mutationContext)
 
+        // Reflect only conversion-owned lifecycle fields on an already-loaded quote.
+        // Other pending quote/contact/line edits stay untouched and unsaved.
+        if let workingQuote = fetchQuote(qid) {
+            workingQuote.invoiceId = quote.invoiceId
+            workingQuote.status = quote.status
+            workingQuote.updatedAt = quote.updatedAt
+        }
         status = quote.status
         invoiceId = invoice.id
         return invoice.id
@@ -450,7 +510,7 @@ final class QuoteEditorViewModel {
     /// "YYYY-MM-DD" 28 days from today (UTC) — the default quote validity.
     static func validUntilPlus28() -> String { dateString(daysFromNow: 28) }
 
-    private func validClientLink(_ candidate: String?, previousId: String?) -> Bool {
+    private func validClientLink(_ candidate: String?, previousId: String?, queryContext: ModelContext? = nil) -> Bool {
         guard let clientId = candidate else { return true }
         // Historical documents may keep their unchanged link after deletion.
         if clientId == previousId { return true }
@@ -458,7 +518,7 @@ final class QuoteEditorViewModel {
         let descriptor = FetchDescriptor<Client>(predicate: #Predicate {
             $0.id == clientId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
         })
-        return (try? context.fetch(descriptor).isEmpty) == false
+        return (try? (queryContext ?? context).fetch(descriptor).isEmpty) == false
     }
 
     private func fetchQuote(_ id: String) -> Quote? {

@@ -79,6 +79,11 @@ final class SyncEngine {
     /// Append an outbox mutation snapshotting `entity` (full camelCase payload for
     /// an upsert; the snapshot still carries the id for a delete) and mark it pending.
     func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
+        enqueue(op: op, entityType: entityType, entity: entity, context: context)
+    }
+
+    /// Used by isolated domain transactions so outbox saves do not commit shared editor input.
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) {
         let payload = registry.encodePayload(entityType: entityType, entity: entity)
         // Dedupe consecutive PENDING upserts for the same entity into ONE row (refresh the payload
         // to the latest state, keep the original baseRev). Otherwise N rapid edits enqueue N upserts

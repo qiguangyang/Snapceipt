@@ -305,4 +305,90 @@ struct InvoiceEditorViewModelTests {
         #expect(v.errorMessage != nil && sync.calls.isEmpty)
         #expect(try ctx.fetch(FetchDescriptor<Invoice>()).isEmpty)
     }
+
+    @Test func failedExistingDraftSaveRetainsInputAndUnrelatedChanges() throws {
+        let (ctx, sync) = try makeFixture()
+        let original = vm(ctx, sync)
+        original.load(id: nil); original.setClient(name: "Saved", email: nil)
+        original.addLine()
+        original.lineItems[0].itemDescription = "Saved line"
+        original.lineItems[0].unitPriceCents = 10_000
+        #expect(original.saveDraft())
+        let unrelated = Client(userId: "u1", profileId: "p1", name: "Other", notes: "Saved notes")
+        ctx.insert(unrelated); try ctx.save()
+        var shouldFail = true
+        struct Failure: Error {}
+        let v = InvoiceEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { context in
+            if shouldFail { throw Failure() }
+            try context.save()
+        })
+        v.load(id: original.invoiceId)
+        v.setClient(name: "Typed", email: "typed@example.com")
+        v.lineItems[0].itemDescription = "Typed description"
+        v.lineItems[0].quantity = 3; v.lineItems[0].unitPriceCents = 20_000
+        unrelated.notes = "Pending unrelated notes"
+        sync.calls.removeAll()
+        #expect(v.saveDraft() == false && v.errorMessage != nil)
+        #expect(sync.calls.isEmpty)
+        #expect(v.clientName == "Typed" && v.lineItems[0].itemDescription == "Typed description")
+        #expect(v.lineItems[0].quantity == 3 && v.lineItems[0].unitPriceCents == 20_000)
+        #expect(unrelated.notes == "Pending unrelated notes" && ctx.hasChanges)
+        let reader = ModelContext(ctx.container)
+        let saved = try #require(reader.fetch(FetchDescriptor<Invoice>()).first)
+        #expect(saved.clientName == "Saved" && saved.totalCents == 11_000)
+        #expect(try reader.fetch(FetchDescriptor<InvoiceLineItem>()).first?.unitPriceCents == 10_000)
+        shouldFail = false
+        #expect(v.saveDraft())
+        #expect(v.lineItems[0].itemDescription == "Typed description" && v.totals.total == 66_000)
+        let retried = ModelContext(ctx.container)
+        let savedLine = try #require(retried.fetch(FetchDescriptor<InvoiceLineItem>()).first)
+        #expect(savedLine.itemDescription == "Typed description" && savedLine.quantity == 3 && savedLine.unitPriceCents == 20_000)
+        #expect(try retried.fetch(FetchDescriptor<Client>()).first?.notes == "Pending unrelated notes")
+        #expect(sync.calls.contains { $0.entityType == .invoiceLineItem && $0.entityId == v.lineItems[0].id })
+    }
+
+    @Test(arguments: [false, true])
+    func failedDraftSaveRetainsNewLinesForRetry(existingDraft: Bool) throws {
+        let (ctx, sync) = try makeFixture()
+        var shouldFail = false
+        struct Failure: Error {}
+        let v = InvoiceEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { context in
+            if shouldFail { throw Failure() }
+            try context.save()
+        })
+        v.load(id: nil); v.setClient(name: "Typed client", email: nil)
+        var removedLine: InvoiceLineItem?
+        if existingDraft {
+            v.addLine(); v.lineItems[0].unitPriceCents = 10_000
+            #expect(v.saveDraft())
+            removedLine = v.lineItems[0]
+            v.removeLine(v.lineItems[0])
+        }
+        v.addLine()
+        let newLine = v.lineItems[0]
+        newLine.itemDescription = "Typed new line"
+        newLine.quantity = 2; newLine.unitPriceCents = 5_000
+        shouldFail = true; sync.calls.removeAll()
+        #expect(v.saveDraft() == false && v.errorMessage != nil && sync.calls.isEmpty)
+        #expect(newLine.itemDescription == "Typed new line" && newLine.quantity == 2 && newLine.unitPriceCents == 5_000)
+        #expect(removedLine?.deletedAt == nil)
+        // An unrelated later save must not persist a failed insert or deletion.
+        let unrelated = Client(userId: "u1", profileId: "p1", name: "Other")
+        ctx.insert(unrelated); try ctx.save()
+        let reader = ModelContext(ctx.container)
+        let beforeRetry = try reader.fetch(FetchDescriptor<InvoiceLineItem>())
+        #expect(beforeRetry.allSatisfy { $0.id != newLine.id && $0.deletedAt == nil })
+        #expect(try reader.fetch(FetchDescriptor<Invoice>()).count == (existingDraft ? 1 : 0))
+        shouldFail = false
+        #expect(v.saveDraft())
+        let retried = ModelContext(ctx.container)
+        let savedLines = try retried.fetch(FetchDescriptor<InvoiceLineItem>())
+        let savedLine = try #require(savedLines.first { $0.id == newLine.id })
+        #expect(savedLine.itemDescription == "Typed new line" && savedLine.quantity == 2 && savedLine.unitPriceCents == 5_000 && savedLine.deletedAt == nil)
+        if let removedLine {
+            #expect(savedLines.first { $0.id == removedLine.id }?.deletedAt != nil)
+            #expect(sync.calls.contains { $0.entityId == removedLine.id && $0.op == "delete" })
+        }
+        #expect(sync.calls.contains { $0.entityId == newLine.id && $0.op == "upsert" })
+    }
 }

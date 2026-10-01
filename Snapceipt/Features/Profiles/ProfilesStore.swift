@@ -15,6 +15,9 @@ import SwiftUI
 protocol SyncEnqueuing: AnyObject {
     func enqueue(op: String, entityType: EntityType, entity: any Syncable)
 
+    /// Queue using an isolated mutation context without saving unrelated editor changes.
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext)
+
     /// Drain the local outbox to the backend NOW, awaiting any in-flight sync
     /// first. Action endpoints that require a just-edited entity to already exist
     /// server-side (e.g. quote send) call this after `enqueue` so the upsert has
@@ -24,6 +27,9 @@ protocol SyncEnqueuing: AnyObject {
 }
 
 extension SyncEnqueuing {
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) {
+        enqueue(op: op, entityType: entityType, entity: entity)
+    }
     func flush() async {}
 }
 

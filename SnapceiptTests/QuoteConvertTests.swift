@@ -173,4 +173,60 @@ struct QuoteConvertTests {
         #expect(try ctx.fetch(FetchDescriptor<Invoice>()).isEmpty)
         #expect(q.clientId == client.id && q.status == "sent" && sync.calls.isEmpty)
     }
+
+    @Test func conversionUsesConsistentPersistedSourceAndIsolatesOutboxSaves() throws {
+        let (ctx, _) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Saved client", notes: "Saved notes")
+        let quote = Quote(userId: "u1", profileId: "p1", clientId: client.id, clientName: "Saved client", subtotalCents: 10_000, gstCents: 1_000, totalCents: 11_000, status: "sent")
+        let line = QuoteLineItem(userId: "u1", quoteId: quote.id, itemDescription: "Saved line", quantity: 1, unitPriceCents: 10_000)
+        ctx.insert(client); ctx.insert(quote); ctx.insert(line); try ctx.save()
+        let engine = SyncEngine(api: MockAPIClient(), context: ctx, auth: AuthStore(), toast: ToastCenter())
+        let v = QuoteEditorViewModel(context: ctx, sync: engine, userId: "u1", profileId: "p1")
+        v.load(id: quote.id)
+        v.lineItems[0].quantity = 2; v.lineItems[0].unitPriceCents = 20_000
+        v.lineItems[0].itemDescription = "Pending line"
+        v.gstEnabled = false
+        quote.clientName = "Pending contact"
+        client.notes = "Pending unrelated notes"
+        let iid = try #require(v.convertToInvoice())
+        let reader = ModelContext(ctx.container)
+        let invoice = try #require(reader.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == iid })).first)
+        let invoiceLine = try #require(reader.fetch(FetchDescriptor<InvoiceLineItem>()).first)
+        let savedQuote = try #require(reader.fetch(FetchDescriptor<Quote>()).first)
+        let savedLine = try #require(reader.fetch(FetchDescriptor<QuoteLineItem>()).first)
+        #expect(invoice.totalCents == 11_000 && invoice.gstEnabled)
+        #expect(invoiceLine.unitPriceCents == 10_000 && invoiceLine.quantity == 1 && invoiceLine.itemDescription == "Saved line")
+        #expect(invoice.subtotalCents == invoiceLine.lineTotalCents)
+        #expect(savedQuote.clientName == "Saved client" && savedQuote.totalCents == 11_000 && savedQuote.invoiceId == iid)
+        #expect(savedLine.unitPriceCents == 10_000 && savedLine.quantity == 1 && savedLine.itemDescription == "Saved line")
+        #expect(try reader.fetch(FetchDescriptor<Client>()).first?.notes == "Saved notes")
+        #expect(v.lineItems[0].unitPriceCents == 20_000 && v.lineItems[0].quantity == 2)
+        #expect(quote.clientName == "Pending contact" && client.notes == "Pending unrelated notes" && ctx.hasChanges)
+        let outbox = try reader.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(outbox.count == 3)
+        #expect(Set(outbox.map(\.entityType)) == Set([EntityType.invoice.rawValue, EntityType.invoiceLineItem.rawValue, EntityType.quote.rawValue]))
+        #expect(outbox.allSatisfy { $0.entityId != line.id && $0.entityId != client.id })
+        #expect(v.convertToInvoice() == iid)
+    }
+
+    @Test func failedConversionRetainsPendingSourceAndUnrelatedInput() throws {
+        let (ctx, sync) = try makeFixture()
+        let original = sentQuote(ctx, sync)
+        let client = Client(userId: "u1", profileId: "p1", name: "Other", notes: "Saved")
+        ctx.insert(client); try ctx.save()
+        struct Failure: Error {}
+        let v = QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { _ in throw Failure() })
+        v.load(id: original.quoteId)
+        v.lineItems[0].itemDescription = "Typed source description"
+        v.lineItems[0].quantity = 5; v.lineItems[0].unitPriceCents = 40_000
+        client.notes = "Pending unrelated"
+        sync.calls.removeAll()
+        #expect(v.convertToInvoice() == nil && v.errorMessage != nil)
+        #expect(v.lineItems[0].itemDescription == "Typed source description")
+        #expect(v.lineItems[0].quantity == 5 && v.lineItems[0].unitPriceCents == 40_000 && client.notes == "Pending unrelated" && ctx.hasChanges)
+        #expect(sync.calls.isEmpty)
+        let reader = ModelContext(ctx.container)
+        #expect(try reader.fetch(FetchDescriptor<Invoice>()).isEmpty)
+        #expect(try reader.fetch(FetchDescriptor<Quote>()).first?.status == "sent")
+    }
 }

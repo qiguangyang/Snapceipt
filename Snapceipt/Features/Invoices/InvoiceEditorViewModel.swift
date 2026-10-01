@@ -187,6 +187,20 @@ final class InvoiceEditorViewModel {
             context.insert(x)
             return x
         }()
+        let previousFields = (profileId: invoice.profileId,
+                              gstRateBp: invoice.gstRateBp,
+                              clientId: invoice.clientId,
+                              clientName: invoice.clientName,
+                              clientEmail: invoice.clientEmail,
+                              quoteId: invoice.quoteId,
+                              gstEnabled: invoice.gstEnabled,
+                              gstInclusive: invoice.gstInclusive,
+                              subtotalCents: invoice.subtotalCents,
+                              gstCents: invoice.gstCents,
+                              totalCents: invoice.totalCents,
+                              dueDate: invoice.dueDate,
+                              updatedAt: invoice.updatedAt)
+        let previousRate = gstRateBp
         // Snapshot the GST rate from the active profile on first save (mirrors the quote
         // editor); keep an existing snapshot (e.g. set by convert) so a re-save never
         // re-rates the invoice. (spec §3)
@@ -207,15 +221,19 @@ final class InvoiceEditorViewModel {
         invoice.updatedAt = Epoch.nowMs()
 
         let keptIds = Set(lineItems.map(\.id))
+        let previousLineMetadata = lineItems.map { ($0, $0.sortOrder, $0.updatedAt) }
+        var insertedLines: [InvoiceLineItem] = []
         for (idx, line) in lineItems.enumerated() {
             line.sortOrder = idx
             line.updatedAt = Epoch.nowMs()
-            if fetchLine(line.id) == nil { context.insert(line) }
+            if fetchLine(line.id) == nil { context.insert(line); insertedLines.append(line) }
         }
         let removed = originalLineIds.subtracting(keptIds)
         var deletedRows: [InvoiceLineItem] = []
+        var previousDeletedMetadata: [(InvoiceLineItem, Int?, Int)] = []
         for rid in removed {
             if let row = fetchLine(rid) {
+                previousDeletedMetadata.append((row, row.deletedAt, row.updatedAt))
                 row.deletedAt = Epoch.nowMs()
                 row.updatedAt = Epoch.nowMs()
                 deletedRows.append(row)
@@ -223,7 +241,31 @@ final class InvoiceEditorViewModel {
         }
         do { try persist(context) }
         catch {
-            context.rollback()
+            // Keep typed line/contact input and unrelated pending edits available for retry.
+            if existing == nil { context.delete(invoice) }
+            else {
+                invoice.profileId = previousFields.profileId
+                invoice.gstRateBp = previousFields.gstRateBp
+                invoice.clientId = previousFields.clientId
+                invoice.clientName = previousFields.clientName
+                invoice.clientEmail = previousFields.clientEmail
+                invoice.quoteId = previousFields.quoteId
+                invoice.gstEnabled = previousFields.gstEnabled
+                invoice.gstInclusive = previousFields.gstInclusive
+                invoice.subtotalCents = previousFields.subtotalCents
+                invoice.gstCents = previousFields.gstCents
+                invoice.totalCents = previousFields.totalCents
+                invoice.dueDate = previousFields.dueDate
+                invoice.updatedAt = previousFields.updatedAt
+            }
+            gstRateBp = previousRate
+            for line in insertedLines { context.delete(line) }
+            for (line, sortOrder, updatedAt) in previousLineMetadata {
+                line.sortOrder = sortOrder; line.updatedAt = updatedAt
+            }
+            for (line, deletedAt, updatedAt) in previousDeletedMetadata {
+                line.deletedAt = deletedAt; line.updatedAt = updatedAt
+            }
             errorMessage = "Couldn’t save the draft. Try again."
             return false
         }
