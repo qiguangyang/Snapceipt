@@ -252,6 +252,7 @@ struct AppLaunch {
                 itemDescription: String(repeating: "Detailed prior work description for review. ", count: 12), unitPriceCents: 10000))
             context.insert(Payment(id: "01990000-0000-7000-8000-000000000108", userId: DevAccount.userId, invoiceId: invoice.id, amountCents: 11000, paidOn: "2020-08-02"))
             context.insert(CatalogItem(id: "01990000-0000-7000-8000-000000000109", userId: DevAccount.userId, profileId: p1.id, itemDescription: "Journey consulting", unitLabel: "hour", unitPriceCents: 12500))
+            context.insert(CatalogItem(id: "01990000-0000-7000-8000-000000000118", userId: DevAccount.userId, profileId: p1.id, itemDescription: "NZD consulting", unitLabel: "hour", unitPriceCents: 12500, currency: "NZD"))
             let legacy = Quote(id: "01990000-0000-7000-8000-000000000110", userId: DevAccount.userId, profileId: p1.id, number: "Q-LEGACY", clientName: "Legacy snapshot contact", clientEmail: "legacy@example.test", clientAddress: "Original site address", clientMobile: "0400111222", subtotalCents: 1000, gstCents: 100, totalCents: 1100)
             context.insert(legacy)
             context.insert(QuoteLineItem(id: "01990000-0000-7000-8000-000000000111", userId: DevAccount.userId, quoteId: legacy.id, itemDescription: "Historical work", unitPriceCents: 1000))

@@ -77,59 +77,59 @@ final class ClientStore {
         let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let notes = normalized(draft.notes, trim: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ValidationError.blankName }
-        guard name.count <= 200 else { throw ValidationError.nameTooLong }
-        guard (notes?.count ?? 0) <= 10_000 else { throw ValidationError.notesTooLong }
+        guard name.utf16.count <= 200 else { throw ValidationError.nameTooLong }
+        guard (notes?.utf16.count ?? 0) <= 10_000 else { throw ValidationError.notesTooLong }
+        let isolated = ModelContext(context.container)
+        isolated.autosaveEnabled = false
         let client: Client
-        if let id { client = try liveClient(id) }
-        else {
+        let working: Client?
+        if let id {
+            working = try liveClient(id)
+            client = try liveClient(id, in: isolated)
+        } else {
+            working = nil
             client = Client(userId: userId, profileId: profileId, name: name)
-            context.insert(client)
+            isolated.insert(client)
         }
-        let previous = ClientDraft(name: client.name, email: client.email, mobilePhone: client.mobilePhone,
-                                   address: client.address, notes: client.notes)
-        let updatedAt = client.updatedAt
         client.name = name
         client.email = normalized(draft.email, trim: .whitespaces)
         client.mobilePhone = normalized(draft.mobilePhone, trim: .whitespaces)
         client.address = normalized(draft.address, trim: .whitespacesAndNewlines)
         client.notes = notes
         client.updatedAt = Epoch.nowMs()
-        do { try persist(context) }
-        catch {
-            // Restore only this operation, preserving other unsaved editor work.
-            if id == nil { context.delete(client) }
-            else {
-                client.name = previous.name; client.email = previous.email
-                client.mobilePhone = previous.mobilePhone; client.address = previous.address
-                client.notes = previous.notes; client.updatedAt = updatedAt
-            }
-            throw error
+        try sync.persistAndEnqueue(mutations: [.init(op: "upsert", entityType: .client, entity: client)],
+                                   context: isolated, save: persist)
+        if let working {
+            working.name = client.name; working.email = client.email
+            working.mobilePhone = client.mobilePhone; working.address = client.address
+            working.notes = client.notes; working.updatedAt = client.updatedAt
+            return working
         }
-        sync.enqueue(op: "upsert", entityType: .client, entity: client)
-        return client
+        return try liveClient(client.id)
     }
 
     func delete(id: String) throws {
-        let client = try liveClient(id)
+        let working = try liveClient(id)
+        let isolated = ModelContext(context.container)
+        isolated.autosaveEnabled = false
+        let client = try liveClient(id, in: isolated)
         let uid = userId, pid = profileId
-        let followUps = try context.fetch(FetchDescriptor<ClientFollowUp>(predicate: #Predicate {
+        let descriptor = FetchDescriptor<ClientFollowUp>(predicate: #Predicate {
             $0.userId == uid && $0.profileId == pid && $0.clientId == id && $0.deletedAt == nil
-        }))
-        let previousClientTime = client.updatedAt
-        let previousFollowUpTimes = followUps.map(\.updatedAt)
+        })
+        let followUps = try isolated.fetch(descriptor)
+        let workingFollowUps = try context.fetch(descriptor)
         let now = Epoch.nowMs()
         client.deletedAt = now; client.updatedAt = now
         for followUp in followUps { followUp.deletedAt = now; followUp.updatedAt = now }
-        do { try persist(context) }
-        catch {
-            client.deletedAt = nil; client.updatedAt = previousClientTime
-            for (followUp, updatedAt) in zip(followUps, previousFollowUpTimes) {
-                followUp.deletedAt = nil; followUp.updatedAt = updatedAt
-            }
-            throw error
+        let mutations = [SyncMutationDescriptor(op: "delete", entityType: .client, entity: client)]
+            + followUps.map { SyncMutationDescriptor(op: "delete", entityType: .clientFollowUp, entity: $0) }
+        try sync.persistAndEnqueue(mutations: mutations, context: isolated, save: persist)
+        working.deletedAt = now; working.updatedAt = now
+        let committedIds = Set(followUps.map(\.id))
+        for followUp in workingFollowUps where committedIds.contains(followUp.id) {
+            followUp.deletedAt = now; followUp.updatedAt = now
         }
-        sync.enqueue(op: "delete", entityType: .client, entity: client)
-        for followUp in followUps { sync.enqueue(op: "delete", entityType: .clientFollowUp, entity: followUp) }
         NotificationCenter.default.post(name: .clientFollowUpsDidChange, object: nil)
     }
 
@@ -191,13 +191,14 @@ final class ClientStore {
         for pair in invoices { pair.working.clientId = clientId; pair.working.updatedAt = now }
     }
 
-    private func liveClient(_ id: String) throws -> Client {
+    private func liveClient(_ id: String, in source: ModelContext? = nil) throws -> Client {
         let uid = userId, pid = profileId
         var descriptor = FetchDescriptor<Client>(predicate: #Predicate {
             $0.id == id && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
         })
         descriptor.fetchLimit = 1
-        guard let client = try context.fetch(descriptor).first else { throw ValidationError.unavailable }
+        guard let client = try (source ?? context).fetch(descriptor).first,
+              client.userId == uid, client.profileId == pid, client.deletedAt == nil else { throw ValidationError.unavailable }
         return client
     }
 

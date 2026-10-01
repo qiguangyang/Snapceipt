@@ -7,7 +7,7 @@ iOS 17 deployment support remain. No automatic customer messaging or recurrence.
 ## Automated evidence
 
 The detailed command/exit/count ledger is
-[Task 10 report](../../.superpowers/sdd/2026-10-01-v2-clients-repeat-work/task-10-report.md).
+[Verification evidence](v2-client-workspace-evidence.md).
 Final results are recorded there; do not interpret the existence of a test as a pass.
 
 | Acceptance | Owning automated verification |
@@ -19,6 +19,7 @@ Final results are recorded there; do not interpret the existence of a test as a 
 | Genuine v1 disk upgrades with IDs/values intact, optional new fields nil, no memory fallback | ClientWorkspaceUpgradeTests + FixtureBundlingTests |
 | Existing cached draft/outbox edited and deleted lines survive applied acknowledgements on iOS | ClientWorkspaceAppliedAckTests, real SyncEngine + scripted API response |
 | Offline edit survives disk relaunch and restores from local server after sign-out wipes local data | LiveJourneyUITests.testClientWorkspaceOfflineRelaunchAndServerRestore |
+| Edited pending clients precede linked work/reminders across 200-mutation batches; contact null clears reach repeat drafts; exact Unicode limits and catalog currency guards | ClientWorkspaceFinalFixTests + ClientsJourneyUITests mismatch message |
 | Save failure preserves input and unrelated pending changes, emits no success | Client/Catalog/FollowUp stores + editor atomic-save suites |
 | Completion/reopen/reschedule/deletion, account switch/sign-out/deletion cancel pending and delivered requests | FollowUp store/scheduler/lifecycle suites; fake notification center |
 | Permission denial/disabled device leaves in-app reminders; >32 chooses earliest eligible reminders | FollowUpNotificationSchedulerTests; fake notification center |
@@ -76,3 +77,11 @@ first validate ownership/liveness of an explicit target business profile.
 5. App Store upload and publication require their separate execution instruction.
 
 No production deployment, push, App Store upload or publication is part of Task 10.
+
+## Runtime warning follow-up
+
+- [ ] Classify the unclassified minor invalid-frame warning seen on client name/notes
+  and quote focus. Functional simulator journeys pass, but root cause and baseline
+  attribution remain unestablished. Check physical-device layout/focus before release;
+  investigate any visible defect. Known baseline actor-isolation/AppIntents and
+  Wrangler compatibility/configuration warnings remain disclosed in the evidence.

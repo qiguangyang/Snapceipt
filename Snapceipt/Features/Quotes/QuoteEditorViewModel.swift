@@ -197,6 +197,10 @@ final class QuoteEditorViewModel {
     func addCatalogItem(_ item: CatalogItem) throws -> String {
         let saved = try CatalogStore(context: context, sync: sync, userId: userId, profileId: profileId).ownedItem(item)
         guard let parentId = quoteId else { throw CatalogStore.ValidationError.unavailable }
+        let currency = fetchQuote(parentId)?.currency ?? AppSettings.businessCurrency(profileId: profileId)
+        guard saved.currency == currency else {
+            throw CatalogStore.ValidationError.currencyMismatch(item: saved.currency, document: currency)
+        }
         let price = try CatalogPrice.enteredCents(exclusiveCents: saved.unitPriceCents,
             gstEnabled: gstEnabled, gstInclusive: gstInclusive, rateBp: effectiveGstRateBp)
         let line = QuoteLineItem(userId: userId, quoteId: parentId,

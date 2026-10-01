@@ -28,6 +28,14 @@ final class ClientsJourneyUITests: UITestCase {
         XCTAssertTrue(app.staticTexts["Private site access notes"].exists)
         let quote = app.buttons[AccessibilityID.clientNewQuote]; reach(quote); quote.tap()
         let saved = app.buttons["Saved items"]; XCTAssertTrue(saved.waitForExistence(timeout: 5)); reach(saved); saved.tap()
+        let mismatch = app.buttons.containing(.staticText, identifier: "NZD consulting").firstMatch
+        XCTAssertTrue(mismatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "NZD 125.00")).firstMatch.exists)
+        mismatch.tap()
+        let explanation = app.staticTexts["This saved item is priced in NZD, but this document uses AUD. Add a manual item with a price in AUD."]
+        XCTAssertTrue(explanation.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Saved items"].exists)
+        shot("saved-item-currency-mismatch-explanation")
         let item = app.buttons.containing(.staticText, identifier: "Journey consulting").firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 5)); item.tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Journey consulting")).firstMatch.waitForExistence(timeout: 5))

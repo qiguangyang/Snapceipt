@@ -44,7 +44,7 @@ final class ClientFollowUpStore {
         try validateTimestamp(now)
         try validateTimestamp(dueAt)
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty && title.count <= 200 else { throw ValidationError.title }
+        guard !title.isEmpty && title.utf16.count <= 200 else { throw ValidationError.title }
         guard dueAt > now else { throw ValidationError.date }
         guard TimeZone(identifier: timezone) != nil else { throw ValidationError.timezone }
         let isolated = mutationContext()

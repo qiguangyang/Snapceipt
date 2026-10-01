@@ -853,9 +853,9 @@ private struct ClientSyncMapper: SyncRowMapper {
         if env.raw["notes"] != nil { row.notes = env.string("notes") }
         row.profileId = env.profileId
         if let v = env.string("name") { row.name = v }
-        if let v = env.string("email") { row.email = v }
-        if let v = env.string("mobilePhone") { row.mobilePhone = v }
-        if let v = env.string("address") { row.address = v }
+        if env.raw["email"] != nil { row.email = env.string("email") }
+        if env.raw["mobilePhone"] != nil { row.mobilePhone = env.string("mobilePhone") }
+        if env.raw["address"] != nil { row.address = env.string("address") }
     }
 
     func payload(_ r: Client) -> [String: JSONValue] {

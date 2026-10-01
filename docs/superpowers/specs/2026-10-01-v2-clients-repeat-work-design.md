@@ -57,7 +57,7 @@ A source must belong to the signed-in user and active profile, contain at least 
 
 ### Saved services and items
 
-Store description, an optional unit label, and unit price excluding GST. Search, create, edit, and soft-delete items per business profile. Inserting an item copies its values to a new document line with quantity 1. Editing or deleting a saved item never changes existing document lines.
+Store description, an optional unit label, and unit price excluding GST. Search, create, edit, and soft-delete items per business profile. Inserting an item copies its values to a new document line with quantity 1. Editing or deleting a saved item never changes existing document lines. Show each saved price's currency in the picker. Both document editors reject a saved item whose currency differs from the destination document, with an explanation to enter a manual price in the document currency. No FX conversion or currency mutation occurs.
 
 For GST-inclusive, GST-enabled documents, convert the saved exclusive price with integer half-up rounding: `floor((exclusiveCents * (10000 + rateBp) + 5000) / 10000)`. Otherwise use the exclusive price unchanged. This is unit-price conversion; existing engines remain authoritative for document totals.
 
@@ -93,7 +93,7 @@ Use the existing sync envelope: UUIDv7 `id`, `userId`, required `profileId` for 
 
 New table profile references use the same foreign-key convention as current profile-scoped tables. Client links are logical references checked in sync, avoiding a new FK that prevents legacy documents and tombstones from surviving client deletion. Index document history by `(user_id, profile_id, client_id, deleted_at, created_at)` and follow-ups by `(user_id, profile_id, completed_at, deleted_at, due_at)`.
 
-Trim names/descriptions/titles; reject blank values. Maximums: client name 200 characters, notes 10,000, item description 500, unit label 40, reminder title 200. Saved item price is `0...1_000_000_000` cents. Validate safe nonnegative integer timestamps and an IANA timezone. Blank optional notes/units normalize to null. Preserve existing contact field behavior.
+Trim names/descriptions/titles; reject blank values. Maximums, measured in UTF-16 code units to match the existing wire contract: client name 200, notes 10,000, item description 500, unit label 40, reminder title 200. Saved item price is `0...1_000_000_000` cents. Validate safe nonnegative integer timestamps and an IANA timezone. Blank optional notes/units normalize to null. Preserve existing contact field behavior.
 
 New links must resolve to a live client owned by the same user and profile. An existing document may retain its unchanged link to a soft-deleted client; assigning a new link to that deleted client is rejected. Unlinking is allowed. Client/profile reassignment that would invalidate live document or follow-up links is rejected. New client mutations precede dependent document/follow-up mutations.
 

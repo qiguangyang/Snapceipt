@@ -15,7 +15,7 @@ or recurring documents.
 Design: [v2 specification](../superpowers/specs/2026-10-01-v2-clients-repeat-work-design.md).
 Implementation: [plan and reconciled rulings](../superpowers/plans/2026-10-01-v2-clients-repeat-work.md).
 Acceptance: [checklist](v2-client-workspace-checklist.md).
-Detailed evidence: [Task 10 report](../../.superpowers/sdd/2026-10-01-v2-clients-repeat-work/task-10-report.md).
+Detailed evidence: [Verification evidence](v2-client-workspace-evidence.md).
 
 ## Validation
 
@@ -38,6 +38,14 @@ Detailed evidence: [Task 10 report](../../.superpowers/sdd/2026-10-01-v2-clients
   simulator diagnostic collection required owned-child cleanup and is partial.
   Eight full-run skips require live mode; one existing meals-default threading
   test documents functionality outside this feature's scope.
+
+Final review fixes also make client CRUD atomic with its outbox, retain parent
+queue positions on deduplication, apply explicit contact clears, match UTF-16 text
+limits, and reject saved-item currency mismatches in both editors. The final unit
+run passes 784 Swift Testing tests plus 4 XCTest tests. All three scoped client
+journeys pass, including the visible currency explanation; exact outcomes are in
+the durable evidence. Earlier failed full UI and later covering results above
+remain distinct.
 
 ## Release boundaries and remaining gates
 

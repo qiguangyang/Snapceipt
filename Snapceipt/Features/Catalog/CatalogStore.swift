@@ -6,8 +6,11 @@ import SwiftData
 final class CatalogStore {
     enum ValidationError: LocalizedError {
         case blankDescription, descriptionTooLong, unitTooLong, unavailable
+        case currencyMismatch(item: String, document: String)
         var errorDescription: String? {
             switch self {
+            case .currencyMismatch(let item, let document):
+                "This saved item is priced in \(item), but this document uses \(document). Add a manual item with a price in \(document)."
             case .blankDescription: "Enter a description."
             case .descriptionTooLong: "Description must be 500 characters or fewer."
             case .unitTooLong: "Unit must be 40 characters or fewer."

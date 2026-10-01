@@ -121,7 +121,8 @@ final class SyncEngine {
             existingDescriptor.fetchLimit = 1
             if let existing = try context.fetch(existingDescriptor).first {
                 existing.payloadJSON = payload
-                existing.createdAt = enqueueTime
+                // Preserve its original position: a newly created parent must stay
+                // before queued children, including across push batch boundaries.
                 return
             }
         }

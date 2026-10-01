@@ -25,7 +25,7 @@ struct CatalogPickerSheet: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(item.itemDescription)
-                            Text("\(item.unitLabel.map { "\($0) · " } ?? "")\(Double(item.unitPriceCents) / 100, specifier: "%.2f") excl. GST")
+                            Text("\(item.unitLabel.map { "\($0) · " } ?? "")\(item.currency) \(Double(item.unitPriceCents) / 100, specifier: "%.2f") excl. GST")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
