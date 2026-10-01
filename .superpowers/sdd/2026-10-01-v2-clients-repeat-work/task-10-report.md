@@ -339,3 +339,46 @@ outside this feature. Baseline fiscal evidence file:
 passes; project.yml/version/build and upload-ready release_notes.txt untouched.
 
 Commit subject: `test: verify v2 client workflows and upgrades` (local only).
+
+## Task10 review fix round1 — stock macOS Bash3 optional-array compatibility
+
+Base db973c7. Review Important finding reproduced: the optional XCODE_ARGS array
+was empty when IOS_DERIVED_DATA was absent; Bash3.2 with set-u reported
+`XCODE_ARGS[@]: unbound variable` before invoking xcodebuild. Replaced the empty
+optional array with a nonempty complete xcode argv containing fixed test/scheme/
+destination arguments, then appended the optional derived-data pair and nonempty
+class selections. Defaults, quoting, environment and production behavior unchanged.
+Only scripts/ios-e2e-journeys.sh and this report changed.
+
+Verification uses `/private/tmp/task10-harness-args.py`, which invokes the actual
+repository script with `/bin/bash`3.2.57 and PATH command stubs. Stub node/npx/curl/
+lsof/xcodegen/xcodebuild avoid real networking, migrations, builds and simulator
+launches. A harmless owned sleep stands in for the Worker lifetime and is cleaned
+up by the real script's cleanup trap. NUL-delimited argv capture verifies argument
+boundaries; no source fragment or alternate runner is substituted.
+
+RED command: `python3 /private/tmp/task10-harness-args.py >
+/private/tmp/task10-harness-bash3-red.log 2>&1`, actual verifier exit1.
+- Default/no overrides: unbound-array stderr; xcodebuild never called. The actual
+  runner returned0 via its existing EXIT cleanup, so checking exit alone would
+  falsely pass; verifier correctly required recorded argv and failed.
+- Explicit derived-data/destination/port and two class selectors: correct argv,
+  actual runner0, passed even before correction.
+- No derived override with synthetic xcode23: xcode never called, actual runner0,
+  verifier rejected missing argv and lost expected23.
+
+GREEN command: `python3 /private/tmp/task10-harness-args.py >
+/private/tmp/task10-harness-bash3-green.log 2>&1`, actual verifier exit0.
+All3 cases pass: default runner0 with original iPhone16 destination/default
+LiveJourneyUITests/8787; overrides runner0 with space-containing derived and
+persist paths preserved as single arguments, alternate destination/port and two
+class selectors; synthetic xcode23 propagates runner23. Exact node/npx argv and
+TEST_RUNNER_E2E_LIVE/API_BASE_URL are checked; default temporary persistence is
+removed on exit. Log records the captured argv, actual exits and Bash version.
+`/bin/bash -n scripts/ios-e2e-journeys.sh` and `git diff --check` exit0.
+
+Self-review: whole argv is always nonempty under set-u, optional pair order remains
+unchanged, and selected classes retain quoting. No app/backend/full-suite rerun:
+this is the scoped shell correction requested by review. Previously accepted
+full/covering/live evidence stands; minor frame warning and manual device gates
+remain explicitly open. No push/deploy/publication.

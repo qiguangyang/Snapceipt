@@ -85,10 +85,9 @@ echo "Backend up. Running journey classes: ${CLASSES[*]}"
 xcodegen generate
 ONLY=()
 for c in "${CLASSES[@]}"; do ONLY+=("-only-testing:SnapceiptUITests/$c"); done
-XCODE_ARGS=()
+# Keep the array nonempty: Bash 3.2 treats an empty array as unbound under set -u.
+XCODE_ARGS=(test -scheme Snapceipt -destination "${IOS_TEST_DESTINATION:-platform=iOS Simulator,name=iPhone 16}")
 if [[ -n "${IOS_DERIVED_DATA:-}" ]]; then XCODE_ARGS+=("-derivedDataPath" "$IOS_DERIVED_DATA"); fi
+XCODE_ARGS+=("${ONLY[@]}")
 TEST_RUNNER_E2E_LIVE=1 TEST_RUNNER_API_BASE_URL="$BASE" \
-  xcodebuild test -scheme Snapceipt \
-  -destination "${IOS_TEST_DESTINATION:-platform=iOS Simulator,name=iPhone 16}" \
-  "${XCODE_ARGS[@]}" \
-  "${ONLY[@]}"
+  xcodebuild "${XCODE_ARGS[@]}"
