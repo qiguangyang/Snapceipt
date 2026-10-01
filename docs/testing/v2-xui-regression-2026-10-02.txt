@@ -1,0 +1,72 @@
+Snapceipt v2 XCUITest simulator regression verification
+Date: 2026-10-02 (Australia/Sydney)
+Branch: codex/v2-clients-repeat-work
+Production tree: f4ac4db3db11d01ea45420d4c61665c65540e9e4. Only a test keyboard-dismiss step changed.
+Simulator: iPhone 16 / iOS 26.5 / 7962C2D3-C7A8-422D-A061-3C90F3D59206. Xcode 27.0 (27A266a). Default signing.
+
+Final coverage: 84 unique UI scenarios passed, 0 remaining failed assertions, 1 existing unsupported meals-default threading scenario skipped.
+No feature regression detected in these exercised simulator scenarios. This is not proof of every possible app behavior.
+Physical upgrade, spoken VoiceOver, actual OS notification delivery/taps and two-device behavior were not verified.
+
+FULL HERMETIC TARGET
+Actual command exit 0; authoritative xcresulttool summary: 76 passed, 9 skipped, 0 failed, 85 total.
+Eight live skips were separately exercised below. The remaining skip is SettingsExtraUITests/testMealsDefaultPctThreads: existing taxMealsPct-to-capture threading is not implemented; fixed stub assertions would be vacuous.
+Command: xcodebuild test -project Snapceipt.xcodeproj -scheme Snapceipt -destination platform=iOS Simulator,id=7962C2D3-C7A8-422D-A061-3C90F3D59206 -derivedDataPath /private/tmp/snapceipt-v2-derived -resultBundlePath /private/tmp/snapceipt-xui-20261002.7zrdG7/hermetic.xcresult -parallel-testing-enabled NO -only-testing:SnapceiptUITests
+Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/hermetic.log
+Retained bundle: /private/tmp/snapceipt-xui-20261002.7zrdG7/hermetic.xcresult
+
+LIVE LOCAL WORKER SCENARIOS
+Each method uses scripts/ios-e2e-journeys.sh with fresh temporary local D1/Worker persistence, a free loopback port, IOS_TEST_DESTINATION set to the UUID above and IOS_DERIVED_DATA=/private/tmp/snapceipt-v2-derived. Harness verifies listener ownership. No production endpoint or unrelated listener is touched.
+AuthRateLimitLiveUITests/testFailedPasswordLoginsDoNotBlockCodeRequest: actual exit 0; 1 passed / 0 failed / 0 skipped; port 49358
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/auth-rerun.log
+  Evidence: xcresulttool summary + final log and recorded exit
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-57-02-+1000.xcresult (retained)
+LiveSmokeUITests/testLiveDevSignIn: actual exit 0; 1 passed / 0 failed / 0 skipped; port 62648
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-2.log
+  Evidence: final suite/footer log + recorded exit; older bundle pruned by Xcode
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-40-42-+1000.xcresult (pruned; final log retained)
+LiveJourneyUITests/testClientWorkspaceOfflineRelaunchAndServerRestore: actual exit 0; 1 passed / 0 failed / 0 skipped; port 62867
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-3.log
+  Evidence: final suite/footer log + recorded exit; older bundle pruned by Xcode
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-40-58-+1000.xcresult (pruned; final log retained)
+LiveJourneyUITests/testFirstRunOnboardingToShell: actual exit 0; 1 passed / 0 failed / 0 skipped; port 63719
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-4.log
+  Evidence: final suite/footer log + recorded exit; older bundle pruned by Xcode
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-46-24-+1000.xcresult (pruned; final log retained)
+LiveJourneyUITests/testLiveLaunchReachesSignIn: actual exit 0; 1 passed / 0 failed / 0 skipped; port 64041
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-5.log
+  Evidence: xcresulttool summary + final log and recorded exit
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-47-09-+1000.xcresult (retained)
+LiveJourneyUITests/testOfflineCaptureDrainsOnReconnect: actual exit 0; 1 passed / 0 failed / 0 skipped; port 64199
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-6.log
+  Evidence: xcresulttool summary + final log and recorded exit
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-47-24-+1000.xcresult (retained)
+LiveJourneyUITests/testProfilePersistsAcrossRelaunch: actual exit 0; 1 passed / 0 failed / 0 skipped; port 64779
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-7.log
+  Evidence: xcresulttool summary + final log and recorded exit
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-51-43-+1000.xcresult (retained)
+SyncFailureUITests/testInflightRequeuesAfterRelaunch: actual exit 0; 1 passed / 0 failed / 0 skipped; port 65119
+  Log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-8.log
+  Evidence: xcresulttool summary + final log and recorded exit
+  Bundle: /tmp/snapceipt-v2-derived/Logs/Test/Test-Snapceipt-2026.10.02_03-52-29-+1000.xcresult (retained)
+
+AUTH TEST RED / GREEN
+Original live batch returned actual exit 1: seven methods passed; auth test returned 65. Original failure log and exported AX hierarchy retained.
+Worker received nine password/login 401 responses but no code request. AX hierarchy showed the code button at y=461..479 with keyboard starting y=469; tap center overlapped the keyboard. Product EmailLoginView and this test were unchanged from e22d995 before correction.
+Test-only correction: call existing dismissKeyboard() before tapping the code button. Production auth, rate limits and assertions unchanged.
+Focused rerun returned actual exit 0; reached code screen. Worker recorded nine password/login 401 responses followed by otp/request 202.
+Rerun passed documented -collect-test-diagnostics never through a temporary xcodebuild wrapper to avoid stalled verbose sysdiagnostics. Assertions, logs, normal result bundle and rate limiter retained.
+Original log: /private/tmp/snapceipt-xui-20261002.7zrdG7/live-1.log
+AX failure evidence: /private/tmp/snapceipt-xui-20261002.7zrdG7/auth-failure-attachments
+GREEN log: /private/tmp/snapceipt-xui-20261002.7zrdG7/auth-rerun.log
+
+DIAGNOSTICS / VISUAL LIMITS
+Live methods 3, 6, 8 passed assertions but optional simctl diagnose stalled. Fresh child/parent/result-path verification preceded SIGTERM only to diagnostic children 50497/49931, 51940/51625, 53149/53078. Xcode was not terminated and returned actual 0 / TEST SUCCEEDED. Verbose diagnostics are partial.
+Other runs completed naturally. Xcode pruned some older derived-data result bundles; retained final logs and captured exits remain independent evidence. The explicit hermetic bundle and failure AX exports are retained.
+Hermetic summary contains 25 previously documented invalid-frame runtime warnings. Root cause remains unclassified; test passes do not imply warning-free layout.
+Exported and viewed both repeat-editor screenshots: review banners, save controls and wrapped long descriptions are visible. Screenshots: /private/tmp/snapceipt-xui-20261002.7zrdG7/visual-check
+Coverage includes all eight v2 client UI checks (five inspections, three journeys), currency guard, legacy confirmation, paid repeat/profile isolation, DST/large text, and existing auth/capture/quotes/invoices/reports/settings/navigation/restart/requeue flows.
+
+All retained bundles were checked with xcresulttool. Pruned bundles are explicitly identified and verified using complete suite logs, success footers and real recorded exits, not early assertion output.
+Combined machine-readable evidence: /private/tmp/snapceipt-xui-20261002.7zrdG7/combined-summary.json
+Artifacts: /private/tmp/snapceipt-xui-20261002.7zrdG7

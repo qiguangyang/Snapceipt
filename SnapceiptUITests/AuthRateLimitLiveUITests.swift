@@ -42,6 +42,7 @@ final class AuthRateLimitLiveUITests: UITestCase {
         }
 
         // Now request a code — it must SEND (reach the code screen), NOT "Too many attempts".
+        dismissKeyboard() // The keyboard can overlap the code button after the error appears.
         let useCode = app.buttons[AccessibilityID.signInUseCode]
         waitEnabled(useCode, "Email me a code")
         useCode.tap()
