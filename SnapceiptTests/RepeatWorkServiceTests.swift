@@ -228,3 +228,73 @@ extension RepeatWorkServiceTests {
         #expect(sync.calls.isEmpty)
     }
 }
+
+extension RepeatWorkServiceTests {
+    @Test(arguments: [nil, 2000] as [Int?], [true, false])
+    func quoteRateSurvivesEditorRoundTrip(sourceRate: Int?, linked: Bool) throws {
+        let (context, sync, client) = try fixture() // Current profile rate: 1500 bp.
+        let effectiveRate = sourceRate ?? 1000
+        let tax = 10000 * effectiveRate / 10000
+        let source = Quote(userId: "u1", profileId: "p1", clientId: linked ? client.id : nil,
+                           clientName: "Historical", gstEnabled: true, gstInclusive: false,
+                           subtotalCents: 10000, gstCents: tax, totalCents: 10000 + tax,
+                           currency: "NZD", status: "sent", gstRateBp: sourceRate)
+        let sourceLine = QuoteLineItem(userId: "u1", quoteId: source.id, itemDescription: "Work",
+                                       unitLabel: "hour", quantity: 1, unitPriceCents: 10000)
+        context.insert(source); context.insert(sourceLine); try context.save()
+        let before = [snapshot(source), snapshot(sourceLine)]
+        let id: String
+        if linked {
+            id = try service(context, sync).repeatQuote(sourceId: source.id, now: now)
+        } else {
+            let list = QuoteListViewModel(context: context, sync: sync, userId: "u1", profileId: "p1", clock: { now })
+            id = try #require(list.duplicate(source))
+        }
+        let editor = QuoteEditorViewModel(context: context, sync: sync, userId: "u1", profileId: "p1")
+        editor.load(id: id)
+        #expect(editor.gstRateBp == effectiveRate)
+        #expect(editor.totals.total == 10000 + tax)
+        #expect(editor.saveDraft())
+        let saved = ModelContext(context.container)
+        let draft = try #require(saved.fetch(FetchDescriptor<Quote>()).first { $0.id == id })
+        let line = try #require(saved.fetch(FetchDescriptor<QuoteLineItem>()).first { $0.quoteId == id })
+        #expect(draft.gstRateBp == effectiveRate && draft.totalCents == 10000 + tax)
+        #expect(draft.gstEnabled && !draft.gstInclusive && draft.currency == "NZD")
+        #expect(line.unitPriceCents == 10000 && line.quantity == 1 && line.unitLabel == "hour")
+        let unchangedSource = try #require(saved.fetch(FetchDescriptor<Quote>()).first { $0.id == source.id })
+        let unchangedLine = try #require(saved.fetch(FetchDescriptor<QuoteLineItem>()).first { $0.id == sourceLine.id })
+        #expect([snapshot(unchangedSource), snapshot(unchangedLine)] == before)
+    }
+
+    @Test(arguments: [nil, 2000] as [Int?])
+    func invoiceRateSurvivesEditorRoundTrip(sourceRate: Int?) throws {
+        let (context, sync, client) = try fixture() // Current profile rate: 1500 bp.
+        let effectiveRate = sourceRate ?? 1000
+        let tax = 10000 * effectiveRate / 10000
+        let source = Invoice(userId: "u1", profileId: "p1", clientId: client.id,
+                             clientName: "Historical", gstEnabled: true, gstInclusive: false,
+                             subtotalCents: 10000, gstCents: tax, totalCents: 10000 + tax,
+                             currency: "NZD", status: "issued", gstRateBp: sourceRate)
+        let sourceLine = InvoiceLineItem(userId: "u1", invoiceId: source.id, itemDescription: "Work",
+                                         unitLabel: "hour", quantity: 1, unitPriceCents: 10000)
+        let payment = Payment(userId: "u1", invoiceId: source.id, amountCents: 10000 + tax, paidOn: "2026-09-01")
+        context.insert(source); context.insert(sourceLine); context.insert(payment); try context.save()
+        let before = [snapshot(source), snapshot(sourceLine), snapshot(payment)]
+        let id = try service(context, sync).repeatInvoice(sourceId: source.id, now: now)
+        let editor = InvoiceEditorViewModel(context: context, sync: sync, userId: "u1", profileId: "p1")
+        editor.load(id: id)
+        #expect(editor.gstRateBp == effectiveRate)
+        #expect(editor.totals.total == 10000 + tax)
+        #expect(editor.saveDraft())
+        let saved = ModelContext(context.container)
+        let draft = try #require(saved.fetch(FetchDescriptor<Invoice>()).first { $0.id == id })
+        let line = try #require(saved.fetch(FetchDescriptor<InvoiceLineItem>()).first { $0.invoiceId == id })
+        #expect(draft.gstRateBp == effectiveRate && draft.totalCents == 10000 + tax)
+        #expect(draft.gstEnabled && !draft.gstInclusive && draft.currency == "NZD")
+        #expect(line.unitPriceCents == 10000 && line.quantity == 1 && line.unitLabel == "hour")
+        let unchangedSource = try #require(saved.fetch(FetchDescriptor<Invoice>()).first { $0.id == source.id })
+        let unchangedLine = try #require(saved.fetch(FetchDescriptor<InvoiceLineItem>()).first { $0.id == sourceLine.id })
+        let unchangedPayment = try #require(saved.fetch(FetchDescriptor<Payment>()).first { $0.id == payment.id })
+        #expect([snapshot(unchangedSource), snapshot(unchangedLine), snapshot(unchangedPayment)] == before)
+    }
+}

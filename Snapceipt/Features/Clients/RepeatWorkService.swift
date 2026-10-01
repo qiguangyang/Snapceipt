@@ -89,6 +89,8 @@ final class RepeatWorkService {
         }, sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt), SortDescriptor(\.id)]))
         guard allowLegacy || !lines.isEmpty else { throw ValidationError.emptySource }
         let stamp = Int((now.timeIntervalSince1970 * 1000).rounded())
+        // Legacy nil means the historical totals-engine default, not today's profile rate.
+        // Persist it explicitly so opening/saving the draft cannot silently re-rate it.
         let quote = Quote(userId: userId, profileId: profileId, clientId: client?.id,
                           clientName: client?.name ?? source.clientName,
                           clientEmail: client == nil ? source.clientEmail : client?.email,
@@ -98,7 +100,7 @@ final class RepeatWorkService {
                           subtotalCents: source.subtotalCents, gstCents: source.gstCents,
                           totalCents: source.totalCents, currency: source.currency,
                           validUntil: Self.documentDate(now: now, addingDays: 28),
-                          gstRateBp: source.gstRateBp, createdAt: stamp, updatedAt: stamp)
+                          gstRateBp: source.gstRateBp ?? QuoteTotals.defaultRateBp, createdAt: stamp, updatedAt: stamp)
         mutationContext.insert(quote)
         let copies = lines.enumerated().map { index, line in
             QuoteLineItem(userId: userId, quoteId: quote.id, itemDescription: line.itemDescription,
@@ -131,7 +133,7 @@ final class RepeatWorkService {
                               subtotalCents: source.subtotalCents, gstCents: source.gstCents,
                               totalCents: source.totalCents, currency: source.currency,
                               dueDate: Self.documentDate(now: now, addingDays: 14),
-                              gstRateBp: source.gstRateBp, createdAt: stamp, updatedAt: stamp)
+                              gstRateBp: source.gstRateBp ?? QuoteTotals.defaultRateBp, createdAt: stamp, updatedAt: stamp)
         mutationContext.insert(invoice)
         let copies = lines.enumerated().map { index, line in
             InvoiceLineItem(userId: userId, invoiceId: invoice.id, itemDescription: line.itemDescription,
