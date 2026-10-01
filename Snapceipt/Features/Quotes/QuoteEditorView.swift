@@ -62,8 +62,8 @@ struct QuoteEditorView: View {
         .sheet(isPresented: $showClientPicker) {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
-                                  onPick: { name, email, mobile, address in
-                                      vm.setClient(name: name, email: email, mobile: mobile, address: address)
+                                  onPick: { selection in
+                                      vm.setClient(selection)
                                       showClientPicker = false
                                   },
                                   onClose: { showClientPicker = false })
@@ -93,8 +93,7 @@ struct QuoteEditorView: View {
             // server-minted quote number instead.
             if vm == nil || vm?.statusValue == .draft {
                 Button {
-                    vm?.saveDraft()
-                    onSavedDraft()
+                    if vm?.saveDraft() == true { onSavedDraft() }
                 } label: {
                     Text("Save Draft").font(.ui(12.5, .bold))
                         .foregroundStyle((vm?.canSaveDraft ?? false) ? accent.base : Palette.ink3)

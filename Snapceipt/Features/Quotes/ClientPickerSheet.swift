@@ -9,7 +9,7 @@ struct ClientPickerSheet: View {
     let sync: any SyncEnqueuing
     let userId: String
     let profileId: String
-    let onPick: (_ name: String, _ email: String?, _ mobile: String?, _ address: String?) -> Void
+    let onPick: (ClientSelection) -> Void
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
@@ -34,6 +34,9 @@ struct ClientPickerSheet: View {
                         searchField
                         newClientButton
                         if showNew { newClientForm(vm) }
+                        if let error = vm.errorMessage {
+                            Text(error).font(.ui(12.5)).foregroundStyle(Palette.alert)
+                        }
                     }
                     .listRowBackground(Palette.cream)
                     .listRowSeparator(.hidden)
@@ -42,7 +45,7 @@ struct ClientPickerSheet: View {
                     if !clients.isEmpty {
                         Section {
                             ForEach(clients) { client in
-                                Button { onPick(client.name, client.email, client.mobilePhone, client.address) } label: { row(client) }
+                                Button { onPick(ClientSelection(client)) } label: { row(client) }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier(AccessibilityID.clientRowPrefix + client.id)
                                     .listRowBackground(Palette.cream)
@@ -110,7 +113,7 @@ struct ClientPickerSheet: View {
             Button {
                 if let c = vm.create(name: newName, email: newEmail,
                                      mobilePhone: newMobile, address: newAddress) {
-                    onPick(c.name, c.email, c.mobilePhone, c.address)
+                    onPick(ClientSelection(c))
                 }
             } label: {
                 Text("Save client").font(.ui(15, .semibold)).foregroundStyle(.white)

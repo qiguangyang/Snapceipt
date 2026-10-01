@@ -137,4 +137,40 @@ struct QuoteConvertTests {
         let invoices = try ctx.fetch(FetchDescriptor<Invoice>())
         #expect(invoices.isEmpty)
     }
+
+    @Test func convertPreservesClientLinkAndQuoteSnapshot() throws {
+        let (ctx, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Original", email: "old@example.com")
+        ctx.insert(client); try ctx.save()
+        let v = sentQuote(ctx, sync)
+        let qid = try #require(v.quoteId)
+        let q = try #require(ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == qid })).first)
+        q.clientId = client.id
+        q.clientName = "Original"; q.clientEmail = "old@example.com"
+        try ctx.save()
+        _ = try ClientStore(context: ctx, sync: sync, userId: "u1", profileId: "p1").save(id: client.id, draft: ClientDraft(name: "Renamed", email: "new@example.com"))
+        v.load(id: qid)
+        // Conversion must use the stored quote, even if the editor's working snapshot differs.
+        v.setClient(name: "Unsaved other contact", email: "unsaved@example.com")
+        let iid = try #require(v.convertToInvoice())
+        let inv = try #require(ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == iid })).first)
+        #expect(inv.clientId == client.id)
+        #expect(inv.clientName == "Original" && inv.clientEmail == "old@example.com")
+    }
+
+    @Test func convertDoesNotCreateNewLinkToDeletedClient() throws {
+        let (ctx, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Original")
+        ctx.insert(client); try ctx.save()
+        let v = sentQuote(ctx, sync)
+        let qid = try #require(v.quoteId)
+        let q = try #require(ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == qid })).first)
+        q.clientId = client.id; try ctx.save()
+        try ClientStore(context: ctx, sync: sync, userId: "u1", profileId: "p1").delete(id: client.id)
+        v.load(id: qid)
+        sync.calls.removeAll()
+        #expect(v.convertToInvoice() == nil && v.errorMessage != nil)
+        #expect(try ctx.fetch(FetchDescriptor<Invoice>()).isEmpty)
+        #expect(q.clientId == client.id && q.status == "sent" && sync.calls.isEmpty)
+    }
 }

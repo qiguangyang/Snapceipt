@@ -45,7 +45,7 @@ struct InvoiceEditorView: View {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
                                   // clientAddress + clientMobile are scoped to QUOTES only — invoices ignore them.
-                                  onPick: { name, email, _, _ in vm.setClient(name: name, email: email); showClientPicker = false },
+                                  onPick: { selection in vm.setClient(selection); showClientPicker = false },
                                   onClose: { showClientPicker = false })
                     .environment(\.accent, accent)
             }

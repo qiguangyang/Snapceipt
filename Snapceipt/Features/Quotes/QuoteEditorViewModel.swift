@@ -12,6 +12,7 @@ final class QuoteEditorViewModel {
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private let sync: any SyncEnqueuing
     @ObservationIgnored private let userId: String
+    @ObservationIgnored private let persist: (ModelContext) throws -> Void
     @ObservationIgnored let profileId: String
 
     /// Localized tax label (GST / Sales tax / GST/HST) for the profile's business currency.
@@ -24,7 +25,8 @@ final class QuoteEditorViewModel {
     }()
 
     private func fetchProfile(_ id: String) -> Profile? {
-        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id })
+        let uid = userId
+        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id && $0.userId == uid })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }
@@ -57,6 +59,7 @@ final class QuoteEditorViewModel {
     /// When true (and `gstEnabled`), entered prices already include GST — see
     /// `QuoteTotals.compute`. Only meaningful while `gstEnabled`.
     var gstInclusive = false
+    private(set) var clientId: String?
     private(set) var clientName: String?
     private(set) var clientEmail: String?
     /// Snapshot of the picked client's freeform address (mirrors clientName/clientEmail);
@@ -81,10 +84,12 @@ final class QuoteEditorViewModel {
 
     @ObservationIgnored private var originalLineIds: Set<String> = []
 
-    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String) {
+    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String,
+         persist: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
         self.sync = sync
         self.userId = userId
+        self.persist = persist
         self.profileId = profileId
     }
 
@@ -120,6 +125,7 @@ final class QuoteEditorViewModel {
             quoteId = q.id
             gstEnabled = q.gstEnabled
             gstInclusive = q.gstInclusive
+            clientId = q.clientId
             clientName = q.clientName
             clientEmail = q.clientEmail
             clientAddress = q.clientAddress
@@ -132,8 +138,9 @@ final class QuoteEditorViewModel {
             invoiceId = q.invoiceId
             gstRateBp = q.gstRateBp
             let qid = q.id
+            let uid = userId
             let d = FetchDescriptor<QuoteLineItem>(
-                predicate: #Predicate { $0.quoteId == qid && $0.deletedAt == nil },
+                predicate: #Predicate { $0.quoteId == qid && $0.userId == uid && $0.deletedAt == nil },
                 sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)])
             lineItems = (try? context.fetch(d)) ?? []
             originalLineIds = Set(lineItems.map(\.id))
@@ -141,6 +148,7 @@ final class QuoteEditorViewModel {
             quoteId = ID.uuidv7()
             gstEnabled = true
             gstInclusive = false
+            clientId = nil
             clientName = nil
             clientEmail = nil
             clientAddress = nil
@@ -158,10 +166,19 @@ final class QuoteEditorViewModel {
     }
 
     func setClient(name: String, email: String?, mobile: String? = nil, address: String? = nil) {
+        clientId = nil
         clientName = name
         clientEmail = email
         clientMobile = mobile
         clientAddress = address
+    }
+
+    func setClient(_ selection: ClientSelection) {
+        clientId = selection.id
+        clientName = selection.name
+        clientEmail = selection.email
+        clientMobile = selection.mobilePhone
+        clientAddress = selection.address
     }
 
     /// Append a blank line item. Returns the new line's id so the editor can move keyboard
@@ -180,9 +197,16 @@ final class QuoteEditorViewModel {
         lineItems.removeAll { $0.id == line.id }
     }
 
-    func saveDraft() {
-        guard let qid = quoteId else { return }
-        let quote = fetchQuote(qid) ?? {
+    @discardableResult
+    func saveDraft() -> Bool {
+        errorMessage = nil
+        guard let qid = quoteId else { return false }
+        let existing = fetchQuote(qid)
+        guard validClientLink(clientId, previousId: existing?.clientId) else {
+            errorMessage = "Select a live client in this business."
+            return false
+        }
+        let quote = existing ?? {
             let q = Quote(userId: userId, profileId: profileId,
                           currency: AppSettings.businessCurrency(profileId: profileId))
             q.id = qid
@@ -195,6 +219,7 @@ final class QuoteEditorViewModel {
         if quote.gstRateBp == nil { quote.gstRateBp = profileGstRateBp }
         gstRateBp = quote.gstRateBp
         let t = totals
+        quote.clientId = clientId
         quote.clientName = clientName
         quote.clientEmail = clientEmail
         quote.clientAddress = clientAddress
@@ -222,18 +247,24 @@ final class QuoteEditorViewModel {
                 deletedRows.append(row)
             }
         }
-        try? context.save()
+        do { try persist(context) }
+        catch {
+            context.rollback()
+            errorMessage = "Couldn’t save the draft. Try again."
+            return false
+        }
 
         sync.enqueue(op: "upsert", entityType: .quote, entity: quote)
         for line in lineItems { sync.enqueue(op: "upsert", entityType: .quoteLineItem, entity: line) }
         for row in deletedRows { sync.enqueue(op: "delete", entityType: .quoteLineItem, entity: row) }
         originalLineIds = keptIds
+        return true
     }
 
     func send(api: APIClient) async -> Bool {
         guard let qid = quoteId else { return false }
         errorMessage = nil
-        saveDraft()
+        guard saveDraft() else { return false }
         isSending = true
         defer { isSending = false }
         // The send route loads the quote from D1 (it was only just enqueued locally
@@ -287,7 +318,7 @@ final class QuoteEditorViewModel {
     func shareLink(api: APIClient) async -> String? {
         guard let qid = quoteId else { return nil }
         errorMessage = nil
-        saveDraft()
+        guard saveDraft() else { return nil }
         isSending = true
         defer { isSending = false }
         await sync.flush()
@@ -345,16 +376,27 @@ final class QuoteEditorViewModel {
     func convertToInvoice() -> String? {
         guard let qid = quoteId, let quote = fetchQuote(qid) else { return nil }
         if let existing = quote.invoiceId { invoiceId = existing; return existing }
-        guard canConvert else { return nil }
-        saveDraft()   // ensure the quote + lines are persisted before cloning
+        guard quote.status == QuoteStatus.sent.rawValue || quote.status == QuoteStatus.accepted.rawValue else { return nil }
+        guard validClientLink(quote.clientId, previousId: nil) else {
+            errorMessage = "Select a live client in this business before creating an invoice."
+            return nil
+        }
+        let uid = userId
+        let descriptor = FetchDescriptor<QuoteLineItem>(
+            predicate: #Predicate { $0.quoteId == qid && $0.userId == uid && $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)])
+        guard let sourceLines = try? context.fetch(descriptor) else {
+            errorMessage = "Couldn’t load the quote items. Try again."
+            return nil
+        }
 
         let due = Self.dueDatePlus14()
-        let t = totals
         let invoice = Invoice(userId: userId, profileId: profileId,
                               quoteId: qid,
-                              clientName: clientName, clientEmail: clientEmail,
-                              gstEnabled: gstEnabled, gstInclusive: gstInclusive,
-                              subtotalCents: t.subtotal, gstCents: t.gst, totalCents: t.total,
+                              clientId: quote.clientId,
+                              clientName: quote.clientName, clientEmail: quote.clientEmail,
+                              gstEnabled: quote.gstEnabled, gstInclusive: quote.gstInclusive,
+                              subtotalCents: quote.subtotalCents, gstCents: quote.gstCents, totalCents: quote.totalCents,
                               currency: quote.currency,
                               status: "draft", dueDate: due,
                               // Snapshot the quote's GST rate onto the invoice so it stays
@@ -363,9 +405,10 @@ final class QuoteEditorViewModel {
         context.insert(invoice)
 
         var clonedLines: [InvoiceLineItem] = []
-        for (idx, line) in lineItems.enumerated() {
+        for (idx, line) in sourceLines.enumerated() {
             let cloned = InvoiceLineItem(userId: userId, invoiceId: invoice.id,
                                          itemDescription: line.itemDescription,
+                                         unitLabel: line.unitLabel,
                                          quantity: line.quantity, unitPriceCents: line.unitPriceCents,
                                          sortOrder: idx)
             context.insert(cloned)
@@ -375,7 +418,12 @@ final class QuoteEditorViewModel {
         quote.invoiceId = invoice.id
         quote.status = QuoteStatus.invoiced.rawValue
         quote.updatedAt = Epoch.nowMs()
-        try? context.save()
+        do { try persist(context) }
+        catch {
+            context.rollback()
+            errorMessage = "Couldn’t create the invoice. Try again."
+            return nil
+        }
 
         sync.enqueue(op: "upsert", entityType: .invoice, entity: invoice)
         for line in clonedLines { sync.enqueue(op: "upsert", entityType: .invoiceLineItem, entity: line) }
@@ -402,14 +450,28 @@ final class QuoteEditorViewModel {
     /// "YYYY-MM-DD" 28 days from today (UTC) — the default quote validity.
     static func validUntilPlus28() -> String { dateString(daysFromNow: 28) }
 
+    private func validClientLink(_ candidate: String?, previousId: String?) -> Bool {
+        guard let clientId = candidate else { return true }
+        // Historical documents may keep their unchanged link after deletion.
+        if clientId == previousId { return true }
+        let uid = userId, pid = profileId
+        let descriptor = FetchDescriptor<Client>(predicate: #Predicate {
+            $0.id == clientId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+        })
+        return (try? context.fetch(descriptor).isEmpty) == false
+    }
+
     private func fetchQuote(_ id: String) -> Quote? {
-        var d = FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id })
+        let uid = userId, pid = profileId
+        var d = FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }
 
     private func fetchLine(_ id: String) -> QuoteLineItem? {
-        var d = FetchDescriptor<QuoteLineItem>(predicate: #Predicate { $0.id == id })
+        guard let parentId = quoteId, fetchQuote(parentId) != nil else { return nil }
+        let uid = userId
+        var d = FetchDescriptor<QuoteLineItem>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.quoteId == parentId })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }

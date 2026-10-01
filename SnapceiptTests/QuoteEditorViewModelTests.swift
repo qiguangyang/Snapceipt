@@ -284,4 +284,55 @@ struct QuoteEditorViewModelTests {
         #expect(v.statusValue == .draft)
         #expect(v.number == nil)
     }
+
+    @Test func selectionPersistsClientId() throws {
+        let (ctx, sync) = try makeFixture()
+        let picker = ClientPickerViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
+        let client = try #require(picker.create(name: "Acme", email: "old@example.com", mobilePhone: "0400000000", address: "Original address"))
+        let editor = QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
+        editor.load(id: nil)
+        editor.setClient(ClientSelection(client))
+        editor.saveDraft()
+        let loaded = QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1")
+        loaded.load(id: editor.quoteId)
+        #expect(loaded.clientId == client.id)
+        #expect(loaded.clientMobile == "0400000000" && loaded.clientAddress == "Original address")
+        #expect(loaded.clientName == "Acme" && loaded.clientEmail == "old@example.com")
+        #expect(sync.calls.first?.entityType == .client)
+        loaded.setClient(name: "Legacy", email: nil)
+        loaded.saveDraft()
+        #expect(loaded.clientId == nil)
+    }
+
+    @Test func scopedClientLinksAndDeletedHistory() throws {
+        let (ctx, sync) = try makeFixture()
+        let live = Client(userId: "u1", profileId: "p1", name: "Live")
+        let foreign = Client(userId: "u2", profileId: "p1", name: "Foreign")
+        let other = Client(userId: "u1", profileId: "p2", name: "Other")
+        let deleted = Client(userId: "u1", profileId: "p1", name: "Deleted", deletedAt: 1)
+        for client in [live, foreign, other, deleted] { ctx.insert(client) }
+        try ctx.save()
+        let v = vm(ctx, sync); v.load(id: nil)
+        for client in [foreign, other, deleted] {
+            v.setClient(ClientSelection(client))
+            #expect(v.saveDraft() == false)
+            #expect(v.errorMessage != nil && sync.calls.isEmpty)
+        }
+        v.setClient(ClientSelection(live))
+        #expect(v.saveDraft())
+        let id = v.quoteId
+        try ClientStore(context: ctx, sync: sync, userId: "u1", profileId: "p1").delete(id: live.id)
+        let loaded = vm(ctx, sync); loaded.load(id: id)
+        #expect(loaded.clientId == live.id && loaded.saveDraft())
+    }
+
+    @Test func saveFailureDoesNotEnqueueDraft() throws {
+        let (ctx, sync) = try makeFixture()
+        struct Failure: Error {}
+        let v = QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { _ in throw Failure() })
+        v.load(id: nil); v.setClient(name: "Acme", email: nil)
+        #expect(v.saveDraft() == false)
+        #expect(v.errorMessage != nil && sync.calls.isEmpty)
+        #expect(try ctx.fetch(FetchDescriptor<Quote>()).isEmpty)
+    }
 }

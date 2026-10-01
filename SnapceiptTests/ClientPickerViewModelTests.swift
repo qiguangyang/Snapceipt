@@ -20,6 +20,7 @@ struct ClientPickerViewModelTests {
         let (ctx, sync) = try makeFixture()
         ctx.insert(Client(userId: "u1", profileId: "p1", name: "Beta"))
         ctx.insert(Client(userId: "u1", profileId: "p1", name: "Acme"))
+        ctx.insert(Client(userId: "u2", profileId: "p1", name: "Foreign"))
         ctx.insert(Client(userId: "u1", profileId: "p2", name: "Other"))   // excluded
         try ctx.save()
         let v = vm(ctx, sync)
@@ -81,5 +82,27 @@ struct ClientPickerViewModelTests {
         #expect(v.filtered(search: "acme").count == 1)
         #expect(v.filtered(search: "B@X").count == 1)
         #expect(v.filtered(search: "  ").count == 2)   // blank -> all
+    }
+
+    @Test func failedCreateDoesNotSelectOrDismiss() throws {
+        let (ctx, sync) = try makeFixture()
+        struct Failure: Error {}
+        let v = ClientPickerViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { _ in throw Failure() })
+        var selections = 0
+        // The picker invokes onPick (which closes the sheet) only for a returned client.
+        if v.create(name: "Failed", email: nil) != nil { selections += 1 }
+        #expect(selections == 0 && v.errorMessage != nil && sync.calls.isEmpty)
+        #expect(v.clients.isEmpty)
+    }
+
+    @Test func deleteUsesStoreAndCancelsFollowUps() throws {
+        let (ctx, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Acme")
+        let follow = ClientFollowUp(userId: "u1", profileId: "p1", clientId: client.id, title: "Call")
+        ctx.insert(client); ctx.insert(follow); try ctx.save()
+        let v = vm(ctx, sync)
+        v.delete(client)
+        #expect(v.clients.isEmpty && follow.deletedAt != nil)
+        #expect(sync.calls.count == 2)
     }
 }
