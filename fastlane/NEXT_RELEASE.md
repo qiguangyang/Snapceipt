@@ -53,3 +53,24 @@ they ride the next version (1.x). `promotional_text` is the exception — it is
 - After Apple **approves v1.0.0**, run `npx wrangler secret delete REVIEW_DEMO_EMAIL`
   to close the review-2FA bypass on the demo account. See the App Store
   submission notes.
+
+## Proposed v2 — Clients and repeat work (not upload-ready metadata)
+
+Proposed What's New:
+
+> Keep client details, private notes and document history together in your business profile. Prepare a fresh quote or invoice from previous work, choose saved services and items, and set follow-ups so you know what to do next. Review prices and dates before sending. Follow-ups work in-app, with optional reminders on each enabled device.
+
+This proposal preserves the staged 1.x metadata above. Version/build and
+`metadata/en-AU/release_notes.txt` remain unchanged. At an explicitly requested
+v2 release preparation, reconcile any intervening release work, set the intended
+2.0.0 version/build and approve the final What's New copy.
+
+Rollout: apply additive D1 migrations and deploy compatible Worker support using
+the existing staging/release workflow **before** distributing the v2 iOS build.
+Verify old payloads retain omitted v2 fields and server-owned PDF metadata.
+Follow-ups are local notifications: each device must opt in, and multiple enabled
+devices may remind independently. No automatic documents or customer messages.
+
+Use [the v2 acceptance checklist](../docs/testing/v2-client-workspace-checklist.md)
+for automated evidence and outstanding physical-device release gates. Production
+deployment, App Store upload and publication are separate authorized actions.

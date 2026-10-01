@@ -33,7 +33,7 @@ describe("notifyEmailInBatch", () => {
     const spy = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
     await seedUserWithDevice("u_many", "tok_many");
     await notifyEmailInBatch(env, "u_many", 3, T);
-    const p = spy.mock.calls[0][2];
+    const p = spy.mock.calls[0]![2];
     expect(p.aps.alert.title).toBe("New receipts");
     expect(p.aps.alert.body).toBe("3 receipts arrived — tap to review.");
   });
@@ -71,11 +71,11 @@ describe("notifyEmailInBatch", () => {
     await seedUserWithDevice("u_dev", "tok_dev");
     await env.DB.prepare(`UPDATE devices SET apns_environment = 'development' WHERE user_id = 'u_dev'`).run();
     await notifyEmailInBatch(env, "u_dev", 1, T);
-    expect(spy.mock.calls[0][3]).toBe("development");
+    expect(spy.mock.calls[0]![3]).toBe("development");
 
     const spy2 = vi.spyOn(apns, "sendPush").mockResolvedValue({ stub: false, status: 200 });
     await seedUserWithDevice("u_prod", "tok_prod"); // apns_environment NULL -> production
     await notifyEmailInBatch(env, "u_prod", 1, T);
-    expect(spy2.mock.calls[0][3]).toBe("production");
+    expect(spy2.mock.calls[0]![3]).toBe("production");
   });
 });

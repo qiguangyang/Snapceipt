@@ -1,3 +1,4 @@
+import { grantLocalPro } from "./helpers/entitlement";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,7 +66,7 @@ async function api(
 }
 
 describe("e2e (real HTTP): inbox alias endpoints", () => {
-  it("mints an alias for a pushed profile and rotates it", async () => {
+  it("mints a stable alias for a pushed profile", async () => {
     const email = `e2e-inbox+${Date.now()}@example.com`;
     const deviceId = crypto.randomUUID();
     const ip = "203.0.113.77";
@@ -77,6 +78,7 @@ describe("e2e (real HTTP): inbox alias endpoints", () => {
     });
     expect(verifyRes.status).toBe(200);
     const userId: string = verifyRes.json.user.id;
+    grantLocalPro(repoRoot, persistDir, userId);
     const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
 
     const profileId = crypto.randomUUID();
@@ -100,12 +102,15 @@ describe("e2e (real HTTP): inbox alias endpoints", () => {
     const got = await api(`/profiles/${profileId}/inbox`, { headers: authHeaders });
     expect(got.status).toBe(200);
     expect(got.json.profileId).toBe(profileId);
-    expect(got.json.token).toMatch(/^[0-9a-f]{32}$/);
+    expect(got.json.token).toMatch(/^[a-z2-7]{13}$/);
     expect(got.json.address).toBe(`r.${got.json.token}@in.snapceipt.cc`);
 
-    const rotated = await api(`/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: authHeaders });
-    expect(rotated.status).toBe(200);
-    expect(rotated.json.token).not.toBe(got.json.token);
+    const repeated = await api(`/profiles/${profileId}/inbox`, { headers: authHeaders });
+    expect(repeated.status).toBe(200);
+    expect(repeated.json.token).toBe(got.json.token);
+    // Rotation was removed before v2; a persisted alias remains stable.
+    const removed = await api(`/profiles/${profileId}/inbox/rotate`, { method: "POST", headers: authHeaders });
+    expect(removed.status).toBe(404);
   });
 
   it("404s for a profile the caller does not own", async () => {

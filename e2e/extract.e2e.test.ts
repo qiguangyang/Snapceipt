@@ -90,7 +90,7 @@ describe("e2e: /extract (stub) + /images round-trip + ownership", () => {
     const body = (await res.json()) as any;
     expect(typeof body.requestId).toBe("string");
     expect(body.receipt.currencyCode).toBe("AUD");
-    expect(body.receipt.merchant).toBe("THE GROUNDS");
+    expect(body.receipt.merchant).toBe("ACME HARDWARE PTY LTD");
     expect(body.receipt.total).toBe(33.0);
     expect(body.receipt.gst).toBe(3.0);
     expect(body.receipt.needsReview).toBe(false);

@@ -16,7 +16,7 @@
 
 - Preserve iOS 17.0 support and the existing five bottom-bar entries.
 - Use existing dependencies; no new network service, background scheduler, or analytics SDK.
-- Every new domain query requires both authenticated `userId` and active `profileId`.
+- Workspace queries require authenticated `userId` and active `profileId`. Reminder planning/navigation may use an explicit target profile only after verifying it is a live business profile owned by that user.
 - Money is integer cents; line quantities remain positive integers; IDs are UUIDv7.
 - Client editing, catalog editing, history association, and duplication never rewrite historical document snapshots.
 - Create again always creates an unsent, unissued draft and never copies payments or creates income.
@@ -151,11 +151,11 @@ Task dependencies: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10**.
 - Modify: `Snapceipt/Features/Clients/ClientStore.swift`
 - Reuse: `Snapceipt/Features/Invoices/AccountsReceivable.swift`
 
-**Interfaces:** `ClientHistory.load(context: ModelContext, userId: String, profileId: String, clientId: String, today: String) throws -> ClientHistory.Snapshot` returns `documents: [Document]` and `outstandingCents: Int`, where `Document` carries kind (`quote`/`invoice`), ID, number, created timestamp, total, status, and optional derived invoice payment state. Define `ClientHistory.DocumentReference { kind: DocumentKind, id: String }` and `DocumentKind` with `quote`/`invoice` cases. `LegacyClientLinker.suggestions(client: ClientSelection, quotes: [Quote], invoices: [Invoice]) -> [Suggestion]` is pure; `Suggestion` carries kind, document ID, and reason (`email`/`name`). `ClientStore.linkExistingDocuments(clientId: String, documents: [ClientHistory.DocumentReference]) throws` performs the user-confirmed write.
+**Interfaces:** `ClientHistory.load(context: ModelContext, userId: String, profileId: String, clientId: String, today: String) throws -> ClientHistory.Snapshot` returns `documents: [Document]`, `outstandingByCurrency: [String: Int]`, and compatibility-only `outstandingCents: Int`, where `Document` carries kind (`quote`/`invoice`), ID, number, created timestamp, total, saved currency, status, and optional derived invoice payment state. Define `ClientHistory.DocumentReference { kind: DocumentKind, id: String }` and `DocumentKind` with `quote`/`invoice` cases. `LegacyClientLinker.suggestions(client: ClientSelection, userId: String, profileId: String, quotes: [Quote], invoices: [Invoice]) -> [Suggestion]` is pure; `Suggestion` carries kind, document ID, and reason (`email`/`name`). `ClientStore.linkExistingDocuments(clientId: String, documents: [ClientHistory.DocumentReference]) throws` performs the user-confirmed write.
 
 - [ ] **Step 1: Write** `historyUsesIdsNotContactEquality` with matching client names/emails but different IDs/profiles/users; expect only explicit same-scope links. `outstandingUsesLiveIssuedInvoices` seeds issued totals 10,000 and 5,000, live payments 3,000 and 6,000, deleted payment 2,000, draft total 9,000, void total 8,000; expect `outstandingCents == 7_000`. `suggestionsNeverWrite` expects deterministic matches and zero context/sync mutations. `ambiguousSameNameNeedsSelection` keeps two candidates explicit. `linkChangesOnlyIdAndEnvelope` compares all financial/snapshot fields before/after and expects equality. `confirmationRechecksCurrentScopeAndLink` refuses a row already linked elsewhere since suggestion generation; do not partially apply the selected set.
 - [ ] **Step 2: Run** `ClientHistoryTests` and `LegacyClientLinkerTests` with the iOS unit command. Expect missing helper/API failures.
-- [ ] **Step 3: Implement** ID-based queries, per-invoice `AccountsReceivable.derive`, and `max(total - paid, 0)` only for live issued invoices. Filter payments by invoice and user. Implement normalized exact suggestion matches and an explicit same-profile manual unlinked picker. Confirmation validates the entire selection first, saves once, and enqueues only after success. No automatic backfill or historical snapshot refresh.
+- [ ] **Step 3: Implement** ID-based queries, per-invoice `AccountsReceivable.derive`, and `max(total - paid, 0)` only for live issued invoices. Filter payments by invoice and user. Implement normalized exact suggestion matches and an explicit same-profile manual unlinked picker. Confirmation validates the entire selection first, stages durable outbox work with the checked atomic boundary, and commits domain/outbox together. Failure exposes no successful mutation. No automatic backfill or historical snapshot refresh.
 - [ ] **Step 4: Run** both suites. Expect deterministic ordering, scoped associations, 7,000-cent balance, and unchanged historical fields.
 - [ ] **Step 5: Commit** with `feat: add client history and confirmed document association`.
 
@@ -218,7 +218,7 @@ Task dependencies: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10**.
 - Modify: `Snapceipt/App/Router.swift`, `Snapceipt/App/RootView.swift`, `Snapceipt/App/SnapceiptApp.swift`, `Snapceipt/Features/Notifications/NotificationDelegate.swift`, `Snapceipt/Shared/AccessibilityID.swift`
 - Modify tests: `SnapceiptTests/RouterTests.swift`, `SnapceiptTests/NotificationDelegateTests.swift`
 
-**Interfaces:** Add `Overlay.clients(clientId: String?)` and `Router.openClient(_ id: String?)`. `ClientsHubView` receives context/sync/api/userId/profileId/initialClientId/onClose and owns its NavigationStack plus editor presentation enum. `ClientWorkspaceViewModel` composes stores/history/repeat service; it never replicates money calculations. Add `ClientReminderRoute { userId, profileId, clientId, followUpId }` and an injected `ClientReminderRouteCoordinator.receive(_ route: ClientReminderRoute)` / `resumeAfterSessionRestoration()` pair. This coordinator owns one pending cold-launch route and cancels it on account change/sign-out.
+**Interfaces:** Add `Overlay.clients(clientId: String?)` and `Router.openClient(_ id: String?)`. `ClientsHubView` receives context/sync/api/userId/profileId/initialClientId/onClose/scheduler and owns its NavigationStack plus editor presentation enum. `ClientWorkspaceViewModel` composes stores/history/repeat service; it never replicates money calculations. Add `ClientReminderRoute { userId, profileId, clientId, followUpId }` and an injected `ClientReminderRouteCoordinator.receive(_ route: ClientReminderRoute)` / `resumeAfterSessionRestoration()` pair. This coordinator owns one pending cold-launch route and cancels it on account change/sign-out.
 
 - [ ] **Step 1: Write** `hubActionsReturnToSelectedClient`, `repeatActionDoubleTapGuard`, `reloadAfterSync`, and `personalProfileHasNoClientsEntry`. Routing tests cover ready-session same-profile tap, valid other-business-profile switch, signed-out cold launch followed by same-user restore, different-user restore, deleted client/profile/follow-up, completed follow-up, malformed payload, and sign-out before async restore finishes. Expect only valid current-user live rows to open a client; queueing does not expose contact fields. Existing budget/email notification routing must still pass.
 - [ ] **Step 2: Run** the new view-model/routing suites plus RouterTests/NotificationDelegateTests. Expect missing route/coordinator behaviors to fail.
@@ -257,3 +257,18 @@ Task dependencies: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10**.
 All agreed capabilities map to tasks: client workspace/notes (4, 9), history/balances (5, 9), confirmed legacy links (5), manual repeat work (6), saved items/units (7), follow-ups/notifications (8, 9), and migration/release verification (1–3, 10). The five Review Focus conditions have named tests in their owning tasks. Proposed engineering defaults are identified in the spec; no automatic recurring workflow or new customer messaging service has been added.
 
 Implementation can proceed in this chat using `superpowers:executing-plans` when requested. The shared schema/client identity contracts should land before UI work so every new screen uses the same history, cloning, and notification behavior.
+
+## Final interface/release rulings
+
+Stores, repeat work, conversion and document-editor saves use checked atomic staging
+in isolated mutation contexts. Legacy nil GST becomes the existing effective engine
+default in a repeated draft. Balances in the client UI use outstandingByCurrency;
+the aggregate field remains only for compatibility. InvoiceEditorView has optional
+onSavedDraft (default nil), a draft-only Save Draft action when supplied, and a
+visible repeat-review banner. Successful callbacks alone return to client detail.
+
+Task 10 prepares proposed copy/checklists and a local PR description. It does not
+change project version/build or replace upload-ready release_notes.txt; those belong
+to the separately requested release preparation. Additive D1/Worker support rolls
+out before the v2 client. Physical VoiceOver, OS delivery and second-device checks
+must be reported distinctly from simulator/fake-center automation.

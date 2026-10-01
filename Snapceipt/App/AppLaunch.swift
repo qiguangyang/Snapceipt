@@ -135,7 +135,7 @@ struct AppLaunch {
         authStore.save(SessionResponse(
             accessToken: "seed-access", refreshToken: "seed-refresh", expiresIn: 900,
             user: SessionUser(id: DevAccount.userId, email: DevAccount.email, displayName: "Dev")))
-        let p1 = Profile(userId: DevAccount.userId, name: "Studio North", type: "business",
+        let p1 = Profile(id: useStub && clientWorkspace ? "01990000-0000-7000-8000-000000000101" : ID.uuidv7(), userId: DevAccount.userId, name: "Studio North", type: "business",
                          initials: "SN", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950",
                          sortOrder: 0, isDefault: true)
         let p2 = Profile(userId: DevAccount.userId, name: "Home Budget", type: "personal",
@@ -219,7 +219,7 @@ struct AppLaunch {
         context.insert(VehicleYear(userId: DevAccount.userId, profileId: p2.id, vehicleId: "v2",
                                    fyStartYear: FinancialYear.of(Date(), startMonth: 7).startYear, claimCents: 0))
         // F5: seed a saved client + a draft quote (+ one line item) on p1 (active business).
-        let client = Client(userId: DevAccount.userId, profileId: p1.id,
+        let client = Client(id: useStub && clientWorkspace ? "01990000-0000-7000-8000-000000000103" : ID.uuidv7(), userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")
         context.insert(client)
         // Optional extension of the existing hermetic fixture, reached through Business Home.
@@ -228,27 +228,44 @@ struct AppLaunch {
             client.notes = String(repeating: "Discuss access, materials and timing before preparing the next draft. ", count: 30)
             client.mobilePhone = "0400 123 456"
             let formatter = ISO8601DateFormatter()
-            for (title, instant) in [("DST gap inspection", "2026-10-04T02:30:00Z"), ("DST overlap inspection", "2027-04-04T02:30:00Z")] {
-                context.insert(ClientFollowUp(userId: DevAccount.userId, profileId: p1.id, clientId: client.id,
+            for (index, pair) in [("DST gap inspection", "2026-10-04T02:30:00Z"), ("DST overlap inspection", "2027-04-04T02:30:00Z")].enumerated() {
+                let (title, instant) = pair
+                context.insert(ClientFollowUp(id: String(format: "01990000-0000-7000-8000-%012d", 120 + index), userId: DevAccount.userId, profileId: p1.id, clientId: client.id,
                     title: title, dueAt: Int(formatter.date(from: instant)!.timeIntervalSince1970 * 1000), timezone: "UTC"))
             }
         }
-        let quote = Quote(userId: DevAccount.userId, profileId: p1.id,
+        let quote = Quote(id: useStub && clientWorkspace ? "01990000-0000-7000-8000-000000000104" : ID.uuidv7(), userId: DevAccount.userId, profileId: p1.id,
                           clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
                           gstEnabled: true, subtotalCents: 200_00, gstCents: 20_00, totalCents: 220_00,
                           status: "draft")
         context.insert(quote)
         if useStub && clientWorkspace { quote.clientId = client.id }
-        context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: quote.id,
+        context.insert(QuoteLineItem(id: useStub && clientWorkspace ? "01990000-0000-7000-8000-000000000105" : ID.uuidv7(), userId: DevAccount.userId, quoteId: quote.id,
                                      itemDescription: clientWorkspace ? String(repeating: "Brand identity package with full design descriptions. ", count: 12) : "Brand identity package", quantity: 1,
                                      unitPriceCents: 200_00, sortOrder: 0))
         if useStub && clientWorkspace {
-            let invoice = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-REPEAT", clientId: client.id,
+            let invoice = Invoice(id: "01990000-0000-7000-8000-000000000106", userId: DevAccount.userId, profileId: p1.id, number: "INV-REPEAT", clientId: client.id,
                 clientName: client.name, gstEnabled: true, subtotalCents: 10000, gstCents: 1000, totalCents: 11000,
-                status: "issued", dueDate: "2026-09-01")
+                status: "issued", issueDate: "2020-08-01", dueDate: "2020-09-01", issuedAt: 1596240000000)
             context.insert(invoice)
-            context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invoice.id,
+            context.insert(InvoiceLineItem(id: "01990000-0000-7000-8000-000000000107", userId: DevAccount.userId, invoiceId: invoice.id,
                 itemDescription: String(repeating: "Detailed prior work description for review. ", count: 12), unitPriceCents: 10000))
+            context.insert(Payment(id: "01990000-0000-7000-8000-000000000108", userId: DevAccount.userId, invoiceId: invoice.id, amountCents: 11000, paidOn: "2020-08-02"))
+            context.insert(CatalogItem(id: "01990000-0000-7000-8000-000000000109", userId: DevAccount.userId, profileId: p1.id, itemDescription: "Journey consulting", unitLabel: "hour", unitPriceCents: 12500))
+            let legacy = Quote(id: "01990000-0000-7000-8000-000000000110", userId: DevAccount.userId, profileId: p1.id, number: "Q-LEGACY", clientName: "Legacy snapshot contact", clientEmail: "legacy@example.test", clientAddress: "Original site address", clientMobile: "0400111222", subtotalCents: 1000, gstCents: 100, totalCents: 1100)
+            context.insert(legacy)
+            context.insert(QuoteLineItem(id: "01990000-0000-7000-8000-000000000111", userId: DevAccount.userId, quoteId: legacy.id, itemDescription: "Historical work", unitPriceCents: 1000))
+            let south = Profile(id: "01990000-0000-7000-8000-000000000112", userId: DevAccount.userId, name: "Journey South", type: "business", initials: "JS", accent1: "#0E7C72", accent2: "#DCF0ED", accent3: "#0A5950", sortOrder: 2)
+            context.insert(south)
+            let southClient = Client(id: "01990000-0000-7000-8000-000000000113", userId: DevAccount.userId, profileId: south.id, name: "South client", notes: "South confidential notes")
+            context.insert(southClient)
+            let southInvoice = Invoice(id: "01990000-0000-7000-8000-000000000114", userId: DevAccount.userId, profileId: south.id, number: "INV-SOUTH", clientId: southClient.id, clientName: southClient.name, subtotalCents: 5000, gstCents: 500, totalCents: 5500, status: "issued")
+            context.insert(southInvoice)
+            context.insert(InvoiceLineItem(id: "01990000-0000-7000-8000-000000000115", userId: DevAccount.userId, invoiceId: southInvoice.id, itemDescription: "South work", unitPriceCents: 5000))
+            context.insert(Payment(id: "01990000-0000-7000-8000-000000000116", userId: DevAccount.userId, invoiceId: southInvoice.id, amountCents: 500, paidOn: "2026-09-01"))
+            context.insert(CatalogItem(id: "01990000-0000-7000-8000-000000000117", userId: DevAccount.userId, profileId: south.id, itemDescription: "South saved item", unitPriceCents: 5000))
+            context.insert(ClientFollowUp(id: "01990000-0000-7000-8000-000000000118", userId: DevAccount.userId, profileId: south.id, clientId: southClient.id, title: "South reminder", dueAt: 1800000000000, timezone: "Australia/Sydney"))
+
         }
         // F6: two email-in receipts on the business profile — one failed (needs review),
         // one done — so EmailInUITests can exercise the failed-first list + review flow.

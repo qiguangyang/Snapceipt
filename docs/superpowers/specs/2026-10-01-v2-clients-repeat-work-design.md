@@ -118,3 +118,29 @@ Recheck scope and link state on confirmation. Records linked by another edit mus
 - Backend suites, iOS unit suites, and the new end-to-end client journey pass before release.
 
 Primary product measures to evaluate after launch: time to prepare a repeat draft, use of Create again/saved items, and completed follow-ups. No unapproved analytics provider is added by this plan.
+
+## Implementation rulings reconciled (2026-10-01)
+
+Workspace reads use authenticated user plus active business profile. The all-business
+reminder planner and notification navigation first validate a live business profile
+owned by that user, then query with the explicit target profile. No unscoped client
+or follow-up reads are permitted.
+
+Successful domain mutations and durable outbox staging commit atomically in an
+isolated SwiftData context. A checked staging/save failure preserves typed input
+and unrelated pending edits, and never reports success. Legacy-link suggestions
+accept explicit userId/profileId and confirmation rechecks the entire selection.
+
+Repeat drafts freeze an absent legacy GST snapshot to the existing engine default
+(1000 basis points), preserving historical tax interpretation if profile settings
+change. Document currencies remain their saved currencies; client balances group
+by currency using the existing AccountsReceivable derivation, with no FX conversion.
+
+Hub-owned invoice draft editors expose an optional successful-save callback and
+Save Draft action; failure never dismisses. Other callers retain existing defaults.
+Delivered and pending local reminders are reconciled. Profile eligibility observes
+identity/type/update changes, including same-count changes.
+
+Version 2.0.0 and upload-ready release-note replacement are reserved for actual
+release preparation. NEXT_RELEASE contains proposed copy while staged 1.x work is
+preserved. Deploy additive server support before distributing the v2 app.

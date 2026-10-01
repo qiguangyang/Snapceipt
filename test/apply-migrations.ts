@@ -1,3 +1,4 @@
+import type { Env } from "../src/env";
 import { applyD1Migrations, env } from "cloudflare:test";
 
 // TEST_MIGRATIONS is a test-only binding populated in vitest.config.ts via

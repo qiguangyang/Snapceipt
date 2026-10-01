@@ -169,7 +169,7 @@ describe("e2e (real HTTP): health -> banks 501 -> auth gate -> magic-link -> pus
     // --- iOS SessionResponse contract: { accessToken, refreshToken, expiresIn, user } ---
     expect(typeof session.accessToken).toBe("string");
     expect(typeof session.refreshToken).toBe("string");
-    expect(session.expiresIn).toBe(900);
+    expect(session.expiresIn).toBe(600);
     expect(typeof session.user.id).toBe("string");
     expect(session.user.email).toBe(email);
     // SessionUser declares displayName (nullable) — the key must be present.
@@ -302,7 +302,7 @@ describe("e2e (real HTTP): health -> banks 501 -> auth gate -> magic-link -> pus
     const refreshed = refreshRes.json;
     expect(typeof refreshed.accessToken).toBe("string");
     expect(typeof refreshed.refreshToken).toBe("string");
-    expect(refreshed.expiresIn).toBe(900);
+    expect(refreshed.expiresIn).toBe(600);
     // Rotation: a NEW refresh token (the old one is now superseded).
     expect(refreshed.refreshToken).not.toBe(session.refreshToken);
     expect(refreshed.user.id).toBe(userId);
