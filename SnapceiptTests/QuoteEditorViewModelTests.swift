@@ -494,6 +494,49 @@ struct QuoteEditorViewModelTests {
         let saved = try #require(ModelContext(context.container).fetch(FetchDescriptor<Quote>()).first)
         #expect(saved.clientName == "After" && saved.totalCents == 110 && saved.number == "Issued-1")
     }
+    @Test(arguments: [" \n\t ", String(repeating: " ", count: 60), "  hour \n", "  " + String(repeating: "u", count: 40) + "  ", "  " + String(repeating: "u", count: 41) + "  "])
+    func manualUnitsNormalizeOnlyAfterAtomicSuccess(rawUnit: String) throws {
+        let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
+        context.autosaveEnabled = false
+        let engine = SyncEngine(api: MockAPIClient(), context: context, auth: AuthStore(), toast: ToastCenter())
+        var fail = true, staged = 0
+        enum Failure: Error { case save }
+        let editor = QuoteEditorViewModel(context: context, sync: engine, userId: "u1", profileId: "p1", persist: { transaction in
+            staged = try transaction.fetch(FetchDescriptor<OutboxMutation>()).count
+            if fail { throw Failure.save }
+            try transaction.save()
+        })
+        editor.load(id: nil); editor.addLine()
+        let working = try #require(editor.lineItems.first)
+        working.itemDescription = "Manual service"; working.unitLabel = rawUnit; working.unitPriceCents = 100
+        let trimmed = rawUnit.trimmingCharacters(in: .whitespacesAndNewlines)
+        let valid = trimmed.utf16.count <= 40
+        #expect(!editor.saveDraft() && editor.errorMessage != nil)
+        #expect(working.unitLabel == rawUnit)
+        #expect(staged == (valid ? 2 : 0))
+        let failed = ModelContext(context.container)
+        #expect(try failed.fetch(FetchDescriptor<Quote>()).isEmpty)
+        #expect(try failed.fetch(FetchDescriptor<QuoteLineItem>()).isEmpty)
+        #expect(try failed.fetch(FetchDescriptor<OutboxMutation>()).isEmpty)
+        fail = false
+        if !valid {
+            #expect(!editor.saveDraft() && working.unitLabel == rawUnit)
+            #expect(try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>()).isEmpty)
+            working.unitLabel = "  day  "
+        }
+        let expected = valid ? (trimmed.isEmpty ? nil : trimmed) : "day"
+        #expect(editor.saveDraft() && editor.errorMessage == nil)
+        #expect(working.unitLabel == expected)
+        let saved = ModelContext(context.container)
+        let line = try #require(saved.fetch(FetchDescriptor<QuoteLineItem>()).first)
+        #expect(line.unitLabel == expected)
+        let queued = try #require(saved.fetch(FetchDescriptor<OutboxMutation>()).first { $0.entityId == line.id })
+        let payload = try #require(JSONSerialization.jsonObject(with: Data(queued.payloadJSON.utf8)) as? [String: Any])
+        if let expected { #expect(payload["unitLabel"] as? String == expected) }
+        else { #expect(payload["unitLabel"] is NSNull) }
+        #expect(try saved.fetch(FetchDescriptor<OutboxMutation>()).count == 2)
+    }
+
     @Test func rejectsForeignAndDeletedSavedItems() throws {
         let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
         let sync = MockSyncEngine()

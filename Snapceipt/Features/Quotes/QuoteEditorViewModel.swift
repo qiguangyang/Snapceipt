@@ -226,7 +226,11 @@ final class QuoteEditorViewModel {
         mutationContext.autosaveEnabled = false
         let uid = userId, pid = profileId
         do {
-            guard lineItems.allSatisfy({ ($0.unitLabel?.utf16.count ?? 0) <= 40 }) else {
+            let normalizedUnits = lineItems.map { line -> String? in
+                let unit = line.unitLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return unit?.isEmpty == true ? nil : unit
+            }
+            guard normalizedUnits.allSatisfy({ ($0?.utf16.count ?? 0) <= 40 }) else {
                 throw CatalogStore.ValidationError.unitTooLong
             }
             let descriptor = FetchDescriptor<Quote>(predicate: #Predicate {
@@ -262,7 +266,7 @@ final class QuoteEditorViewModel {
             for (index, working) in lineItems.enumerated() {
                 let line = lines.first { $0.id == working.id } ?? Self.copyLine(working)
                 if !lines.contains(where: { $0.id == working.id }) { mutationContext.insert(line) }
-                line.itemDescription = working.itemDescription; line.unitLabel = working.unitLabel
+                line.itemDescription = working.itemDescription; line.unitLabel = normalizedUnits[index]
                 line.quantity = working.quantity; line.unitPriceCents = working.unitPriceCents
                 line.sortOrder = index; line.updatedAt = now; line.deletedAt = nil
                 mutations.append(.init(op: "upsert", entityType: .quoteLineItem, entity: line))
@@ -292,7 +296,10 @@ final class QuoteEditorViewModel {
             }
             gstRateBp = document.gstRateBp
             originalLineIds = keptIds
-            for (index, line) in lineItems.enumerated() { line.sortOrder = index; line.updatedAt = now }
+            for (index, line) in lineItems.enumerated() {
+                line.unitLabel = normalizedUnits[index]
+                line.sortOrder = index; line.updatedAt = now
+            }
             return true
         } catch {
             errorMessage = "Couldn’t save the draft. Try again."
