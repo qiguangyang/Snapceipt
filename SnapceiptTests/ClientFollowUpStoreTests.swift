@@ -90,3 +90,65 @@ struct ClientFollowUpAtomicStoreTests {
         #expect(try fresh.fetch(FetchDescriptor<Client>()).first?.name == "Original")
     }
 }
+
+@MainActor @Suite("ClientFollowUpTimestampValidation")
+struct ClientFollowUpTimestampValidationTests {
+    private func fixture() throws -> (ModelContext, Client, ClientFollowUpStore) {
+        let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
+        context.autosaveEnabled = false
+        let client = Client(userId: "u1", profileId: "p1", name: "Saved client")
+        context.insert(client); try context.save()
+        let sync = SyncEngine(api: MockAPIClient(), context: context, auth: AuthStore(), toast: ToastCenter())
+        return (context, client, ClientFollowUpStore(context: context, sync: sync, userId: "u1", profileId: "p1"))
+    }
+
+    @Test func acceptsSafeTimestampBoundsAndStillRequiresFutureDueAt() throws {
+        let (context, client, store) = try fixture()
+        let upper = 9_007_199_254_740_991
+        let f = try store.save(id: nil, clientId: client.id, title: "Zero clock", dueAt: 1, timezone: "UTC", now: 0)
+        #expect(f.createdAt == 0 && f.updatedAt == 0 && f.dueAt == 1)
+        try store.complete(id: f.id, at: 0)
+        #expect(f.completedAt == 0 && f.updatedAt == 0)
+        _ = try store.save(id: f.id, clientId: client.id, title: "Upper due", dueAt: upper, timezone: "UTC", now: upper - 1)
+        try store.complete(id: f.id, at: upper)
+        let saved = try #require(ModelContext(context.container).fetch(FetchDescriptor<ClientFollowUp>()).first)
+        #expect(saved.createdAt == 0 && saved.dueAt == upper && saved.completedAt == upper && saved.updatedAt == upper)
+        #expect(throws: (any Error).self) { try store.save(id: f.id, clientId: client.id, title: "Equal", dueAt: upper, timezone: "UTC", now: upper) }
+        #expect(f.title == "Upper due" && f.completedAt == upper)
+    }
+
+    @Test func invalidSaveTimestampsPreserveWorkingInputDomainAndQueue() throws {
+        let upper = 9_007_199_254_740_991
+        for (due, now) in [(200, -1), (upper + 1, 100), (Int.max, 100), (-1, -2), (200, upper + 1), (200, Int.max)] {
+            let (context, client, store) = try fixture()
+            let f = try store.save(id: nil, clientId: client.id, title: "Saved reminder", dueAt: 200, timezone: "UTC", now: 100)
+            let baselineQueue = try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>()).map(\.payloadJSON)
+            client.name = "Pending client input"; f.title = "Pending reminder input"
+            for id in [Optional<String>.none, Optional(f.id)] {
+                #expect(throws: (any Error).self) { try store.save(id: id, clientId: client.id, title: "Invalid change", dueAt: due, timezone: "UTC", now: now) }
+            }
+            #expect(client.name == "Pending client input" && f.title == "Pending reminder input" && f.dueAt == 200 && f.updatedAt == 100)
+            let fresh = ModelContext(context.container)
+            let rows = try fresh.fetch(FetchDescriptor<ClientFollowUp>())
+            #expect(rows.count == 1 && rows[0].title == "Saved reminder" && rows[0].dueAt == 200 && rows[0].createdAt == 100 && rows[0].updatedAt == 100)
+            #expect(try fresh.fetch(FetchDescriptor<Client>()).first?.name == "Saved client")
+            #expect(try fresh.fetch(FetchDescriptor<OutboxMutation>()).map(\.payloadJSON) == baselineQueue)
+        }
+    }
+
+    @Test func invalidCompletionTimestampsPreserveWorkingInputDomainAndQueue() throws {
+        for at in [-1, 9_007_199_254_740_992, Int.max] {
+            let (context, client, store) = try fixture()
+            let f = try store.save(id: nil, clientId: client.id, title: "Saved reminder", dueAt: 200, timezone: "UTC", now: 100)
+            let baselineQueue = try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>()).map(\.payloadJSON)
+            client.name = "Pending client input"; f.title = "Pending reminder input"
+            #expect(throws: (any Error).self) { try store.complete(id: f.id, at: at) }
+            #expect(client.name == "Pending client input" && f.title == "Pending reminder input" && f.completedAt == nil && f.updatedAt == 100)
+            let fresh = ModelContext(context.container)
+            let saved = try #require(fresh.fetch(FetchDescriptor<ClientFollowUp>()).first)
+            #expect(saved.title == "Saved reminder" && saved.completedAt == nil && saved.updatedAt == 100)
+            #expect(try fresh.fetch(FetchDescriptor<Client>()).first?.name == "Saved client")
+            #expect(try fresh.fetch(FetchDescriptor<OutboxMutation>()).map(\.payloadJSON) == baselineQueue)
+        }
+    }
+}

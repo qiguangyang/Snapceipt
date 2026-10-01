@@ -4,11 +4,12 @@ import SwiftData
 @MainActor
 final class ClientFollowUpStore {
     enum ValidationError: LocalizedError {
-        case title, date, timezone, unavailable
+        case title, date, timestamp, timezone, unavailable
         var errorDescription: String? {
             switch self {
             case .title: "Enter a title of 200 characters or fewer."
             case .date: "Choose a future date and time."
+            case .timestamp: "Choose a date and time within the supported range."
             case .timezone: "Choose a valid timezone."
             case .unavailable: "This client or follow-up is no longer available in this business."
             }
@@ -40,6 +41,8 @@ final class ClientFollowUpStore {
     }
 
     func save(id: String?, clientId: String, title: String, dueAt: Int, timezone: String, now: Int) throws -> ClientFollowUp {
+        try validateTimestamp(now)
+        try validateTimestamp(dueAt)
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty && title.count <= 200 else { throw ValidationError.title }
         guard dueAt > now else { throw ValidationError.date }
@@ -68,9 +71,16 @@ final class ClientFollowUpStore {
         return try liveFollowUp(row.id, in: context)
     }
 
-    func complete(id: String, at: Int) throws { try mutate(id: id) { $0.completedAt = at; $0.updatedAt = at } }
+    func complete(id: String, at: Int) throws {
+        try validateTimestamp(at)
+        try mutate(id: id) { $0.completedAt = at; $0.updatedAt = at }
+    }
     func reopen(id: String) throws { try mutate(id: id) { $0.completedAt = nil; $0.updatedAt = Epoch.nowMs() } }
     func delete(id: String) throws { try mutate(id: id, op: "delete") { $0.deletedAt = Epoch.nowMs(); $0.updatedAt = $0.deletedAt! } }
+
+    private func validateTimestamp(_ value: Int) throws {
+        guard (0...9_007_199_254_740_991).contains(value) else { throw ValidationError.timestamp }
+    }
 
     private func mutate(id: String, op: String = "upsert", edit: (ClientFollowUp) -> Void) throws {
         let working = try liveFollowUp(id, in: context)
