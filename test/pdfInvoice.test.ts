@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { PDFDocument } from "pdf-lib";
+import { describe, expect, it, vi } from "vitest";
+import { PDFDocument, PDFPage } from "pdf-lib";
 import {
   buildInvoicePdf,
   gstLabel,
@@ -129,4 +129,13 @@ describe("buildInvoicePdf", () => {
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThan(1);
   });
+});
+
+ it("draws bounded unit text with the existing font, sanitizing unsupported Unicode", async () => {
+  const draw = vi.spyOn(PDFPage.prototype, "drawText");
+  try {
+    await buildInvoicePdf(invoice, [{ description: "Long description for saved work", unitLabel: "hour <script> 工时 🛠", quantity: 1, unitPriceCents: 100 }], sender);
+    expect(draw.mock.calls.some(([text]) => text.includes("hour <script>"))).toBe(true);
+    expect(draw.mock.calls.every(([text]) => !text.includes("工") && !text.includes("🛠"))).toBe(true);
+  } finally { draw.mockRestore(); }
 });

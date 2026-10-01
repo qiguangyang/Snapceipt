@@ -266,3 +266,16 @@ describe("POST /quotes/:id/send", () => {
     expect(res.status).toBe(404);
   });
 });
+
+ it("selects and renders saved units in hosted quotes and WebKit PDF HTML", async () => {
+  vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
+  const { userId, accessToken } = await seedAuthed();
+  const { quoteId } = await seedQuote(userId);
+  await env.DB.prepare("UPDATE quote_line_items SET unit_label = ? WHERE quote_id = ?").bind("hour <script>", quoteId).run();
+  const response = await send(quoteId, accessToken);
+  expect(response.status).toBe(200);
+  const { url } = await response.json() as { url: string };
+  const html = await (await SELF.fetch(url)).text();
+  expect(html).toContain("hour &lt;script&gt;");
+  expect(html).not.toContain("hour <script>");
+});

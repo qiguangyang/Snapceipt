@@ -142,7 +142,7 @@ final class QuoteEditorViewModel {
             let d = FetchDescriptor<QuoteLineItem>(
                 predicate: #Predicate { $0.quoteId == qid && $0.userId == uid && $0.deletedAt == nil },
                 sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)])
-            lineItems = (try? context.fetch(d)) ?? []
+            lineItems = ((try? context.fetch(d)) ?? []).map(Self.copyLine)
             originalLineIds = Set(lineItems.map(\.id))
         } else {
             quoteId = ID.uuidv7()
@@ -193,6 +193,27 @@ final class QuoteEditorViewModel {
         return line.id
     }
 
+    @discardableResult
+    func addCatalogItem(_ item: CatalogItem) throws -> String {
+        let saved = try CatalogStore(context: context, sync: sync, userId: userId, profileId: profileId).ownedItem(item)
+        guard let parentId = quoteId else { throw CatalogStore.ValidationError.unavailable }
+        let price = try CatalogPrice.enteredCents(exclusiveCents: saved.unitPriceCents,
+            gstEnabled: gstEnabled, gstInclusive: gstInclusive, rateBp: effectiveGstRateBp)
+        let line = QuoteLineItem(userId: userId, quoteId: parentId,
+            itemDescription: saved.itemDescription, unitLabel: saved.unitLabel,
+            quantity: 1, unitPriceCents: price, sortOrder: lineItems.count)
+        lineItems.append(line)
+        return line.id
+    }
+
+    private static func copyLine(_ line: QuoteLineItem) -> QuoteLineItem {
+        QuoteLineItem(id: line.id, userId: line.userId, quoteId: line.quoteId,
+            itemDescription: line.itemDescription, unitLabel: line.unitLabel, quantity: line.quantity,
+            unitPriceCents: line.unitPriceCents, sortOrder: line.sortOrder,
+            createdAt: line.createdAt, updatedAt: line.updatedAt, deletedAt: line.deletedAt,
+            rev: line.rev, lastEditedDeviceId: line.lastEditedDeviceId)
+    }
+
     func removeLine(_ line: QuoteLineItem) {
         lineItems.removeAll { $0.id == line.id }
     }
@@ -200,109 +221,83 @@ final class QuoteEditorViewModel {
     @discardableResult
     func saveDraft() -> Bool {
         errorMessage = nil
-        guard let qid = quoteId else { return false }
-        let existing = fetchQuote(qid)
-        guard validClientLink(clientId, previousId: existing?.clientId) else {
-            errorMessage = "Select a live client in this business."
-            return false
-        }
-        let quote = existing ?? {
-            let q = Quote(userId: userId, profileId: profileId,
-                          currency: AppSettings.businessCurrency(profileId: profileId))
-            q.id = qid
-            context.insert(q)
-            return q
-        }()
-        let previousFields = (profileId: quote.profileId,
-                              gstRateBp: quote.gstRateBp,
-                              clientId: quote.clientId,
-                              clientName: quote.clientName,
-                              clientEmail: quote.clientEmail,
-                              clientAddress: quote.clientAddress,
-                              clientMobile: quote.clientMobile,
-                              gstEnabled: quote.gstEnabled,
-                              gstInclusive: quote.gstInclusive,
-                              subtotalCents: quote.subtotalCents,
-                              gstCents: quote.gstCents,
-                              totalCents: quote.totalCents,
-                              validUntil: quote.validUntil,
-                              updatedAt: quote.updatedAt)
-        let previousRate = gstRateBp
-        quote.profileId = profileId
-        // Snapshot the GST rate from the active profile on first save; keep an existing
-        // snapshot so a re-save never re-rates an already-sent quote. (spec §2.2/§3)
-        if quote.gstRateBp == nil { quote.gstRateBp = profileGstRateBp }
-        gstRateBp = quote.gstRateBp
-        let t = totals
-        quote.clientId = clientId
-        quote.clientName = clientName
-        quote.clientEmail = clientEmail
-        quote.clientAddress = clientAddress
-        quote.clientMobile = clientMobile
-        quote.gstEnabled = gstEnabled
-        quote.gstInclusive = gstInclusive
-        quote.subtotalCents = t.subtotal
-        quote.gstCents = t.gst
-        quote.totalCents = t.total
-        quote.validUntil = validUntil
-        quote.updatedAt = Epoch.nowMs()
-
-        let keptIds = Set(lineItems.map(\.id))
-        let previousLineMetadata = lineItems.map { ($0, $0.sortOrder, $0.updatedAt) }
-        var insertedLines: [QuoteLineItem] = []
-        for (idx, line) in lineItems.enumerated() {
-            line.sortOrder = idx
-            line.updatedAt = Epoch.nowMs()
-            if fetchLine(line.id) == nil { context.insert(line); insertedLines.append(line) }
-        }
-        let removed = originalLineIds.subtracting(keptIds)
-        var deletedRows: [QuoteLineItem] = []
-        var previousDeletedMetadata: [(QuoteLineItem, Int?, Int)] = []
-        for rid in removed {
-            if let row = fetchLine(rid) {
-                previousDeletedMetadata.append((row, row.deletedAt, row.updatedAt))
-                row.deletedAt = Epoch.nowMs()
-                row.updatedAt = Epoch.nowMs()
-                deletedRows.append(row)
+        guard let parentId = quoteId else { return false }
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let uid = userId, pid = profileId
+        do {
+            guard lineItems.allSatisfy({ ($0.unitLabel?.utf16.count ?? 0) <= 40 }) else {
+                throw CatalogStore.ValidationError.unitTooLong
             }
-        }
-        do { try persist(context) }
-        catch {
-            // Keep typed line/contact input and unrelated pending edits available for retry.
-            if existing == nil { context.delete(quote) }
-            else {
-                quote.profileId = previousFields.profileId
-                quote.gstRateBp = previousFields.gstRateBp
-                quote.clientId = previousFields.clientId
-                quote.clientName = previousFields.clientName
-                quote.clientEmail = previousFields.clientEmail
-                quote.clientAddress = previousFields.clientAddress
-                quote.clientMobile = previousFields.clientMobile
-                quote.gstEnabled = previousFields.gstEnabled
-                quote.gstInclusive = previousFields.gstInclusive
-                quote.subtotalCents = previousFields.subtotalCents
-                quote.gstCents = previousFields.gstCents
-                quote.totalCents = previousFields.totalCents
-                quote.validUntil = previousFields.validUntil
-                quote.updatedAt = previousFields.updatedAt
+            let descriptor = FetchDescriptor<Quote>(predicate: #Predicate {
+                $0.id == parentId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+            })
+            let existing = try mutationContext.fetch(descriptor).first
+            guard validClientLink(clientId, previousId: existing?.clientId) else {
+                errorMessage = "Select a live client in this business."
+                return false
             }
-            gstRateBp = previousRate
-            for line in insertedLines { context.delete(line) }
-            for (line, sortOrder, updatedAt) in previousLineMetadata {
-                line.sortOrder = sortOrder; line.updatedAt = updatedAt
+            let document = existing ?? Quote(id: parentId, userId: userId, profileId: profileId,
+                currency: AppSettings.businessCurrency(profileId: profileId))
+            if existing == nil { mutationContext.insert(document) }
+            document.gstRateBp = document.gstRateBp ?? profileGstRateBp
+            let t = QuoteTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled,
+                gstInclusive: gstInclusive, gstRateBp: document.gstRateBp ?? profileGstRateBp)
+            document.clientId = clientId
+            document.clientName = clientName
+            document.clientEmail = clientEmail
+            document.gstEnabled = gstEnabled
+            document.gstInclusive = gstInclusive
+            document.clientAddress = clientAddress
+            document.clientMobile = clientMobile
+            document.validUntil = validUntil
+            document.subtotalCents = t.subtotal; document.gstCents = t.gst; document.totalCents = t.total
+            let now = Epoch.nowMs()
+            document.updatedAt = now
+            let lines = try mutationContext.fetch(FetchDescriptor<QuoteLineItem>(predicate: #Predicate {
+                $0.quoteId == parentId && $0.userId == uid
+            }))
+            let keptIds = Set(lineItems.map(\.id))
+            var mutations = [SyncMutationDescriptor(op: "upsert", entityType: .quote, entity: document)]
+            for (index, working) in lineItems.enumerated() {
+                let line = lines.first { $0.id == working.id } ?? Self.copyLine(working)
+                if !lines.contains(where: { $0.id == working.id }) { mutationContext.insert(line) }
+                line.itemDescription = working.itemDescription; line.unitLabel = working.unitLabel
+                line.quantity = working.quantity; line.unitPriceCents = working.unitPriceCents
+                line.sortOrder = index; line.updatedAt = now; line.deletedAt = nil
+                mutations.append(.init(op: "upsert", entityType: .quoteLineItem, entity: line))
             }
-            for (line, deletedAt, updatedAt) in previousDeletedMetadata {
-                line.deletedAt = deletedAt; line.updatedAt = updatedAt
+            for line in lines where originalLineIds.contains(line.id) && !keptIds.contains(line.id) {
+                line.deletedAt = now; line.updatedAt = now
+                mutations.append(.init(op: "delete", entityType: .quoteLineItem, entity: line))
             }
+            try sync.persistAndEnqueue(mutations: mutations, context: mutationContext, save: persist)
+            // The shared context may already cache this parent. Refresh committed fields
+            // so a later issue/share metadata write cannot save its stale draft snapshot.
+            // This happens only after the transaction succeeds; unrelated edits stay pending.
+            if let cached = fetchQuote(parentId) {
+                cached.clientId = document.clientId
+                cached.clientName = document.clientName
+                cached.clientEmail = document.clientEmail
+                cached.gstEnabled = document.gstEnabled
+                cached.gstInclusive = document.gstInclusive
+                cached.gstRateBp = document.gstRateBp
+                cached.subtotalCents = document.subtotalCents
+                cached.gstCents = document.gstCents
+                cached.totalCents = document.totalCents
+                cached.updatedAt = document.updatedAt
+                cached.clientAddress = document.clientAddress
+                cached.clientMobile = document.clientMobile
+                cached.validUntil = document.validUntil
+            }
+            gstRateBp = document.gstRateBp
+            originalLineIds = keptIds
+            for (index, line) in lineItems.enumerated() { line.sortOrder = index; line.updatedAt = now }
+            return true
+        } catch {
             errorMessage = "Couldn’t save the draft. Try again."
             return false
         }
-
-        sync.enqueue(op: "upsert", entityType: .quote, entity: quote)
-        for line in lineItems { sync.enqueue(op: "upsert", entityType: .quoteLineItem, entity: line) }
-        for row in deletedRows { sync.enqueue(op: "delete", entityType: .quoteLineItem, entity: row) }
-        originalLineIds = keptIds
-        return true
     }
 
     func send(api: APIClient) async -> Bool {

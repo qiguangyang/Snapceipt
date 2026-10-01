@@ -22,6 +22,7 @@ struct QuoteEditorView: View {
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
     @State private var showClientPicker = false
+    @State private var showCatalogPicker = false
     @State private var sent = false
     @State private var shareURL: URL?
     @State private var shareFileURL: URL?
@@ -57,6 +58,15 @@ struct QuoteEditorView: View {
                                                  userId: userId, profileId: profileId)
                 model.load(id: quoteId)
                 vm = model
+            }
+        }
+        .sheet(isPresented: $showCatalogPicker) {
+            if let vm {
+                CatalogPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
+                    onPick: { item in
+                        _ = try vm.addCatalogItem(item)
+                        showCatalogPicker = false
+                    }, onClose: { showCatalogPicker = false })
             }
         }
         .sheet(isPresented: $showClientPicker) {
@@ -258,6 +268,10 @@ struct QuoteEditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.quoteEditorAddLine)
             }
+            if vm.status == "draft" {
+                Button("Saved items") { showCatalogPicker = true }
+                    .font(.ui(13, .bold)).foregroundStyle(accent.base)
+            }
             Card(padding: 14) {
                 if vm.lineItems.isEmpty {
                     HStack {
@@ -279,6 +293,9 @@ struct QuoteEditorView: View {
 
     private func lineRow(_ vm: QuoteEditorViewModel, _ line: QuoteLineItem) -> some View {
         VStack(spacing: 8) {
+            TextField("Unit (optional)", text: Binding(
+                get: { line.unitLabel ?? "" }, set: { line.unitLabel = $0.isEmpty ? nil : $0 }))
+                .font(.ui(12.5))
             HStack(alignment: .top, spacing: 8) {
                 TextField("Description", text: Binding(
                     get: { line.itemDescription }, set: { line.itemDescription = $0 }),

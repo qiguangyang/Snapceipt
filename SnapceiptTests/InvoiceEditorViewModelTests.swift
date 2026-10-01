@@ -343,7 +343,10 @@ struct InvoiceEditorViewModelTests {
         let retried = ModelContext(ctx.container)
         let savedLine = try #require(retried.fetch(FetchDescriptor<InvoiceLineItem>()).first)
         #expect(savedLine.itemDescription == "Typed description" && savedLine.quantity == 3 && savedLine.unitPriceCents == 20_000)
-        #expect(try retried.fetch(FetchDescriptor<Client>()).first?.notes == "Pending unrelated notes")
+        #expect(try retried.fetch(FetchDescriptor<Client>()).first?.notes == "Saved notes")
+        #expect(unrelated.notes == "Pending unrelated notes" && ctx.hasChanges)
+        try ctx.save()
+        #expect(try ModelContext(ctx.container).fetch(FetchDescriptor<Client>()).first?.notes == "Pending unrelated notes")
         #expect(sync.calls.contains { $0.entityType == .invoiceLineItem && $0.entityId == v.lineItems[0].id })
     }
 
@@ -390,5 +393,87 @@ struct InvoiceEditorViewModelTests {
             #expect(sync.calls.contains { $0.entityId == removedLine.id && $0.op == "delete" })
         }
         #expect(sync.calls.contains { $0.entityId == newLine.id && $0.op == "upsert" })
+    }
+}
+
+@MainActor @Suite(.serialized) struct InvoiceCatalogAtomicSaveTests {
+    @Test(arguments: [false, true])
+    func stagedOutboxFailureRetainsInputAndRetries(existing: Bool) throws {
+        let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
+        context.autosaveEnabled = false
+        let notes = Client(userId: "u1", profileId: "p1", name: "Other", notes: "Saved")
+        context.insert(notes); try context.save()
+        let engine = SyncEngine(api: MockAPIClient(), context: context, auth: AuthStore(), toast: ToastCenter())
+        var fail = false, staged = 0
+        enum Failure: Error { case save }
+        let editor = InvoiceEditorViewModel(context: context, sync: engine, userId: "u1", profileId: "p1", persist: { transaction in
+            staged = try transaction.fetch(FetchDescriptor<OutboxMutation>()).count
+            if fail { throw Failure.save }
+            try transaction.save()
+        })
+        editor.load(id: nil); editor.setClient(name: "Typed client", email: "typed@test.com")
+        var oldId: String?
+        if existing {
+            editor.addLine(); editor.lineItems[0].itemDescription = "Old"; editor.lineItems[0].unitPriceCents = 100
+            #expect(editor.saveDraft())
+            oldId = editor.lineItems[0].id; editor.removeLine(editor.lineItems[0])
+        }
+        let item = try CatalogStore(context: context, sync: engine, userId: "u1", profileId: "p1")
+            .save(id: nil, description: "Saved service", unitLabel: "hour", unitPriceCents: 200)
+        let lineId = try editor.addCatalogItem(item)
+        editor.lineItems[0].itemDescription = "Typed service"
+        editor.lineItems[0].unitLabel = "day"; editor.lineItems[0].quantity = 3
+        notes.notes = "Pending"
+        let baseline = ModelContext(context.container)
+        let outboxBefore = try baseline.fetch(FetchDescriptor<OutboxMutation>()).map { $0.payloadJSON }.sorted()
+        fail = true
+        #expect(!editor.saveDraft() && editor.errorMessage != nil)
+        #expect(staged == (existing ? 5 : 3))
+        #expect(editor.lineItems[0].id == lineId && editor.lineItems[0].unitLabel == "day" && editor.lineItems[0].quantity == 3)
+        let failed = ModelContext(context.container)
+        #expect(try failed.fetch(FetchDescriptor<Invoice>()).count == (existing ? 1 : 0))
+        #expect(try failed.fetch(FetchDescriptor<Invoice>()).first?.totalCents == (existing ? 110 : nil))
+        #expect(try failed.fetch(FetchDescriptor<InvoiceLineItem>()).count == (existing ? 1 : 0))
+        #expect(try failed.fetch(FetchDescriptor<InvoiceLineItem>()).allSatisfy { $0.deletedAt == nil && $0.itemDescription == "Old" })
+        #expect(try failed.fetch(FetchDescriptor<OutboxMutation>()).map { $0.payloadJSON }.sorted() == outboxBefore)
+        #expect(notes.notes == "Pending" && context.hasChanges)
+        fail = false
+        #expect(editor.saveDraft() && editor.errorMessage == nil)
+        let retried = ModelContext(context.container)
+        let saved = try #require(retried.fetch(FetchDescriptor<InvoiceLineItem>()).first { $0.id == lineId })
+        #expect(saved.itemDescription == "Typed service" && saved.unitLabel == "day" && saved.quantity == 3 && saved.unitPriceCents == 200)
+        #expect(try retried.fetch(FetchDescriptor<OutboxMutation>()).first { $0.entityId == lineId }?.payloadJSON.contains("day") == true)
+        if let oldId { #expect(try retried.fetch(FetchDescriptor<InvoiceLineItem>()).first { $0.id == oldId }?.deletedAt != nil) }
+        #expect(try retried.fetch(FetchDescriptor<Client>()).first?.notes == "Saved")
+        try context.save()
+        #expect(try ModelContext(context.container).fetch(FetchDescriptor<Client>()).first?.notes == "Pending")
+        #expect(try ModelContext(context.container).fetch(FetchDescriptor<InvoiceLineItem>()).first { $0.id == lineId }?.unitLabel == "day")
+    }
+    @Test func savedSnapshotRefreshesCachedParentForLaterActionWrites() throws {
+        let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
+        context.autosaveEnabled = false
+        let parent = Invoice(userId: "u1", profileId: "p1", clientName: "Before")
+        context.insert(parent); try context.save()
+        let editor = InvoiceEditorViewModel(context: context, sync: MockSyncEngine(), userId: "u1", profileId: "p1")
+        editor.load(id: parent.id); editor.setClient(name: "After", email: "new@test.com")
+        editor.addLine(); editor.lineItems[0].unitLabel = "hour"; editor.lineItems[0].unitPriceCents = 100
+        #expect(editor.saveDraft())
+        #expect(parent.clientName == "After" && parent.totalCents == 110)
+        parent.number = "Issued-1"
+        try context.save()
+        let saved = try #require(ModelContext(context.container).fetch(FetchDescriptor<Invoice>()).first)
+        #expect(saved.clientName == "After" && saved.totalCents == 110 && saved.number == "Issued-1")
+    }
+    @Test func rejectsForeignAndDeletedSavedItems() throws {
+        let context = ModelContext(try ModelContainer.makeSnapceiptContainer(inMemory: true))
+        let sync = MockSyncEngine()
+        let editor = InvoiceEditorViewModel(context: context, sync: sync, userId: "u1", profileId: "p1")
+        editor.load(id: nil)
+        for (user, profile, deleted) in [("u2", "p1", false), ("u1", "p2", false), ("u1", "p1", true)] {
+            let item = CatalogItem(userId: user, profileId: profile, itemDescription: "Wrong", unitPriceCents: 10, deletedAt: deleted ? 1 : nil)
+            context.insert(item); try context.save()
+            #expect(throws: CatalogStore.ValidationError.self) { try editor.addCatalogItem(item) }
+        }
+        #expect(editor.lineItems.isEmpty)
     }
 }

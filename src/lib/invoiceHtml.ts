@@ -19,6 +19,7 @@ export interface InvoiceHtmlBusiness {
 
 export interface InvoiceHtmlLineItem {
   description: string;
+  unitLabel?: string | null;
   quantity: number;
   unitPriceCents: number;
 }
@@ -105,7 +106,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       const lineAmount = li.quantity * li.unitPriceCents;
       return `<tr>
         <td class="qty">${esc(String(li.quantity))}</td>
-        <td>${esc(li.description)}</td>
+        <td>${esc(li.description)}${li.unitLabel ? ` <span class="muted">(${esc(li.unitLabel)})</span>` : ""}</td>
         <td class="num">${amount(li.unitPriceCents)}</td>
         <td class="num">${dollars(lineAmount)}</td>
       </tr>`;

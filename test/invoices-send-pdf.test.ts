@@ -1,5 +1,6 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import * as pdfModule from "../src/lib/pdfInvoice";
 import * as emailModule from "../src/lib/email";
 import { uuidv7 } from "../src/lib/ids";
 import { nowMs } from "../src/lib/time";
@@ -238,5 +239,24 @@ describe("/invoices through the real app", () => {
 
   it("GET /invoices/dl/* is public (a forged token is 403, not 401)", async () => {
     expect((await SELF.fetch(`${BASE}/invoices/dl/forged`)).status).toBe(403);
+  });
+});
+
+ describe("saved units through invoice routes", () => {
+  it("passes units to issue, regeneration, send and hosted HTML", async () => {
+    const email = vi.spyOn(emailModule, "sendInvoiceEmail").mockResolvedValue(undefined);
+    const render = vi.spyOn(pdfModule, "buildInvoicePdf");
+    const { userId, accessToken } = await seedAuthed();
+    const { invoiceId } = await seedInvoice(userId, { status: "draft" });
+    await env.DB.prepare("UPDATE invoice_line_items SET unit_label = ? WHERE invoice_id = ?").bind("hour <script>", invoiceId).run();
+    for (const action of ["issue", "pdf", "send"]) {
+      const result = await SELF.fetch(`${BASE}/invoices/${invoiceId}/${action}`, { method: "POST", headers: { authorization: `Bearer ${accessToken}` } });
+      expect(result.status).toBe(200);
+      expect(render.mock.calls.at(-1)?.[1].every((line) => line.unitLabel === "hour <script>")).toBe(true);
+    }
+    const url = email.mock.calls.at(-1)![1].url!;
+    const html = await (await SELF.fetch(url)).text();
+    expect(html).toContain("hour &lt;script&gt;");
+    expect(html).not.toContain("hour <script>");
   });
 });

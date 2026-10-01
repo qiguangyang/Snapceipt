@@ -16,6 +16,7 @@ struct InvoiceEditorView: View {
     @Environment(\.accent) private var accent
     @State private var vm: InvoiceEditorViewModel?
     @State private var showClientPicker = false
+    @State private var showCatalogPicker = false
     @State private var showRecordPayment = false
     @State private var shareURL: URL?
     @State private var sent = false
@@ -39,6 +40,15 @@ struct InvoiceEditorView: View {
                 let model = InvoiceEditorViewModel(context: context, sync: sync, userId: userId, profileId: profileId)
                 model.load(id: invoiceId)
                 vm = model
+            }
+        }
+        .sheet(isPresented: $showCatalogPicker) {
+            if let vm {
+                CatalogPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
+                    onPick: { item in
+                        _ = try vm.addCatalogItem(item)
+                        showCatalogPicker = false
+                    }, onClose: { showCatalogPicker = false })
             }
         }
         .sheet(isPresented: $showClientPicker) {
@@ -201,6 +211,10 @@ struct InvoiceEditorView: View {
                     .accessibilityIdentifier(AccessibilityID.invoiceEditorAddLine)
                 }
             }
+            if vm.status == "draft" {
+                Button("Saved items") { showCatalogPicker = true }
+                    .font(.ui(13, .bold)).foregroundStyle(accent.base)
+            }
             Card(padding: 14) {
                 if vm.lineItems.isEmpty {
                     HStack { Text("No line items yet").font(.ui(13.5)).foregroundStyle(Palette.ink3); Spacer(minLength: 0) }
@@ -219,6 +233,9 @@ struct InvoiceEditorView: View {
     private func lineRow(_ vm: InvoiceEditorViewModel, _ line: InvoiceLineItem) -> some View {
         let editable = vm.status == "draft"
         return VStack(spacing: 8) {
+            TextField("Unit (optional)", text: Binding(
+                get: { line.unitLabel ?? "" }, set: { line.unitLabel = $0.isEmpty ? nil : $0 }))
+                .font(.ui(12.5)).disabled(!editable)
             HStack(spacing: 8) {
                 TextField("Description", text: Binding(get: { line.itemDescription }, set: { line.itemDescription = $0 }))
                     .font(.ui(14.5, .semibold)).disabled(!editable)

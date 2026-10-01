@@ -153,3 +153,15 @@ describe("renderQuoteHtml", () => {
     expect(html).toContain("$100.00");  // amount column, with $
   });
 });
+
+ describe("saved-item units", () => {
+  it("renders and escapes units alongside descriptions", () => {
+    const html = renderQuoteHtml(data({ lineItems: [{ description: "Work", unitLabel: "hour <script>", quantity: 1, unitPriceCents: 100 }] }));
+    expect(html).toContain("hour &lt;script&gt;");
+    expect(html).not.toContain("hour <script>");
+  });
+  it("null unit preserves legacy output", () => {
+    const line = { description: "Work", quantity: 1, unitPriceCents: 100 };
+    expect(renderQuoteHtml(data({ lineItems: [{ ...line, unitLabel: null }] }))).toBe(renderQuoteHtml(data({ lineItems: [line] })));
+  });
+});

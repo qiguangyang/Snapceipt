@@ -21,6 +21,7 @@ export const quotesRoutes = new Hono<AppEnv>();
 
 interface LineItemRow {
   description: string;
+  unit_label: string | null;
   quantity: number;
   unit_price_cents: number;
 }
@@ -99,7 +100,7 @@ export async function loadQuoteForRender(
   if (!quote) return null;
 
   const { results: lineItems } = await env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM quote_line_items
       WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
@@ -146,6 +147,7 @@ export async function loadQuoteForRender(
     },
     lineItems: lineItems.map((li): QuoteHtmlData["lineItems"][number] => ({
       description: li.description,
+      unitLabel: li.unit_label,
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
@@ -187,7 +189,7 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 2. Load its non-deleted line items (deterministic order).
   const { results: lineItems } = await c.env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM quote_line_items
       WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
