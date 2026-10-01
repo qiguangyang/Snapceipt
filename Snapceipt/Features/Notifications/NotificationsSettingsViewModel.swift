@@ -10,6 +10,9 @@ final class NotificationsSettingsViewModel {
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let timezone: String
+    @ObservationIgnored private let userId: String
+    @ObservationIgnored private let followUpScheduler: FollowUpNotificationScheduler?
+    private(set) var clientFollowUpsEnabled: Bool
 
     var pushEnabled: Bool { didSet { defaults.set(pushEnabled, forKey: Keys.push) } }
     var quietHoursEnabled: Bool { didSet { defaults.set(quietHoursEnabled, forKey: Keys.quietOn) } }
@@ -26,15 +29,27 @@ final class NotificationsSettingsViewModel {
     }
 
     init(api: APIClient, defaults: UserDefaults = .standard,
-         timezone: String = QuietHours.deviceTimezone()) {
+         timezone: String = QuietHours.deviceTimezone(), userId: String = "",
+         followUpScheduler: FollowUpNotificationScheduler? = nil) {
         self.api = api
         self.defaults = defaults
         self.timezone = timezone
+        self.userId = userId
+        self.followUpScheduler = followUpScheduler
+        self.clientFollowUpsEnabled = !userId.isEmpty && defaults.bool(forKey: FollowUpNotificationScheduler.preferenceKey(userId: userId))
         self.pushEnabled = defaults.object(forKey: Keys.push) as? Bool ?? true
         self.quietHoursEnabled = defaults.object(forKey: Keys.quietOn) as? Bool ?? false
         self.quietStartMin = defaults.object(forKey: Keys.quietStart) as? Int ?? 1320 // 22:00
         self.quietEndMin = defaults.object(forKey: Keys.quietEnd) as? Int ?? 420       // 07:00
         self.basReminderEnabled = defaults.object(forKey: Keys.bas) as? Bool ?? false
+    }
+
+    /// Explicit device opt-in; separate from backend push + quiet-hours preferences.
+    func setClientFollowUpsEnabled(_ enabled: Bool) async {
+        guard !userId.isEmpty else { return }
+        clientFollowUpsEnabled = enabled
+        defaults.set(enabled, forKey: FollowUpNotificationScheduler.preferenceKey(userId: userId))
+        await followUpScheduler?.setEnabled(enabled, userId: userId)
     }
 
     /// Push the current state to the backend. Quiet-hours minutes are nil when disabled.

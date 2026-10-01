@@ -10,6 +10,8 @@ struct NotificationsSettingsView: View {
     let api: APIClient
     /// Active profile id — so the Debug "Simulate email-in" files the receipt where the user is looking.
     var activeProfileId: String = ""
+    var userId: String = ""
+    var followUpScheduler: FollowUpNotificationScheduler? = nil
     let onClose: () -> Void
 
     @Environment(\.accent) private var accent
@@ -47,6 +49,17 @@ struct NotificationsSettingsView: View {
                                 }
                             }
                             infoNote("Push notifications cover emailed-receipt alerts and budget alerts. Turning this off (or denying notifications in iOS Settings) stops all of them.")
+
+                            groupLabel("Client follow-ups")
+                            Card {
+                                toggleRow(icon: "calendar.badge.clock",
+                                          title: "Follow-ups on this device",
+                                          subtitle: "Local reminders for your earliest 32 future follow-ups",
+                                          isOn: Binding(get: { vm.clientFollowUpsEnabled }, set: { on in
+                                              Task { await vm.setClientFollowUpsEnabled(on) }
+                                          }), id: "notif-client-follow-ups")
+                            }
+                            infoNote("Follow-ups are saved in the app even if notification permission is denied. This device setting is separate from push notifications and quiet hours. Unscheduled reminders show In-app only.")
 
                             groupLabel("Quiet hours")
                             quietHoursCard(vm)
@@ -100,7 +113,7 @@ struct NotificationsSettingsView: View {
         } message: { Text(testPushMessage ?? "") }
         .task {
             if vm == nil {
-                let model = NotificationsSettingsViewModel(api: api)
+                let model = NotificationsSettingsViewModel(api: api, userId: userId, followUpScheduler: followUpScheduler)
                 quietStart = dateFor(model.quietStartMin)
                 quietEnd = dateFor(model.quietEndMin)
                 vm = model

@@ -130,6 +130,7 @@ final class ClientStore {
         }
         sync.enqueue(op: "delete", entityType: .client, entity: client)
         for followUp in followUps { sync.enqueue(op: "delete", entityType: .clientFollowUp, entity: followUp) }
+        NotificationCenter.default.post(name: .clientFollowUpsDidChange, object: nil)
     }
 
     /// Associate only explicitly confirmed records, using committed snapshots for the write.

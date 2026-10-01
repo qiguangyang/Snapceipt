@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
 import UIKit   // UIImage for the share-extension drain; beginBackgroundTask for -bgDelay (DEBUG)
-#if DEBUG
-import Combine // .onReceive(publisher) for the Darwin-notification simulate trigger
-#endif
+import Combine // NotificationCenter publishers for reconciliation and debug simulation
 
 /// Top-level auth + first-run gate, then the authed app shell.
 ///
@@ -21,6 +19,7 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
+    @Environment(FollowUpNotificationScheduler.self) private var followUpScheduler
     @Environment(ToastCenter.self) private var toasts
     @Environment(Reachability.self) private var reachability
     /// Shared biometric app-lock controller, injected from `SnapceiptApp` (spec §6).
@@ -137,8 +136,22 @@ struct RootView: View {
         }
         // Re-arm the post-login initial pull on every sign-in/out so a returning user re-syncs
         // (their profile is restored from the server before the onboarding gate concludes).
-        .onChange(of: auth.session?.userId) { _, _ in
+        .onChange(of: auth.session?.userId, initial: true) { _, userId in
             didInitialSync = false
+            followUpScheduler.setUser(userId)
+            Task { await followUpScheduler.refresh() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await followUpScheduler.refresh() } }
+        }
+        .onChange(of: profileRows.count) { _, _ in
+            Task { await followUpScheduler.refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncDidApplyChanges)) { _ in
+            Task { await followUpScheduler.refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clientFollowUpsDidChange)) { _ in
+            Task { await followUpScheduler.refresh() }
         }
     }
 }
@@ -148,6 +161,7 @@ struct RootView: View {
 /// the screen so the enter animation replays. `SyncEngine.sync()` fires on launch
 /// and on foreground.
 struct ShellView: View {
+    @Environment(FollowUpNotificationScheduler.self) private var followUpScheduler
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthStore.self) private var auth
     @Environment(AuthViewModel.self) private var authVM
@@ -329,6 +343,7 @@ struct ShellView: View {
         .overlay {
             if router.overlay == .notificationSettings {
                 NotificationsSettingsView(api: captureAPI, activeProfileId: profiles.activeProfileId,
+                                          userId: profiles.userId, followUpScheduler: followUpScheduler,
                                           onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
@@ -1212,6 +1227,7 @@ enum ExportDateFormatter {
         .environment(Router())
         .environment(store)
         .environment(engine)
+        .environment(FollowUpNotificationScheduler(context: context))
         .environment(toast)
         .environment(Reachability())
         .environment(AppLockController(canEvaluate: { false }, evaluate: { true }))

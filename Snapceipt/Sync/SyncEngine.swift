@@ -174,7 +174,13 @@ final class SyncEngine {
             do {
                 let resp = try await api.syncPush(deviceId: deviceId, mutations: wire)
                 applyPushResults(resp.results, batch: batch)
-                try? context.save()
+                do {
+                    try context.save()
+                    NotificationCenter.default.post(name: .syncDidApplyChanges, object: self)
+                } catch {
+                    status = .error("Could not save synced changes.")
+                    return
+                }
             } catch {
                 // A deterministic 4xx contract rejection (excluding 401, which the
                 // APIClient already refresh-retries, and 429, which is transient)
@@ -254,6 +260,7 @@ final class SyncEngine {
             }
             do {
                 try context.save()
+                NotificationCenter.default.post(name: .syncDidApplyChanges, object: self)
             } catch {
                 status = .error("Could not save synced changes.")
                 return
