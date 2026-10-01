@@ -35,13 +35,14 @@ struct ClientSelection {
 @MainActor
 final class ClientStore {
     enum ValidationError: LocalizedError {
-        case blankName, nameTooLong, notesTooLong, unavailable
+        case blankName, nameTooLong, notesTooLong, unavailable, documentUnavailable
         var errorDescription: String? {
             switch self {
             case .blankName: "Enter a client name."
             case .nameTooLong: "Client name must be 200 characters or fewer."
             case .notesTooLong: "Notes must be 10,000 characters or fewer."
             case .unavailable: "This client is no longer available in this business."
+            case .documentUnavailable: "A selected document is no longer available or has already been linked. Review your selection."
             }
         }
     }
@@ -129,6 +130,67 @@ final class ClientStore {
         }
         sync.enqueue(op: "delete", entityType: .client, entity: client)
         for followUp in followUps { sync.enqueue(op: "delete", entityType: .clientFollowUp, entity: followUp) }
+    }
+
+    /// Associate only explicitly confirmed records, using committed snapshots for the write.
+    /// Both the working context and the persisted rows are rechecked before any mutation.
+    func linkExistingDocuments(clientId: String, documents: [ClientHistory.DocumentReference]) throws {
+        let workingClient = try liveClient(clientId)
+        guard workingClient.userId == userId, workingClient.profileId == profileId, workingClient.deletedAt == nil else {
+            throw ValidationError.unavailable
+        }
+        guard !documents.isEmpty else { return }
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let uid = userId, pid = profileId
+        let clients = try mutationContext.fetch(FetchDescriptor<Client>(predicate: #Predicate {
+            $0.id == clientId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+        }))
+        guard !clients.isEmpty else { throw ValidationError.unavailable }
+
+        var quotes: [(saved: Quote, working: Quote)] = []
+        var invoices: [(saved: Invoice, working: Invoice)] = []
+        // Deduplicate selection while retaining a stable order for mutation and sync.
+        let selection = Set(documents).sorted {
+            if $0.kind != $1.kind { return $0.kind.rawValue < $1.kind.rawValue }
+            return $0.id < $1.id
+        }
+        for reference in selection {
+            let id = reference.id
+            switch reference.kind {
+            case .quote:
+                let descriptor = FetchDescriptor<Quote>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.profileId == pid })
+                guard let working = try context.fetch(descriptor).first,
+                      let saved = try mutationContext.fetch(descriptor).first,
+                      working.userId == uid, working.profileId == pid, working.deletedAt == nil, working.clientId == nil,
+                      saved.userId == uid, saved.profileId == pid, saved.deletedAt == nil, saved.clientId == nil else {
+                    throw ValidationError.documentUnavailable
+                }
+                quotes.append((saved, working))
+            case .invoice:
+                let descriptor = FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.profileId == pid })
+                guard let working = try context.fetch(descriptor).first,
+                      let saved = try mutationContext.fetch(descriptor).first,
+                      working.userId == uid, working.profileId == pid, working.deletedAt == nil, working.clientId == nil,
+                      saved.userId == uid, saved.profileId == pid, saved.deletedAt == nil, saved.clientId == nil else {
+                    throw ValidationError.documentUnavailable
+                }
+                invoices.append((saved, working))
+            }
+        }
+        let now = Epoch.nowMs()
+        for pair in quotes { pair.saved.clientId = clientId; pair.saved.updatedAt = now }
+        for pair in invoices { pair.saved.clientId = clientId; pair.saved.updatedAt = now }
+        // Failure discards only this isolated context. Pending user input stays intact.
+        try persist(mutationContext)
+        for pair in quotes {
+            sync.enqueue(op: "upsert", entityType: .quote, entity: pair.saved, context: mutationContext)
+            pair.working.clientId = clientId; pair.working.updatedAt = now
+        }
+        for pair in invoices {
+            sync.enqueue(op: "upsert", entityType: .invoice, entity: pair.saved, context: mutationContext)
+            pair.working.clientId = clientId; pair.working.updatedAt = now
+        }
     }
 
     private func liveClient(_ id: String) throws -> Client {
