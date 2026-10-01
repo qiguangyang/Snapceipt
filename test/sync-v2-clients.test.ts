@@ -48,6 +48,28 @@ function rejected(result: any, reason = "VALIDATION_FAILED") {
   expect(result).toMatchObject({ status: "rejected", reason, entity: null });
 }
 
+/** Real route/D1 write with a competing commit after validation, before batch. */
+async function pushInterleaved(s: Awaited<ReturnType<typeof setup>>, mutation: ReturnType<Awaited<ReturnType<typeof setup>>["mutation"]>, competingWrite: () => Promise<void>) {
+  let interleaved = false;
+  const db = {
+    prepare: env.DB.prepare.bind(env.DB),
+    async batch(statements: D1PreparedStatement[]) {
+      if (!interleaved) {
+        interleaved = true;
+        await competingWrite();
+      }
+      return env.DB.batch(statements);
+    },
+  } as D1Database;
+  const response = await app.request("/sync/push", {
+    method: "POST", headers: s.headers,
+    body: JSON.stringify({ deviceId: s.deviceId, mutations: [mutation] }),
+  }, { ...env, DB: db });
+  expect(response.status).toBe(200);
+  expect(interleaved).toBe(true);
+  return ((await response.json()) as any).results[0];
+}
+
 describe("v2 apply-time sync validation", () => {
   it("noTypeV2RoundTrip: normalizes and pulls v2 fields without a type tag", async () => {
     const s = await setup();
@@ -275,5 +297,82 @@ describe("v2 apply-time sync validation", () => {
     expect(((await response.json()) as any).results[0].status).toBe("applied");
     expect(interleaved).toBe(true);
     expect((await s.pull()).find(c => c.id === quote.entityId)).toMatchObject({ pdfR2Key: "new.pdf", status: "sent", clientName: "Historic snapshot" });
+  });
+
+  it.each(["quote", "invoice", "clientFollowUp"])("%s link rejects a client deleted after validation, before commit", async type => {
+    const s = await setup();
+    const client = s.mutation("client", { name: "Acme" });
+    await s.push(client);
+    const dependent = s.mutation(type, { clientId: client.entityId, title: "Call", dueAt: 1, timezone: "UTC" });
+    const result = await pushInterleaved(s, dependent, async () => {
+      await env.DB.prepare("UPDATE clients SET deleted_at = 1 WHERE id = ? AND user_id = ? AND profile_id = ?")
+        .bind(client.entityId, s.userId, s.profileId).run();
+    });
+    rejected(result);
+    expect((await s.pull()).some(c => c.id === dependent.entityId)).toBe(false);
+    expect((await s.push(dependent))[0]).toMatchObject({ status: "duplicate", reason: "VALIDATION_FAILED" });
+  });
+
+  it.each(["quote", "invoice", "clientFollowUp"])("%s link rejects a client moved after validation, before commit", async type => {
+    const s = await setup(), target = await profile(s.userId);
+    const client = s.mutation("client", { name: "Acme" });
+    await s.push(client);
+    const dependent = s.mutation(type, { clientId: client.entityId, title: "Call", dueAt: 1, timezone: "UTC" });
+    rejected(await pushInterleaved(s, dependent, async () => {
+      await env.DB.prepare("UPDATE clients SET profile_id = ? WHERE id = ? AND user_id = ? AND profile_id = ?")
+        .bind(target, client.entityId, s.userId, s.profileId).run();
+    }));
+    expect((await s.pull()).some(c => c.id === dependent.entityId)).toBe(false);
+  });
+
+  it.each(["quote", "invoice", "clientFollowUp"])("client move rejects a new %s link committed after validation", async type => {
+    const s = await setup(), target = await profile(s.userId);
+    const client = s.mutation("client", { name: "Acme" });
+    await s.push(client);
+    const linkId = uuidv7();
+    const move = s.mutation("client", { name: "Acme", profileId: target }, client.entityId);
+    rejected(await pushInterleaved(s, move, async () => {
+      const table = type === "quote" ? "quotes" : type === "invoice" ? "invoices" : "client_follow_ups";
+      const extraColumns = type === "clientFollowUp" ? ",title,due_at,timezone" : "";
+      const extraValues = type === "clientFollowUp" ? ",'Call',1,'UTC'" : "";
+      await env.DB.prepare(`INSERT INTO ${table}(id,user_id,profile_id,client_id,created_at,updated_at${extraColumns}) VALUES(?,?,?,?,1,1${extraValues})`)
+        .bind(linkId, s.userId, s.profileId, client.entityId).run();
+    }));
+    const changes = await s.pull();
+    expect(changes.find(c => c.id === client.entityId).profileId).toBe(s.profileId);
+    expect(changes.find(c => c.id === linkId).clientId).toBe(client.entityId);
+  });
+
+  it.each(["catalogItem", "clientFollowUp"])("%s rejects a profile deleted after validation, before commit", async type => {
+    const s = await setup();
+    const client = s.mutation("client", { name: "Acme" });
+    await s.push(client);
+    const dependent = s.mutation(type, { itemDescription: "Work", unitPriceCents: 10, clientId: client.entityId, title: "Call", dueAt: 1, timezone: "UTC" });
+    rejected(await pushInterleaved(s, dependent, async () => {
+      await env.DB.prepare("UPDATE profiles SET deleted_at = 1 WHERE id = ? AND user_id = ?")
+        .bind(s.profileId, s.userId).run();
+    }));
+  });
+
+  it.each(["client", "profile"])("child tombstone cleanup remains valid after its %s is tombstoned", async parentType => {
+    const s = await setup();
+    const client = s.mutation("client", { name: "Acme" });
+    const item = s.mutation("catalogItem", { itemDescription: "Work", unitPriceCents: 10 });
+    const followUp = s.mutation("clientFollowUp", { clientId: client.entityId, title: "Call", dueAt: 1, timezone: "UTC" });
+    expect((await s.push(client, item, followUp)).map(r => r.status)).toEqual(["applied", "applied", "applied"]);
+    const parent = s.mutation(parentType, {}, parentType === "client" ? client.entityId : s.profileId);
+    parent.op = "delete";
+    expect((await s.push(parent))[0].status).toBe("applied");
+    const deletes = [item, followUp].map(original => {
+      const deletion = s.mutation(original.entityType, {}, original.entityId);
+      deletion.op = "delete";
+      return deletion;
+    });
+    const results = await s.push(...deletes);
+    expect(results.map(r => r.status)).toEqual(["applied", "applied"]);
+    expect(results.every(r => typeof r.entity.deletedAt === "number")).toBe(true);
+    const changes = await s.pull();
+    expect(changes.find(c => c.id === item.entityId).deletedAt).not.toBeNull();
+    expect(changes.find(c => c.id === followUp.entityId).deletedAt).not.toBeNull();
   });
 });

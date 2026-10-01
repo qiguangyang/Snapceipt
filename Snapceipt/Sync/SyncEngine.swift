@@ -21,6 +21,8 @@ struct SyncEntityHandler {
     let applyPulled: (_ context: ModelContext, _ env: PullChange) -> Void
     /// Local `updatedAt` for the row id, or nil if no local row exists.
     let localUpdatedAt: (_ context: ModelContext, _ id: String) -> Int?
+    /// Local server revision; older pulled revisions must never replace it.
+    let localRev: (_ context: ModelContext, _ id: String) -> Int?
     /// Delete the local row for the id (tombstone handling).
     let deleteLocal: (_ context: ModelContext, _ id: String) -> Void
     /// Overwrite the local row from a server entity (push conflict).
@@ -245,8 +247,15 @@ final class SyncEngine {
         // Keep local if an unsynced (pending/inflight) outbox edit exists for this id.
         if hasUnsyncedOutbox(entityId: id) { return }
 
-        // LWW: an equal-or-newer local row wins over the incoming change.
-        if let localUpd = handler.localUpdatedAt(context, id), localUpd >= incomingUpdatedAt {
+        // Applied acknowledgements stamp updatedAt/rev without copying domain
+        // fields. An authoritative pull at that same timestamp must still apply
+        // (for example, a preserved server PDF/status omitted from the push).
+        // Pending/inflight edits remain protected above; older timestamps and
+        // revisions remain stale even when the other value happens to be newer.
+        if let localUpd = handler.localUpdatedAt(context, id), localUpd > incomingUpdatedAt {
+            return
+        }
+        if let localRev = handler.localRev(context, id), localRev > env.rev {
             return
         }
 

@@ -76,7 +76,8 @@ describe("v2ColumnsAndTables", () => {
     await seedProfile();
     await env.DB.prepare("INSERT INTO catalog_items (id,user_id,profile_id,description,unit_price_cents,created_at,updated_at) VALUES ('v2-item','v2-user','v2-profile','Work',0,1,1)").run();
     expect(await env.DB.prepare("SELECT currency,unit_label,deleted_at,rev,last_edited_device_id FROM catalog_items WHERE id='v2-item'").first()).toEqual({ currency: "AUD", unit_label: null, deleted_at: null, rev: 0, last_edited_device_id: null });
-    // Client IDs are logical links: no FK to clients is introduced.
+    // Client IDs remain logical links; 0020 guards require a live scoped client.
+    await env.DB.prepare("INSERT INTO clients (id,user_id,profile_id,name,created_at,updated_at) VALUES ('logical-client','v2-user','v2-profile','Acme',1,1)").run();
     await env.DB.prepare("INSERT INTO client_follow_ups (id,user_id,profile_id,client_id,title,due_at,timezone,created_at,updated_at) VALUES ('v2-follow','v2-user','v2-profile','logical-client','Call',0,'Australia/Sydney',1,1)").run();
     expect(await env.DB.prepare("SELECT completed_at FROM client_follow_ups WHERE id='v2-follow'").first()).toEqual({ completed_at: null });
     await expect(env.DB.prepare("INSERT INTO catalog_items (id,user_id,description,unit_price_cents,created_at,updated_at) VALUES ('missing-profile','v2-user','Work',0,1,1)").run()).rejects.toThrow(/NOT NULL/);

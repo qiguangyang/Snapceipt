@@ -57,6 +57,7 @@ final class SyncEntityRegistry {
         handlers[type] = SyncEntityHandler(
             applyPulled: { ctx, env in mapper.upsert(ctx, env) },
             localUpdatedAt: { ctx, id in mapper.localUpdatedAt(ctx, id) },
+            localRev: { ctx, id in mapper.fetch(ctx, id)?.rev },
             deleteLocal: { ctx, id in mapper.delete(ctx, id) },
             overwriteLocal: { ctx, env in mapper.upsert(ctx, env) },
             stampServer: { ctx, id, rev, upd in mapper.stamp(ctx, id, rev: rev, updatedAt: upd) },
