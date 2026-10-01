@@ -101,6 +101,12 @@ final class SyncEngine {
 
     private func stage(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) throws {
         let payload = registry.encodePayload(entityType: entityType, entity: entity)
+        // UUIDv7 random bits and millisecond ties cannot preserve insertion order.
+        // Allocate a strictly increasing local outbox time; domain timestamps remain unchanged.
+        var newest = FetchDescriptor<OutboxMutation>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        newest.fetchLimit = 1
+        let latest = try context.fetch(newest).first?.createdAt
+        let enqueueTime = max(Epoch.nowMs(), latest.map { $0 + 1 } ?? 0)
         // Dedupe consecutive PENDING upserts for the same entity into ONE row (refresh the payload
         // to the latest state, keep the original baseRev). Otherwise N rapid edits enqueue N upserts
         // all on the same baseRev — the first applies (server rev → R+1) and every later one
@@ -115,7 +121,7 @@ final class SyncEngine {
             existingDescriptor.fetchLimit = 1
             if let existing = try context.fetch(existingDescriptor).first {
                 existing.payloadJSON = payload
-                existing.createdAt = Epoch.nowMs()
+                existing.createdAt = enqueueTime
                 return
             }
         }
@@ -126,7 +132,7 @@ final class SyncEngine {
             op: op,
             payloadJSON: payload,
             baseRev: entity.rev,
-            createdAt: Epoch.nowMs(),
+            createdAt: enqueueTime,
             attemptCount: 0,
             status: "pending"
         )

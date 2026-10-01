@@ -85,3 +85,48 @@ struct QuoteListViewModelTests {
         #expect(sync.calls.contains { $0.op == "upsert" && $0.entityType == .quoteLineItem })
     }
 }
+
+extension QuoteListViewModelTests {
+    @Test func doubleTapCreatesOneDraft() async throws {
+        let (context, sync) = try makeFixture()
+        let quote = Quote(userId: "u1", profileId: "p1", clientName: "Legacy", clientAddress: "Address", clientMobile: "123", validUntil: "2000-01-01")
+        context.insert(quote); try context.save()
+        let model = QuoteListViewModel(context: context, sync: sync, userId: "u1", profileId: "p1", clock: { Date(timeIntervalSince1970: 1790811000) })
+        let first = try #require(model.duplicate(quote))
+        #expect(model.duplicate(quote) == nil)
+        #expect(try context.fetch(FetchDescriptor<Quote>()).count == 2)
+        let copy = try #require(context.fetch(FetchDescriptor<Quote>()).first { $0.id == first })
+        #expect(copy.clientAddress == "Address" && copy.clientMobile == "123")
+        #expect(copy.validUntil == "2026-10-28")
+        for _ in 0..<5 { await Task.yield() }
+        #expect(model.duplicate(quote) == nil) // stays guarded while the review prompt is open
+        model.finishCreatingDraft() // cancelling presentation keeps the committed draft
+        #expect(try context.fetch(FetchDescriptor<Quote>()).count == 2)
+        #expect(model.duplicate(quote) != nil)
+        #expect(try context.fetch(FetchDescriptor<Quote>()).count == 3)
+    }
+}
+
+extension QuoteListViewModelTests {
+    @Test func linkedDuplicateUsesCurrentClientAndFailuresDoNotNavigate() throws {
+        let (context, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Current")
+        let quote = Quote(userId: "u1", profileId: "p1", clientId: client.id, clientName: "Old")
+        context.insert(client); context.insert(quote)
+        context.insert(QuoteLineItem(userId: "u1", quoteId: quote.id, itemDescription: "Work", unitPriceCents: 100))
+        try context.save()
+        let model = vm(context, sync)
+        let id = try #require(model.duplicate(quote))
+        #expect(try context.fetch(FetchDescriptor<Quote>()).first { $0.id == id }?.clientName == "Current")
+        enum Failure: Error { case save }
+        let failing = QuoteListViewModel(context: context, sync: sync, userId: "u1", profileId: "p1", persist: { _ in throw Failure.save })
+        let previousCalls = sync.calls.count
+        #expect(failing.duplicate(quote) == nil && failing.errorMessage != nil)
+        #expect(sync.calls.count == previousCalls)
+        #expect(try ModelContext(context.container).fetch(FetchDescriptor<Quote>()).count == 2)
+        client.deletedAt = 1; try context.save()
+        let deleted = vm(context, sync)
+        #expect(deleted.duplicate(quote) == nil)
+        #expect(deleted.errorMessage == "Select a live client in this business before creating again.")
+    }
+}

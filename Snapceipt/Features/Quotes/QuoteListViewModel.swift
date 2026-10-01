@@ -12,22 +12,30 @@ final class QuoteListViewModel {
     @ObservationIgnored private let sync: any SyncEnqueuing
     @ObservationIgnored private let userId: String
     @ObservationIgnored let profileId: String
+    @ObservationIgnored private let repeatWork: RepeatWorkService
+    @ObservationIgnored private let clock: () -> Date
+    private(set) var isCreatingDraft = false
+    var errorMessage: String?
 
     /// Active profile's live quotes, newest first.
     private(set) var quotes: [Quote] = []
 
-    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String) {
+    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String,
+         persist: @escaping (ModelContext) throws -> Void = { try $0.save() },
+         clock: @escaping () -> Date = { Date() }) {
         self.context = context
         self.sync = sync
         self.userId = userId
         self.profileId = profileId
+        self.repeatWork = RepeatWorkService(context: context, sync: sync, userId: userId, profileId: profileId, persist: persist)
+        self.clock = clock
         reload()
     }
 
     func reload() {
-        let pid = profileId
+        let uid = userId, pid = profileId
         let d = FetchDescriptor<Quote>(
-            predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil },
+            predicate: #Predicate { $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         quotes = (try? context.fetch(d)) ?? []
     }
@@ -42,38 +50,30 @@ final class QuoteListViewModel {
         sync.enqueue(op: "delete", entityType: .quote, entity: quote)
     }
 
-    /// Clone a quote (client, GST flags, line items) into a fresh DRAFT — new id, no
-    /// number / invoice / PDF / sent state — so the user can quickly start a new quote
-    /// from an existing one. Returns the new quote's id (to open its editor).
+    /// Hold the guard through the saved-draft review prompt and navigation.
+    /// Cancellation calls finishCreatingDraft(); returning from the editor creates a new list model.
     @discardableResult
     func duplicate(_ quote: Quote) -> String? {
-        let copy = Quote(
-            userId: userId, profileId: profileId,
-            clientName: quote.clientName, clientEmail: quote.clientEmail,
-            gstEnabled: quote.gstEnabled, gstInclusive: quote.gstInclusive,
-            subtotalCents: quote.subtotalCents, gstCents: quote.gstCents, totalCents: quote.totalCents,
-            currency: quote.currency, status: "draft", validUntil: quote.validUntil,
-            gstRateBp: quote.gstRateBp)
-        context.insert(copy)
-
-        let qid = quote.id
-        let d = FetchDescriptor<QuoteLineItem>(
-            predicate: #Predicate { $0.quoteId == qid && $0.deletedAt == nil },
-            sortBy: [SortDescriptor(\.sortOrder)])
-        let lines = (try? context.fetch(d)) ?? []
-        var cloned: [QuoteLineItem] = []
-        for (idx, line) in lines.enumerated() {
-            let c = QuoteLineItem(userId: userId, quoteId: copy.id,
-                                  itemDescription: line.itemDescription,
-                                  quantity: line.quantity, unitPriceCents: line.unitPriceCents,
-                                  sortOrder: idx)
-            context.insert(c)
-            cloned.append(c)
+        guard !isCreatingDraft else { return nil }
+        isCreatingDraft = true
+        errorMessage = nil
+        do {
+            let id: String
+            if quote.clientId != nil {
+                id = try repeatWork.repeatQuote(sourceId: quote.id, now: clock())
+            } else {
+                id = try repeatWork.duplicateLegacyQuote(sourceId: quote.id, now: clock())
+            }
+            reload()
+            return id
+        } catch {
+            isCreatingDraft = false
+            errorMessage = (error as? RepeatWorkService.ValidationError)?.errorDescription
+                ?? "Couldn’t create the draft. Try again."
+            return nil
         }
-        try? context.save()
-        reload()
-        sync.enqueue(op: "upsert", entityType: .quote, entity: copy)
-        for c in cloned { sync.enqueue(op: "upsert", entityType: .quoteLineItem, entity: c) }
-        return copy.id
     }
+
+    /// End presentation after cancellation; the committed draft remains in the list.
+    func finishCreatingDraft() { isCreatingDraft = false }
 }

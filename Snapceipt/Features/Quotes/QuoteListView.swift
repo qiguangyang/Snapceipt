@@ -18,6 +18,8 @@ struct QuoteListView: View {
     @Environment(EntitlementStore.self) private var entitlement
     @State private var vm: QuoteListViewModel?
     @State private var showPaywall = false
+    @State private var pendingDraftId: String?
+    @State private var showDraftReview = false
     /// Date filter: "" = All time, else "YYYY-MM". Defaults to the current month and snaps to the
     /// newest quote's month on load (like the Activity page's filter).
     @State private var monthKey: String = MonthKey.current
@@ -67,11 +69,15 @@ struct QuoteListView: View {
                                             .accessibilityIdentifier(AccessibilityID.quoteRowDelete + quote.id)
                                             Button {
                                                 guard entitlement.isPro else { showPaywall = true; return }
-                                                if let newId = vm.duplicate(quote) { onEdit(newId) }
+                                                if let newId = vm.duplicate(quote) {
+                                                    pendingDraftId = newId
+                                                    showDraftReview = true
+                                                }
                                             } label: {
                                                 Image(systemName: "plus.square.on.square")
                                             }
                                             .tint(accent.base)
+                                            .disabled(vm.isCreatingDraft)
                                             .accessibilityIdentifier(AccessibilityID.quoteRowDuplicate + quote.id)
                                         }
                                 }
@@ -103,6 +109,25 @@ struct QuoteListView: View {
             if !entitlement.isPro { showPaywall = true; return }
             await onRefresh()      // pull a client's web "Accept" before the list settles
             vm?.reload()
+        }
+        .alert(pendingDraftId == nil ? "Couldn’t create the draft" : "Draft ready", isPresented: Binding(
+            get: { showDraftReview || vm?.errorMessage != nil },
+            set: { if !$0 { showDraftReview = false; vm?.errorMessage = nil } }
+        )) {
+            if let id = pendingDraftId {
+                Button("Review draft") {
+                    pendingDraftId = nil
+                    onEdit(id)
+                }
+                Button("Keep in list", role: .cancel) {
+                    pendingDraftId = nil
+                    vm?.finishCreatingDraft()
+                }
+            } else {
+                Button("OK", role: .cancel) { vm?.errorMessage = nil }
+            }
+        } message: {
+            Text(pendingDraftId == nil ? (vm?.errorMessage ?? "") : "Review prices and dates before sending.")
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
     }

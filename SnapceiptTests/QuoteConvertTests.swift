@@ -73,8 +73,10 @@ struct QuoteConvertTests {
         #expect(inv.gstInclusive == false)
         // due = today + 14 days
         let today = ExportDateFormatter.shared.string(from: Date())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let expected = ExportDateFormatter.shared.string(
-            from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 14,
+            from: calendar.date(byAdding: .day, value: 14,
                 to: ExportDateFormatter.shared.date(from: today)!)!)
         #expect(inv.dueDate == expected)
         let lines = try ctx.fetch(FetchDescriptor<InvoiceLineItem>(predicate: #Predicate { $0.invoiceId == invId! }))

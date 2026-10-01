@@ -472,15 +472,15 @@ final class QuoteEditorViewModel {
         quote.invoiceId = invoice.id
         quote.status = QuoteStatus.invoiced.rawValue
         quote.updatedAt = Epoch.nowMs()
-        do { try persist(mutationContext) }
+        let mutations = [SyncMutationDescriptor(op: "upsert", entityType: .invoice, entity: invoice)]
+            + clonedLines.map { SyncMutationDescriptor(op: "upsert", entityType: .invoiceLineItem, entity: $0) }
+            + [SyncMutationDescriptor(op: "upsert", entityType: .quote, entity: quote)]
+        do { try sync.persistAndEnqueue(mutations: mutations, context: mutationContext, save: persist) }
         catch {
+            mutationContext.rollback()
             errorMessage = "Couldn’t create the invoice. Try again."
             return nil
         }
-
-        sync.enqueue(op: "upsert", entityType: .invoice, entity: invoice, context: mutationContext)
-        for line in clonedLines { sync.enqueue(op: "upsert", entityType: .invoiceLineItem, entity: line, context: mutationContext) }
-        sync.enqueue(op: "upsert", entityType: .quote, entity: quote, context: mutationContext)
 
         // Reflect only conversion-owned lifecycle fields on an already-loaded quote.
         // Other pending quote/contact/line edits stay untouched and unsaved.
@@ -494,14 +494,9 @@ final class QuoteEditorViewModel {
         return invoice.id
     }
 
-    /// "YYYY-MM-DD" `days` from today (UTC). Falls back to today on a parse failure.
+    /// "YYYY-MM-DD" `days` from today using an explicit UTC calendar.
     static func dateString(daysFromNow days: Int) -> String {
-        let today = ExportDateFormatter.shared.string(from: Date())
-        guard let d = ExportDateFormatter.shared.date(from: today),
-              let plus = Calendar(identifier: .gregorian).date(byAdding: .day, value: days, to: d) else {
-            return today
-        }
-        return ExportDateFormatter.shared.string(from: plus)
+        RepeatWorkService.documentDate(now: Date(), addingDays: days)
     }
 
     /// "YYYY-MM-DD" 14 days from today (UTC) — the invoice convert/due default (spec §4.2).
