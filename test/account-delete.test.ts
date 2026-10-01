@@ -17,6 +17,7 @@ const PURGE_ORDER = [
   "categories",
   "payments", "invoice_line_items", "invoices",
   "quotes",
+  "catalog_items", "client_follow_ups",
   "clients", "tax_settings", "loyalty_cards", "wfh_logs",
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",
@@ -82,6 +83,8 @@ async function seedRichUser(): Promise<{ userId: string; profileId: string; bear
   await env.DB.prepare(`INSERT INTO quotes (id, user_id, profile_id, number, subtotal_cents, gst_cents, total_cents, currency, status, created_at, updated_at) VALUES (?, ?, ?, 'SN-0001', 1000, 100, 1100, 'AUD', 'draft', ?, ?)`).bind(quoteId, userId, profileId, t, t).run();
   await env.DB.prepare(`INSERT INTO quote_line_items (id, user_id, quote_id, description, quantity, unit_price_cents, created_at, updated_at) VALUES (?, ?, ?, 'Consulting', 1, 1000, ?, ?)`).bind(qliId, userId, quoteId, t, t).run();
   await env.DB.prepare(`INSERT INTO clients (id, user_id, profile_id, name, email, created_at, updated_at) VALUES (?, ?, ?, 'Acme', 'acme@e.com', ?, ?)`).bind(clientId, userId, profileId, t, t).run();
+  await env.DB.prepare(`INSERT INTO catalog_items (id, user_id, profile_id, description, unit_label, unit_price_cents, created_at, updated_at) VALUES (?, ?, ?, 'Consulting', 'hour', 1000, ?, ?)`).bind(uuidv7(), userId, profileId, t, t).run();
+  await env.DB.prepare(`INSERT INTO client_follow_ups (id, user_id, profile_id, client_id, title, due_at, timezone, created_at, updated_at) VALUES (?, ?, ?, ?, 'Follow up', ?, 'Australia/Sydney', ?, ?)`).bind(uuidv7(), userId, profileId, clientId, t, t, t).run();
   await env.DB.prepare(`INSERT INTO quote_counters (user_id, next_seq) VALUES (?, 2)`).bind(userId).run();
 
   // Invoice subsystem — the graph that used to break DELETE /account: invoices FK to
@@ -144,11 +147,11 @@ async function countForUser(table: string, userId: string): Promise<number> {
 }
 
 describe("DELETE /account", () => {
-  it("purges all D1 rows across every user-scoped table + R2 objects", async () => {
+  it("accountDeletionWithV2Data purges all D1 rows across every user-scoped table + R2 objects", async () => {
     const { userId, profileId, bearer, r2Key, exportKey, quoteR2Key, invoiceR2Key, logoR2Key } = await seedRichUser();
 
     // Sanity: the seed actually populated the graph (a few representative tables).
-    for (const table of ["transactions", "line_items", "receipt_images", "quotes", "quote_line_items", "invoices", "payments", "vehicle_years", "profiles", "users"]) {
+    for (const table of ["transactions", "line_items", "receipt_images", "quotes", "quote_line_items", "invoices", "payments", "vehicle_years", "catalog_items", "client_follow_ups", "profiles", "users"]) {
       expect(await countForUser(table, userId)).toBeGreaterThan(0);
     }
     expect(
@@ -180,6 +183,7 @@ describe("DELETE /account", () => {
     await SELF.fetch("https://x/account", { method: "DELETE", headers: { authorization: a.bearer } });
     const bRows = await env.DB.prepare("SELECT COUNT(*) c FROM transactions WHERE user_id = ?").bind(b.userId).first<{ c: number }>();
     expect(bRows!.c).toBe(1);
+    for (const table of ["catalog_items", "client_follow_ups"]) expect(await countForUser(table, b.userId)).toBe(1);
   });
 
   it("rejects deletion when the session has been revoked, even with a still-valid access token (S4)", async () => {

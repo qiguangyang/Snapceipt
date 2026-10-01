@@ -143,6 +143,28 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
       email: "email",
       mobilePhone: "mobile_phone",
       address: "address",
+      notes: "notes",
+    },
+  },
+  catalogItem: {
+    table: "catalog_items",
+    hasProfileId: true,
+    columns: {
+      itemDescription: "description",
+      unitLabel: "unit_label",
+      unitPriceCents: "unit_price_cents",
+      currency: "currency",
+    },
+  },
+  clientFollowUp: {
+    table: "client_follow_ups",
+    hasProfileId: true,
+    columns: {
+      clientId: "client_id",
+      title: "title",
+      dueAt: "due_at",
+      timezone: "timezone",
+      completedAt: "completed_at",
     },
   },
   quote: {
@@ -150,6 +172,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     hasProfileId: true,
     columns: {
       number: "number",
+      clientId: "client_id",
       clientName: "client_name",
       clientEmail: "client_email",
       clientAddress: "client_address",
@@ -174,6 +197,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     columns: {
       quoteId: "quote_id",
       description: "description",
+      unitLabel: "unit_label",
       quantity: "quantity",
       unitPriceCents: "unit_price_cents",
       sortOrder: "sort_order",
@@ -184,6 +208,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     hasProfileId: true,
     columns: {
       number: "number",
+      clientId: "client_id",
       quoteId: "quote_id",
       clientName: "client_name",
       clientEmail: "client_email",
@@ -207,6 +232,7 @@ export const SYNCABLE_TABLES: Record<string, SyncTableMeta> = {
     columns: {
       invoiceId: "invoice_id",
       itemDescription: "description",
+      unitLabel: "unit_label",
       quantity: "quantity",
       unitPriceCents: "unit_price_cents",
       sortOrder: "sort_order",
@@ -314,6 +340,8 @@ export const PROFILE_ID_REQUIRED: ReadonlySet<string> = new Set([
   "quote",
   "invoice",
   "taxSettings",
+  "catalogItem",
+  "clientFollowUp",
 ]);
 
 /** Resolve a client entityType to its table metadata, or null if unknown. */
