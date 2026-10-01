@@ -84,6 +84,22 @@ final class SyncEngine {
 
     /// Used by isolated domain transactions so outbox saves do not commit shared editor input.
     func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) {
+        // Keep the existing best-effort API compatible; checked domain transactions use
+        // persistAndEnqueue below so a staging/save failure reaches their UI.
+        try? persistAndEnqueue(mutations: [SyncMutationDescriptor(op: op, entityType: entityType, entity: entity)],
+                              context: context, save: { try $0.save() })
+    }
+
+    /// Stage all sync rows without saving, then commit domain and outbox changes once.
+    func persistAndEnqueue(mutations: [SyncMutationDescriptor], context: ModelContext,
+                           save: (ModelContext) throws -> Void) throws {
+        for mutation in mutations {
+            try stage(op: mutation.op, entityType: mutation.entityType, entity: mutation.entity, context: context)
+        }
+        try save(context)
+    }
+
+    private func stage(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) throws {
         let payload = registry.encodePayload(entityType: entityType, entity: entity)
         // Dedupe consecutive PENDING upserts for the same entity into ONE row (refresh the payload
         // to the latest state, keep the original baseRev). Otherwise N rapid edits enqueue N upserts
@@ -97,10 +113,9 @@ final class SyncEngine {
                 $0.entityId == eid && $0.entityType == etype && $0.op == "upsert" && $0.status == "pending"
             })
             existingDescriptor.fetchLimit = 1
-            if let existing = (try? context.fetch(existingDescriptor))?.first {
+            if let existing = try context.fetch(existingDescriptor).first {
                 existing.payloadJSON = payload
                 existing.createdAt = Epoch.nowMs()
-                try? context.save()
                 return
             }
         }
@@ -116,7 +131,6 @@ final class SyncEngine {
             status: "pending"
         )
         context.insert(mutation)
-        try? context.save()
     }
 
     // MARK: push

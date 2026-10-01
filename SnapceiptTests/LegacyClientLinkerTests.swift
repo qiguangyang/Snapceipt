@@ -188,6 +188,92 @@ struct LegacyClientLinkerTests {
         #expect(q.clientName == "Pending contact" && q.totalCents == 9999 && ctx.hasChanges)
     }
 
+    @Test(arguments: [false, true])
+    func stagedOutboxSaveFailureIsAtomicAndRetryable(existingPendingUpsert: Bool) async throws {
+        let (ctx, _, client, _) = try fixture()
+        let quote = Quote(userId: "u1", profileId: "p1", clientName: "Original quote", totalCents: 100, rev: 7)
+        let invoice = Invoice(userId: "u1", profileId: "p1", clientName: "Original invoice", totalCents: 200)
+        ctx.insert(quote); ctx.insert(invoice); try ctx.save()
+        let api = MockAPIClient()
+        let engine = SyncEngine(api: api, context: ctx, auth: AuthStore(), toast: ToastCenter())
+        if existingPendingUpsert { engine.enqueue(op: "upsert", entityType: .quote, entity: quote) }
+        let registry = SyncEntityRegistry()
+        let originalQuote = try canonicalPayload(registry.encodePayload(entityType: .quote, entity: quote))
+        let originalInvoice = try canonicalPayload(registry.encodePayload(entityType: .invoice, entity: invoice))
+        let previousOutbox = try ctx.fetch(FetchDescriptor<OutboxMutation>()).first
+        let previousPayload = previousOutbox?.payloadJSON
+        let previousMutationId = previousOutbox?.mutationId
+        struct OutboxSaveFailure: Error {}
+        var shouldFail = true
+        var saves = 0
+        let store = ClientStore(context: ctx, sync: engine, userId: "u1", profileId: "p1", persist: { transaction in
+            saves += 1
+            let staged = try transaction.fetch(FetchDescriptor<OutboxMutation>())
+            // Fail specifically when real outbox staging has prepared this complete selection.
+            if shouldFail && staged.count == 2 { throw OutboxSaveFailure() }
+            try transaction.save()
+        })
+        let vm = LegacyDocumentLinkViewModel(store: store, client: ClientSelection(client))
+        vm.load()
+        vm.toggle(.init(kind: .quote, id: quote.id)); vm.toggle(.init(kind: .invoice, id: invoice.id))
+        quote.clientName = "Pending quote"; invoice.totalCents = 999; client.notes = "Pending unrelated notes"
+        var successes = 0
+        #expect(!vm.confirm(onLinked: { successes += 1 }))
+        #expect(vm.errorMessage != nil && vm.selected.count == 2 && successes == 0 && saves == 1)
+        let failedReader = ModelContext(ctx.container)
+        let failedQuote = try #require(failedReader.fetch(FetchDescriptor<Quote>()).first)
+        let failedInvoice = try #require(failedReader.fetch(FetchDescriptor<Invoice>()).first)
+        #expect(failedQuote.clientId == nil && failedInvoice.clientId == nil)
+        #expect(try canonicalPayload(registry.encodePayload(entityType: .quote, entity: failedQuote)) == originalQuote)
+        #expect(try canonicalPayload(registry.encodePayload(entityType: .invoice, entity: failedInvoice)) == originalInvoice)
+        let failedOutbox = try failedReader.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(failedOutbox.count == (existingPendingUpsert ? 1 : 0))
+        if existingPendingUpsert {
+            #expect(failedOutbox.first?.payloadJSON == previousPayload && failedOutbox.first?.mutationId == previousMutationId)
+        }
+        #expect(quote.clientId == nil && invoice.clientId == nil)
+        #expect(quote.clientName == "Pending quote" && invoice.totalCents == 999 && client.notes == "Pending unrelated notes" && ctx.hasChanges)
+
+        shouldFail = false
+        #expect(vm.confirm(onLinked: { successes += 1 }))
+        #expect(vm.errorMessage == nil && successes == 1 && saves == 2)
+        let reader = ModelContext(ctx.container)
+        #expect(try reader.fetch(FetchDescriptor<Quote>()).first?.clientId == client.id)
+        #expect(try reader.fetch(FetchDescriptor<Invoice>()).first?.clientId == client.id)
+        #expect(try reader.fetch(FetchDescriptor<Client>()).first?.notes == nil)
+        let committed = try reader.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(committed.count == 2)
+        let quoteMutation = try #require(committed.first { $0.entityId == quote.id })
+        if existingPendingUpsert { #expect(quoteMutation.mutationId == previousMutationId) }
+        #expect(quoteMutation.baseRev == 7)
+        for mutation in committed {
+            let payload = SyncEntityRegistry().decodePayload(mutation.payloadJSON)
+            #expect(payload["clientId"]?.stringValue == client.id)
+            if mutation.entityId == quote.id { #expect(payload["clientName"]?.stringValue == "Original quote") }
+            else { #expect(payload["totalCents"]?.intValue == 200) }
+        }
+        #expect(quote.clientName == "Pending quote" && invoice.totalCents == 999 && client.notes == "Pending unrelated notes" && ctx.hasChanges)
+        #expect(api.pushCalls.isEmpty)
+        api.pushHandler = { mutations in
+            PushResponse(results: mutations.map {
+                PushResult(mutationId: $0.mutationId, status: "applied", reason: nil, entity: nil)
+            }, serverTime: 1)
+        }
+        await engine.push()
+        #expect(api.pushCalls.count == 1)
+        let sent = try #require(api.pushCalls.first)
+        #expect(sent.count == 2)
+        for mutation in sent {
+            let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(mutation.payload)) as? [String: Any])
+            #expect(json["clientId"] as? String == client.id)
+            if mutation.entityId == quote.id {
+                #expect(json["clientName"] as? String == "Original quote")
+                #expect(mutation.baseRev == 7)
+            } else { #expect(json["totalCents"] as? Int == 200) }
+        }
+        #expect(try ModelContext(ctx.container).fetch(FetchDescriptor<OutboxMutation>()).isEmpty)
+    }
+
     private func canonicalPayload(_ data: String) throws -> Data {
         let json = try JSONSerialization.jsonObject(with: Data(data.utf8))
         return try JSONSerialization.data(withJSONObject: json, options: .sortedKeys)

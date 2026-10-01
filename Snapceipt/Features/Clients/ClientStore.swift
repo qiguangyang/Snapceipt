@@ -181,16 +181,13 @@ final class ClientStore {
         let now = Epoch.nowMs()
         for pair in quotes { pair.saved.clientId = clientId; pair.saved.updatedAt = now }
         for pair in invoices { pair.saved.clientId = clientId; pair.saved.updatedAt = now }
-        // Failure discards only this isolated context. Pending user input stays intact.
-        try persist(mutationContext)
-        for pair in quotes {
-            sync.enqueue(op: "upsert", entityType: .quote, entity: pair.saved, context: mutationContext)
-            pair.working.clientId = clientId; pair.working.updatedAt = now
-        }
-        for pair in invoices {
-            sync.enqueue(op: "upsert", entityType: .invoice, entity: pair.saved, context: mutationContext)
-            pair.working.clientId = clientId; pair.working.updatedAt = now
-        }
+        let mutations = quotes.map { SyncMutationDescriptor(op: "upsert", entityType: .quote, entity: $0.saved) }
+            + invoices.map { SyncMutationDescriptor(op: "upsert", entityType: .invoice, entity: $0.saved) }
+        // Domain links and staged outbox rows share one checked save. Failure discards
+        // only this isolated context; pending user input remains intact and unsaved.
+        try sync.persistAndEnqueue(mutations: mutations, context: mutationContext, save: persist)
+        for pair in quotes { pair.working.clientId = clientId; pair.working.updatedAt = now }
+        for pair in invoices { pair.working.clientId = clientId; pair.working.updatedAt = now }
     }
 
     private func liveClient(_ id: String) throws -> Client {
