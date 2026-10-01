@@ -25,7 +25,7 @@ extension JSONValue: Encodable {
 // MARK: - Registry
 
 /// Single source of truth mapping `EntityType` → row glue + payload codec. Every one
-/// of the 14 syncable types is registered so a pulled envelope of any type upserts
+/// of the 20 syncable types is registered so a pulled envelope of any type upserts
 /// into the right `@Model` (no silent drop).
 final class SyncEntityRegistry {
     @MainActor static let shared = SyncEntityRegistry()
@@ -51,6 +51,8 @@ final class SyncEntityRegistry {
         register(.invoice, InvoiceSyncMapper())
         register(.invoiceLineItem, InvoiceLineItemSyncMapper())
         register(.payment, PaymentSyncMapper())
+        register(.catalogItem, CatalogItemSyncMapper())
+        register(.clientFollowUp, ClientFollowUpSyncMapper())
     }
 
     private func register<M: SyncRowMapper>(_ type: EntityType, _ mapper: M) {
@@ -107,9 +109,9 @@ func sharedFields(_ e: any Syncable) -> [String: JSONValue] {
     return f
 }
 
-private func str(_ v: String?) -> JSONValue { v.map { .string($0) } ?? .null }
-private func num(_ v: Int?) -> JSONValue { v.map { .number(Double($0)) } ?? .null }
-private func num(_ v: Int) -> JSONValue { .number(Double(v)) }
+func str(_ v: String?) -> JSONValue { v.map { .string($0) } ?? .null }
+func num(_ v: Int?) -> JSONValue { v.map { .number(Double($0)) } ?? .null }
+func num(_ v: Int) -> JSONValue { .number(Double(v)) }
 private func boolv(_ v: Bool) -> JSONValue { .bool(v) }
 
 // MARK: - Row mapper protocol
@@ -156,7 +158,7 @@ protocol MutableSyncRow: AnyObject {
 }
 
 /// Applies the shared SPINE envelope fields onto any @Model conforming row.
-private func applySharedEnvelope(_ row: some SyncableMutableEnvelope, _ env: PullChange) {
+func applySharedEnvelope(_ row: some SyncableMutableEnvelope, _ env: PullChange) {
     row.userId = env.userId
     row.rev = env.rev
     row.createdAt = env.createdAt
@@ -533,6 +535,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
             return x
         }()
         applySharedEnvelope(row, env)
+        if env.raw["clientId"] != nil { row.clientId = env.string("clientId") }
         row.profileId = env.profileId
         if let v = env.string("number") { row.number = v }
         if let v = env.string("clientName") { row.clientName = v }
@@ -555,6 +558,7 @@ private struct QuoteSyncMapper: SyncRowMapper {
 
     func payload(_ r: Quote) -> [String: JSONValue] {
         var f = sharedFields(r)
+        f["clientId"] = str(r.clientId)
         f["number"] = str(r.number)
         f["clientName"] = str(r.clientName)
         f["clientEmail"] = str(r.clientEmail)
@@ -596,6 +600,7 @@ private struct QuoteLineItemSyncMapper: SyncRowMapper {
             return x
         }()
         applySharedEnvelope(row, env)
+        if env.raw["unitLabel"] != nil { row.unitLabel = env.string("unitLabel") }
         if let v = env.string("quoteId") { row.quoteId = v }
         if let v = env.string("description") { row.itemDescription = v }
         if let v = env.int("quantity") { row.quantity = v }
@@ -605,6 +610,7 @@ private struct QuoteLineItemSyncMapper: SyncRowMapper {
 
     func payload(_ r: QuoteLineItem) -> [String: JSONValue] {
         var f = sharedFields(r)
+        f["unitLabel"] = str(r.unitLabel)
         f["quoteId"] = .string(r.quoteId)
         f["description"] = .string(r.itemDescription)   // maps to backend "description"
         f["quantity"] = num(r.quantity)
@@ -844,6 +850,7 @@ private struct ClientSyncMapper: SyncRowMapper {
             return x
         }()
         applySharedEnvelope(row, env)
+        if env.raw["notes"] != nil { row.notes = env.string("notes") }
         row.profileId = env.profileId
         if let v = env.string("name") { row.name = v }
         if let v = env.string("email") { row.email = v }
@@ -853,6 +860,7 @@ private struct ClientSyncMapper: SyncRowMapper {
 
     func payload(_ r: Client) -> [String: JSONValue] {
         var f = sharedFields(r)
+        f["notes"] = str(r.notes)
         f["name"] = .string(r.name)
         f["email"] = str(r.email)
         f["mobilePhone"] = str(r.mobilePhone)
@@ -877,6 +885,7 @@ private struct InvoiceSyncMapper: SyncRowMapper {
             return x
         }()
         applySharedEnvelope(row, env)
+        if env.raw["clientId"] != nil { row.clientId = env.string("clientId") }
         row.profileId = env.profileId
         if let v = env.string("number") { row.number = v }
         if let v = env.string("quoteId") { row.quoteId = v }
@@ -898,6 +907,7 @@ private struct InvoiceSyncMapper: SyncRowMapper {
 
     func payload(_ r: Invoice) -> [String: JSONValue] {
         var f = sharedFields(r)
+        f["clientId"] = str(r.clientId)
         f["number"] = str(r.number)
         f["quoteId"] = str(r.quoteId)
         f["clientName"] = str(r.clientName)
@@ -938,6 +948,7 @@ private struct InvoiceLineItemSyncMapper: SyncRowMapper {
             return x
         }()
         applySharedEnvelope(row, env)
+        if env.raw["unitLabel"] != nil { row.unitLabel = env.string("unitLabel") }
         if let v = env.string("invoiceId") { row.invoiceId = v }
         if let v = env.string("itemDescription") { row.itemDescription = v }
         if let v = env.int("quantity") { row.quantity = v }
@@ -947,6 +958,7 @@ private struct InvoiceLineItemSyncMapper: SyncRowMapper {
 
     func payload(_ r: InvoiceLineItem) -> [String: JSONValue] {
         var f = sharedFields(r)
+        f["unitLabel"] = str(r.unitLabel)
         f["invoiceId"] = .string(r.invoiceId)
         f["itemDescription"] = .string(r.itemDescription)   // backend wire key "itemDescription"
         f["quantity"] = num(r.quantity)

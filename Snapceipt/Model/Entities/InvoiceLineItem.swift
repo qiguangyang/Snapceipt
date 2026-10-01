@@ -10,6 +10,7 @@ final class InvoiceLineItem: Syncable {
     var profileId: String?           // always nil (child of an invoice)
 
     var invoiceId: String
+    var unitLabel: String? = nil
     var itemDescription: String      // maps to backend "description"
     var quantity: Int
     var unitPriceCents: Int
@@ -30,6 +31,7 @@ final class InvoiceLineItem: Syncable {
         userId: String,
         invoiceId: String,
         itemDescription: String,
+        unitLabel: String? = nil,
         quantity: Int = 1,
         unitPriceCents: Int,
         sortOrder: Int = 0,
@@ -43,6 +45,7 @@ final class InvoiceLineItem: Syncable {
         self.userId = userId
         self.profileId = nil
         self.invoiceId = invoiceId
+        self.unitLabel = unitLabel
         self.itemDescription = itemDescription
         self.quantity = quantity
         self.unitPriceCents = unitPriceCents

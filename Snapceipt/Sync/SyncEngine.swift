@@ -208,6 +208,11 @@ final class SyncEngine {
     /// LWW per change and persisting `nextCursor` after each page (crash-safe).
     func pull() async {
         status = .syncing
+        // Older apps can advance past unfamiliar types. Complete one full pull per
+        // user after expanding the registry; a failed/interrupted upgrade starts over.
+        let versionKey = auth.session.map { "sc.syncEntityVersion." + $0.userId }
+        let upgrading = versionKey.map { UserDefaults.standard.integer(forKey: $0) != 20 } ?? false
+        if upgrading { UserDefaults.standard.removeObject(forKey: cursorKey) }
         var cursor = UserDefaults.standard.string(forKey: cursorKey)
 
         while true {
@@ -222,7 +227,12 @@ final class SyncEngine {
             for change in resp.changes {
                 applyPulled(change)
             }
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                status = .error("Could not save synced changes.")
+                return
+            }
 
             // Persist only after the page committed (crash-safe).
             if let next = resp.nextCursor {
@@ -231,6 +241,9 @@ final class SyncEngine {
             }
 
             if !resp.hasMore { break }
+        }
+        if upgrading, let versionKey {
+            UserDefaults.standard.set(20, forKey: versionKey)
         }
         status = .idle
         // Signal screens whose lists are manual fetches (not @Query) to re-read after a pull,

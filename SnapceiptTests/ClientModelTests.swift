@@ -14,6 +14,7 @@ struct ClientModelTests {
         #expect(c.profileId == "p1")
         #expect(c.name == "Acme Pty Ltd")
         #expect(c.email == "ap@acme.com")
+        #expect(c.notes == nil)
         #expect(c.deletedAt == nil)
         #expect(c.rev == 0)
     }
@@ -44,7 +45,7 @@ struct ClientModelTests {
         let container = try ModelContainer.makeSnapceiptContainer(inMemory: true)
         let ctx = ModelContext(container)
         let registry = SyncEntityRegistry()
-        let src = Client(userId: "u1", profileId: "p1", name: "Acme", email: "ap@acme.com")
+        let src = Client(userId: "u1", profileId: "p1", name: "Acme", email: "ap@acme.com", notes: "Prefers email")
         src.rev = 3
         ctx.insert(src)
         try ctx.save()
@@ -52,6 +53,7 @@ struct ClientModelTests {
         let json = registry.encodePayload(entityType: .client, entity: src)
         let fields = registry.decodePayload(json)
         #expect(fields["name"]?.stringValue == "Acme")
+        #expect(fields["notes"]?.stringValue == "Prefers email")
         #expect(fields["email"]?.stringValue == "ap@acme.com")
         #expect(fields["id"]?.stringValue == src.id)
         #expect(fields["profileId"]?.stringValue == "p1")

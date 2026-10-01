@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// The full Snapceipt SwiftData schema: the 18 syncable domain models, the
+/// The full Snapceipt SwiftData schema: the 20 syncable domain models, the
 /// offline OutboxMutation queue, and the local-only PendingReceipt artifact.
 enum SnapceiptSchema {
     static let models: [any PersistentModel.Type] = [
@@ -23,6 +23,8 @@ enum SnapceiptSchema {
         Invoice.self,
         InvoiceLineItem.self,
         Payment.self,
+        CatalogItem.self,
+        ClientFollowUp.self,
         OutboxMutation.self,
         PendingReceipt.self,
     ]

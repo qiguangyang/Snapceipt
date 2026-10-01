@@ -12,6 +12,7 @@ final class Invoice: Syncable {
 
     var number: String?              // minted on issue (POST /invoices/:id/issue)
     var quoteId: String?             // origin link (the quote this was converted from)
+    var clientId: String? = nil
     var clientName: String?
     var clientEmail: String?
     var gstEnabled: Bool
@@ -43,6 +44,7 @@ final class Invoice: Syncable {
         profileId: String?,
         number: String? = nil,
         quoteId: String? = nil,
+        clientId: String? = nil,
         clientName: String? = nil,
         clientEmail: String? = nil,
         gstEnabled: Bool = true,
@@ -68,6 +70,7 @@ final class Invoice: Syncable {
         self.profileId = profileId
         self.number = number
         self.quoteId = quoteId
+        self.clientId = clientId
         self.clientName = clientName
         self.clientEmail = clientEmail
         self.gstEnabled = gstEnabled
