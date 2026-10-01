@@ -121,8 +121,8 @@ final class SyncEngine {
             existingDescriptor.fetchLimit = 1
             if let existing = try context.fetch(existingDescriptor).first {
                 existing.payloadJSON = payload
-                // Preserve its original position: a newly created parent must stay
-                // before queued children, including across push batch boundaries.
+                // Keep the original FIFO position and base revision. Push resolves
+                // any newly assigned pending parent before splitting into batches.
                 return
             }
         }
@@ -395,7 +395,65 @@ final class SyncEngine {
             predicate: #Predicate { $0.status == "pending" },
             sortBy: [SortDescriptor(\.createdAt)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        let pending = (try? context.fetch(descriptor)) ?? []
+        return orderingPendingDependencies(pending)
+    }
+
+    /// An older queued document can acquire a newly created client during association.
+    /// Resolve those edges over the complete pending snapshot, before the 200-row split.
+    /// Move only prerequisites ahead of their dependents; retain FIFO for other rows
+    /// and for multiple operations on one entity. Never change persisted queue metadata.
+    private func orderingPendingDependencies(_ pending: [OutboxMutation]) -> [OutboxMutation] {
+        struct EntityKey: Hashable {
+            let type: String
+            let id: String
+        }
+        var firstUpsert: [EntityKey: Int] = [:]
+        var previous: [EntityKey: Int] = [:]
+        var prerequisites = Array(repeating: [Int](), count: pending.count)
+        for (index, row) in pending.enumerated() {
+            let key = EntityKey(type: row.entityType, id: row.entityId)
+            if let earlier = previous[key] { prerequisites[index].append(earlier) }
+            previous[key] = index
+            if row.op == "upsert", firstUpsert[key] == nil { firstUpsert[key] = index }
+        }
+        for (index, row) in pending.enumerated() where row.op == "upsert" {
+            // These typed edges are acyclic: client -> document/follow-up -> line.
+            // Other payload IDs (including origin links) are not dependencies here.
+            let parent: (type: EntityType, field: String)
+            switch EntityType(rawValue: row.entityType) {
+            case .quote, .invoice, .clientFollowUp: parent = (.client, "clientId")
+            case .quoteLineItem: parent = (.quote, "quoteId")
+            case .invoiceLineItem: parent = (.invoice, "invoiceId")
+            default: continue
+            }
+            let fields = registry.decodePayload(row.payloadJSON)
+            guard let id = fields[parent.field]?.stringValue,
+                  let prerequisite = firstUpsert[EntityKey(type: parent.type.rawValue, id: id)] else { continue }
+            prerequisites[index].append(prerequisite)
+        }
+        var ordered: [OutboxMutation] = []
+        // Index identity preserves every mutation, even malformed duplicate entity rows.
+        // Iterative traversal cannot overflow the stack; visiting nodes break malformed
+        // cycles without dropping rows or bypassing the server's normal validation.
+        var state = Array(repeating: 0, count: pending.count) // unseen / visiting / emitted
+        for index in pending.indices {
+            var stack = [(index: index, expanded: false)]
+            while let next = stack.popLast() {
+                guard state[next.index] != 2 else { continue }
+                if next.expanded {
+                    state[next.index] = 2
+                    ordered.append(pending[next.index])
+                } else if state[next.index] == 0 {
+                    state[next.index] = 1
+                    stack.append((next.index, true))
+                    for prerequisite in prerequisites[next.index].reversed() where state[prerequisite] == 0 {
+                        stack.append((prerequisite, false))
+                    }
+                }
+            }
+        }
+        return ordered
     }
 
     private func hasUnsyncedOutbox(entityId: String) -> Bool {

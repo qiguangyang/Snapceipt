@@ -210,4 +210,115 @@ struct ClientWorkspaceFinalFixTests {
         }
         #expect(quote.currency == "AUD" && invoice.currency == "AUD" && aud.currency == "AUD" && nzd.currency == "NZD")
     }
+
+    @Test(arguments: [false, true], [0, 199])
+    func earlierPendingDocumentAcquiresLaterClient(invoice: Bool, padding: Int) async throws {
+        let (context, engine, api) = try fixture()
+        for index in 0..<padding {
+            let item = CatalogItem(userId: "u", profileId: "p", itemDescription: "Unrelated \(index)")
+            context.insert(item)
+            engine.enqueue(op: "upsert", entityType: .catalogItem, entity: item)
+        }
+        let document: any Syncable
+        let line: any Syncable
+        if invoice {
+            let row = Invoice(userId: "u", profileId: "p", clientName: "Edited invoice", rev: 7)
+            let child = InvoiceLineItem(userId: "u", invoiceId: row.id, itemDescription: "Edited line", unitPriceCents: 125)
+            context.insert(row); context.insert(child)
+            document = row; line = child
+        } else {
+            let row = Quote(userId: "u", profileId: "p", clientName: "Edited quote", rev: 7)
+            let child = QuoteLineItem(userId: "u", quoteId: row.id, itemDescription: "Edited line", unitPriceCents: 125)
+            context.insert(row); context.insert(child)
+            document = row; line = child
+        }
+        try context.save()
+        engine.enqueue(op: "upsert", entityType: document.entityType, entity: document)
+        engine.enqueue(op: "upsert", entityType: line.entityType, entity: line)
+        let initial = try #require(context.fetch(FetchDescriptor<OutboxMutation>()).first { $0.entityId == document.id })
+        let mutationId = initial.mutationId, enqueueTime = initial.createdAt
+        let store = ClientStore(context: context, sync: engine, userId: "u", profileId: "p")
+        let client = try store.save(id: nil, draft: ClientDraft(name: "Later client"))
+        try store.linkExistingDocuments(clientId: client.id, documents: [.init(kind: invoice ? .invoice : .quote, id: document.id)])
+        let before = try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>())
+        let linked = try #require(before.first { $0.entityId == document.id })
+        #expect(linked.mutationId == mutationId && linked.createdAt == enqueueTime && linked.baseRev == 7)
+        #expect(SyncEntityRegistry().decodePayload(linked.payloadJSON)["clientId"]?.stringValue == client.id)
+        var serverClients: Set<String> = []
+        // Existing server document has no client until the association upsert applies.
+        var serverDocumentClient: String?
+        var appliedLines: Set<String> = []
+        api.pushHandler = { batch in
+            let results = try batch.map { mutation in
+                let fields = try JSONDecoder().decode([String: JSONValue].self, from: JSONEncoder().encode(mutation.payload))
+                var valid = true
+                if mutation.entityType == "client" { serverClients.insert(mutation.entityId) }
+                if mutation.entityId == document.id {
+                    let ref = fields["clientId"]?.stringValue
+                    valid = ref.map { serverClients.contains($0) } ?? true
+                    if valid { serverDocumentClient = ref }
+                    #expect(mutation.baseRev == 7 && fields["clientName"]?.stringValue == (invoice ? "Edited invoice" : "Edited quote"))
+                }
+                if mutation.entityId == line.id {
+                    #expect(serverDocumentClient == client.id, "The updated parent must precede its line")
+                    if serverDocumentClient == client.id { appliedLines.insert(mutation.entityId) }
+                }
+                #expect(valid, "New client must exist before the association upsert")
+                return PushResult(mutationId: mutation.mutationId, status: valid ? "applied" : "rejected", reason: valid ? nil : "VALIDATION_FAILED", entity: nil)
+            }
+            return PushResponse(results: results, serverTime: 1000)
+        }
+        await engine.push()
+        let sent = api.pushCalls.flatMap { $0 }
+        #expect(sent.count == before.count && Set(sent.map(\.mutationId)) == Set(before.map(\.mutationId)))
+        #expect(Array(sent.suffix(3).map(\.entityId)) == [client.id, document.id, line.id])
+        #expect(api.pushCalls.map(\.count) == (padding == 199 ? [200, 2] : [3]))
+        #expect(serverDocumentClient == client.id && appliedLines == [line.id])
+        #expect(try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>()).isEmpty)
+    }
+
+    @Test func absentNullUnknownAndDeleteReferencesKeepQueueOrderAndServerValidation() async throws {
+        let (context, engine, api) = try fixture()
+        // Only a typed reference to an actual pending upsert creates an ordering edge.
+        // Missing parent, malformed value, delete-only parent and unknown fields are
+        // still sent unchanged for the server to accept/reject under its contract.
+        let fixtures: [(type: String, id: String, op: String, payload: String)] = [
+            ("quote", "omitted", "upsert", "{}"),
+            ("invoice", "null", "upsert", "{\"clientId\":null}"),
+            ("quote", "missing", "upsert", "{\"clientId\":\"not-pending\"}"),
+            ("invoice", "number", "upsert", "{\"clientId\":12}"),
+            ("clientFollowUp", "deleted-parent", "upsert", "{\"clientId\":\"deleted\"}"),
+            ("client", "deleted", "delete", "{}"),
+            ("quote", "delete", "delete", "{\"clientId\":\"later\"}"),
+            ("catalogItem", "not-a-reference", "upsert", "{\"clientId\":\"later\"}"),
+            // Cross-type back references cannot manufacture a graph cycle.
+            ("client", "later", "upsert", "{\"clientId\":\"omitted\",\"quoteId\":\"omitted\"}")
+        ]
+        for (index, fixture) in fixtures.enumerated() {
+            context.insert(OutboxMutation(entityType: fixture.type, entityId: fixture.id,
+                op: fixture.op, payloadJSON: fixture.payload, createdAt: index + 1))
+        }
+        // A failed parent is not pending and must not be pulled into this push.
+        let failed = OutboxMutation(entityType: "client", entityId: "not-pending", op: "upsert", payloadJSON: "{}", createdAt: 0, status: "failed")
+        context.insert(failed); try context.save()
+        api.pushHandler = { batch in
+            PushResponse(results: batch.map { mutation in
+                let rejected = ["missing", "number", "deleted-parent"].contains(mutation.entityId)
+                return PushResult(mutationId: mutation.mutationId, status: rejected ? "rejected" : "applied", reason: rejected ? "VALIDATION_FAILED" : nil, entity: nil)
+            }, serverTime: 1000)
+        }
+        await engine.push()
+        let sent = api.pushCalls.flatMap { $0 }
+        #expect(sent.map(\.entityId) == fixtures.map(\.id))
+        #expect(Set(sent.map(\.mutationId)).count == fixtures.count)
+        for (mutation, fixture) in zip(sent, fixtures) {
+            let actual = try JSONSerialization.jsonObject(with: JSONEncoder().encode(mutation.payload)) as? NSDictionary
+            let expected = try JSONSerialization.jsonObject(with: Data(fixture.payload.utf8)) as? NSDictionary
+            #expect(actual == expected)
+        }
+        let retained = try ModelContext(context.container).fetch(FetchDescriptor<OutboxMutation>())
+        #expect(retained.count == 4 && retained.allSatisfy { $0.status == "failed" })
+        #expect(Set(retained.map(\.entityId)) == ["not-pending", "missing", "number", "deleted-parent"])
+    }
+
 }
