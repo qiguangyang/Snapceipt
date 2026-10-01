@@ -8,6 +8,7 @@ import UIKit
 struct AppLaunch {
     let useStub: Bool
     let reset: Bool
+    let clientWorkspace: Bool
     let seed: Bool
     let basSeed: Bool
     let lockAvailable: Bool
@@ -57,6 +58,7 @@ struct AppLaunch {
          environment: [String: String] = ProcessInfo.processInfo.environment) {
         useStub = arguments.contains("-uiTestStub")
         reset = arguments.contains("-uiTestReset")
+        clientWorkspace = arguments.contains("-uiTestClientWorkspace")
         seed = arguments.contains("-uiTestSeed")
         basSeed = arguments.contains("-uiTestBasSeed")
         lockAvailable = arguments.contains("-uiTestLockAvailable")
@@ -220,14 +222,34 @@ struct AppLaunch {
         let client = Client(userId: DevAccount.userId, profileId: p1.id,
                             name: "Acme Pty Ltd", email: "accounts@acme.example")
         context.insert(client)
+        // Optional extension of the existing hermetic fixture, reached through Business Home.
+        // Clock values intentionally include DST correction cases; production has no route seam.
+        if useStub && clientWorkspace {
+            client.notes = String(repeating: "Discuss access, materials and timing before preparing the next draft. ", count: 30)
+            client.mobilePhone = "0400 123 456"
+            let formatter = ISO8601DateFormatter()
+            for (title, instant) in [("DST gap inspection", "2026-10-04T02:30:00Z"), ("DST overlap inspection", "2027-04-04T02:30:00Z")] {
+                context.insert(ClientFollowUp(userId: DevAccount.userId, profileId: p1.id, clientId: client.id,
+                    title: title, dueAt: Int(formatter.date(from: instant)!.timeIntervalSince1970 * 1000), timezone: "UTC"))
+            }
+        }
         let quote = Quote(userId: DevAccount.userId, profileId: p1.id,
                           clientName: "Northbridge Cafe", clientEmail: "owner@northbridge.example",
                           gstEnabled: true, subtotalCents: 200_00, gstCents: 20_00, totalCents: 220_00,
                           status: "draft")
         context.insert(quote)
+        if useStub && clientWorkspace { quote.clientId = client.id }
         context.insert(QuoteLineItem(userId: DevAccount.userId, quoteId: quote.id,
-                                     itemDescription: "Brand identity package", quantity: 1,
+                                     itemDescription: clientWorkspace ? String(repeating: "Brand identity package with full design descriptions. ", count: 12) : "Brand identity package", quantity: 1,
                                      unitPriceCents: 200_00, sortOrder: 0))
+        if useStub && clientWorkspace {
+            let invoice = Invoice(userId: DevAccount.userId, profileId: p1.id, number: "INV-REPEAT", clientId: client.id,
+                clientName: client.name, gstEnabled: true, subtotalCents: 10000, gstCents: 1000, totalCents: 11000,
+                status: "issued", dueDate: "2026-09-01")
+            context.insert(invoice)
+            context.insert(InvoiceLineItem(userId: DevAccount.userId, invoiceId: invoice.id,
+                itemDescription: String(repeating: "Detailed prior work description for review. ", count: 12), unitPriceCents: 10000))
+        }
         // F6: two email-in receipts on the business profile — one failed (needs review),
         // one done — so EmailInUITests can exercise the failed-first list + review flow.
         context.insert(Transaction(userId: DevAccount.userId, profileId: p1.id, merchant: "",

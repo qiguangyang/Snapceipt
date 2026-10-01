@@ -18,6 +18,7 @@ struct QuoteEditorView: View {
     /// on the saved draft. The editor and the list are sibling overlays, so a plain dismiss would
     /// land on the tab root, not the list.
     let onSavedDraft: () -> Void
+    var showsRepeatReview = false
 
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
@@ -96,6 +97,7 @@ struct QuoteEditorView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.logbookClose)
+            .accessibilityLabel("Close")
             Text(quoteId == nil ? "New quote" : "Quote").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
             // Trailing slot: a "Save Draft" button while the quote is still a draft — persists it
@@ -123,6 +125,7 @@ struct QuoteEditorView: View {
     @ViewBuilder private func content(_ vm: QuoteEditorViewModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if showsRepeatReview { Text("Review prices and dates before sending.").font(.ui(13, .semibold)).foregroundStyle(Palette.ink2).accessibilityIdentifier(AccessibilityID.clientRepeatReview) }
                 billToSection(vm)
                 lineItemsSection(vm)
                 totalsCard(vm)

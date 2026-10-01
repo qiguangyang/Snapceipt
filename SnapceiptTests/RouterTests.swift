@@ -19,3 +19,12 @@ import Testing
         #expect(r.overlay == .receiptDetail(id: "abc"))
     }
 }
+
+@MainActor struct ClientRouterTests {
+    @Test func opensHubOrSelectedClient() {
+        let r = Router(); r.openClient(nil)
+        #expect(r.overlay == .clients(clientId: nil)); #expect(r.overlay?.id == "clients-all")
+        r.openClient("c")
+        #expect(r.overlay == .clients(clientId: "c")); #expect(r.overlay?.id == "clients-c")
+    }
+}

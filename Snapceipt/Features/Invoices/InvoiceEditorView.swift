@@ -12,6 +12,8 @@ struct InvoiceEditorView: View {
     let profileId: String
     let invoiceId: String?           // nil = new
     let onClose: () -> Void
+    var onSavedDraft: (() -> Void)? = nil
+    var showsRepeatReview = false
 
     @Environment(\.accent) private var accent
     @State private var vm: InvoiceEditorViewModel?
@@ -26,6 +28,13 @@ struct InvoiceEditorView: View {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
                 header
+                if showsRepeatReview {
+                    Text("Review prices and dates before sending.")
+                        .font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18).padding(.bottom, 12)
+                        .accessibilityIdentifier(AccessibilityID.clientRepeatReview)
+                }
                 if let vm { content(vm) } else { Color.clear }
             }
             if let vm { actionBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
@@ -81,6 +90,7 @@ struct InvoiceEditorView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.logbookClose)
+            .accessibilityLabel("Close")
             Text(invoiceId == nil ? "New invoice" : "Invoice").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
             Text(vm?.displayNumber ?? "Draft").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
@@ -94,6 +104,10 @@ struct InvoiceEditorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let qid = vm.quoteId { fromQuoteNote(qid) }
                 if vm.status != "draft" { badgeRow(vm) }
+                if vm.status == "draft", onSavedDraft != nil {
+                    Button("Save Draft") { saveDraft(vm) }
+                        .accessibilityIdentifier(AccessibilityID.invoiceEditorSaveDraft)
+                }
                 billToSection(vm)
                 lineItemsSection(vm)
                 dueDateSection(vm)
@@ -102,6 +116,10 @@ struct InvoiceEditorView: View {
             .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 130)
         }
         .keyboardDismissButton()
+    }
+
+    func saveDraft(_ vm: InvoiceEditorViewModel) {
+        if vm.saveDraft() { onSavedDraft?() }
     }
 
     private func fromQuoteNote(_ quoteId: String) -> some View {
@@ -237,7 +255,8 @@ struct InvoiceEditorView: View {
                 get: { line.unitLabel ?? "" }, set: { line.unitLabel = $0.isEmpty ? nil : $0 }))
                 .font(.ui(12.5)).disabled(!editable)
             HStack(spacing: 8) {
-                TextField("Description", text: Binding(get: { line.itemDescription }, set: { line.itemDescription = $0 }))
+                TextField("Description", text: Binding(get: { line.itemDescription }, set: { line.itemDescription = $0 }), axis: .vertical)
+                    .lineLimit(2...5)
                     .font(.ui(14.5, .semibold)).disabled(!editable)
                 Text(fmt(line.lineTotalCents)).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 if editable {

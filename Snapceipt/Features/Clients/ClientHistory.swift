@@ -18,6 +18,7 @@ enum ClientHistory {
         let number: String?
         let createdAt: Int
         let totalCents: Int
+        let currency: String
         let status: String
         let paymentState: AccountsReceivable.PaymentState?
         var reference: DocumentReference { .init(kind: kind, id: id) }
@@ -25,7 +26,13 @@ enum ClientHistory {
 
     struct Snapshot {
         let documents: [Document]
+        /// Compatibility aggregate only: mixed currencies must never be displayed as one balance.
         let outstandingCents: Int
+        let outstandingByCurrency: [String: Int]
+        init(documents: [Document], outstandingCents: Int, outstandingByCurrency: [String: Int] = [:]) {
+            self.documents = documents; self.outstandingCents = outstandingCents
+            self.outstandingByCurrency = outstandingByCurrency
+        }
     }
 
     @MainActor
@@ -44,17 +51,20 @@ enum ClientHistory {
         }))
         let byInvoice = Dictionary(grouping: payments, by: \.invoiceId)
         var outstanding = 0
+        var outstandingByCurrency: [String: Int] = [:]
         var documents = quotes.map {
             Document(kind: .quote, id: $0.id, number: $0.number, createdAt: $0.createdAt,
-                     totalCents: $0.totalCents, status: $0.status, paymentState: nil)
+                     totalCents: $0.totalCents, currency: $0.currency, status: $0.status, paymentState: nil)
         }
         for invoice in invoices {
             let derived = AccountsReceivable.derive(invoice: invoice, payments: byInvoice[invoice.id] ?? [], today: today)
             if invoice.status == "issued" {
-                outstanding += max(invoice.totalCents - derived.amountPaidCents, 0)
+                let balance = max(invoice.totalCents - derived.amountPaidCents, 0)
+                outstanding += balance
+                if balance > 0 { outstandingByCurrency[invoice.currency, default: 0] += balance }
             }
             documents.append(Document(kind: .invoice, id: invoice.id, number: invoice.number,
-                                      createdAt: invoice.createdAt, totalCents: invoice.totalCents,
+                                      createdAt: invoice.createdAt, totalCents: invoice.totalCents, currency: invoice.currency,
                                       status: invoice.status, paymentState: derived.paymentState))
         }
         documents.sort {
@@ -62,6 +72,6 @@ enum ClientHistory {
             if $0.kind != $1.kind { return $0.kind.rawValue < $1.kind.rawValue }
             return $0.id < $1.id
         }
-        return Snapshot(documents: documents, outstandingCents: outstanding)
+        return Snapshot(documents: documents, outstandingCents: outstanding, outstandingByCurrency: outstandingByCurrency)
     }
 }

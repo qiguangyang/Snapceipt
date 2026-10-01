@@ -21,12 +21,13 @@ struct ClientFollowUpEditorView: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: followUp == nil ? "Set reminder" : "Edit follow-up", onClose: onClose)
+            SheetHeader(title: followUp == nil ? "Set reminder" : "Edit follow-up", onClose: onClose, titleLineLimit: 2)
             Form {
-                TextField("Follow-up title", text: $title)
+                TextField("Follow-up title", text: $title).accessibilityIdentifier(AccessibilityID.followUpTitle)
                 DatePicker("Date and time", selection: $wallTime, displayedComponents: [.date, .hourAndMinute])
                     .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
-                TextField("Timezone (IANA)", text: $timezone).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier(AccessibilityID.followUpTime)
+                TextField("Timezone (IANA)", text: $timezone).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier(AccessibilityID.followUpTimezone)
                 Text("Chosen timezone: \(timezone)")
                 if let resolution {
                     Text(resolution.isAmbiguous ? "This clock time occurs twice. The first occurrence will be used (\(resolution.offsetDescription))." : resolution.offsetDescription)
@@ -37,9 +38,10 @@ struct ClientFollowUpEditorView: View {
                 Text("Follow-ups stay in the app. This device can notify for the earliest 32 future follow-ups. Others are In-app only. A reminder never sends anything to your client.")
                 if let followUp { Text(scheduler.status(for: followUp).rawValue) }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                Button(saving ? "Saving…" : "Save follow-up") { save() }.disabled(saving)
+                Button(saving ? "Saving…" : "Save follow-up") { save() }.disabled(saving).accessibilityIdentifier(AccessibilityID.followUpSave)
             }
         }
+        .keyboardDismissButton()
         .task {
             guard !loaded else { return }; loaded = true
             title = followUp?.title ?? ""

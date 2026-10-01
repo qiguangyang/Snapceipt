@@ -78,6 +78,7 @@ struct ClientEditView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title).font(.ui(12.5, .semibold)).foregroundStyle(Palette.ink3)
             TextField(title, text: text, axis: multiline ? .vertical : .horizontal)
+                .accessibilityIdentifier(AccessibilityID.clientFieldPrefix + title)
                 .lineLimit(multiline ? 2...8 : 1...1)
                 .padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 12))
         }

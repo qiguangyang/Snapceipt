@@ -23,6 +23,7 @@ enum Overlay: Equatable, Identifiable {
     case loyaltyAdd
     case loyaltyCard(id: String)
     case quotes
+    case clients(clientId: String?)
     case bas
     case quoteEditor(id: String?)   // nil id = create a new quote
     case invoices
@@ -53,6 +54,7 @@ enum Overlay: Equatable, Identifiable {
         case .loyalty: return "loyalty"
         case .loyaltyAdd: return "loyaltyAdd"
         case .loyaltyCard(let id): return "loyaltyCard-\(id)"
+        case .clients(let id): return "clients-\(id ?? "all")"
         case .quotes: return "quotes"
         case .bas: return "bas"
         case .quoteEditor(let id): return "quoteEditor-\(id ?? "new")"
@@ -113,6 +115,8 @@ enum Route: Equatable {
     func dismissOverlay() { overlay = nil }
 
     /// Open the budget editor for `id` (nil = add). Used by row taps + tapped pushes.
+    func openClient(_ id: String?) { overlay = .clients(clientId: id) }
+
     func openBudget(_ id: String?) { overlay = .budgetEditor(id: id) }
 
     /// Open the quote editor for `id` (nil = create a new quote).

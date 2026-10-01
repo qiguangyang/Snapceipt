@@ -21,6 +21,7 @@ struct SnapceiptApp: App {
     @State private var reachability: Reachability
     @State private var sync: SyncEngine
     @State private var profiles: ProfilesStore
+    @State private var clientReminders: ClientReminderRouteCoordinator
     @State private var followUpScheduler: FollowUpNotificationScheduler
 
     /// Biometric app-lock controller (spec §6). Owned here so the lock state is a
@@ -138,12 +139,17 @@ struct SnapceiptApp: App {
         let followUpScheduler = FollowUpNotificationScheduler(context: context)
         followUpScheduler.setUser(auth.session?.userId)
         _followUpScheduler = State(initialValue: followUpScheduler)
+        let clientReminders = ClientReminderRouteCoordinator(context: context, profiles: profiles,
+            router: router, currentUser: { auth.session?.userId })
+        _clientReminders = State(initialValue: clientReminders)
 
         _auth = State(initialValue: auth)
         _authVM = State(initialValue: AuthViewModel(
             api: api, auth: auth,
             // Wipe local financial data + receipt images on sign-out / account deletion.
             onWipeLocalData: {
+                clientReminders.invalidateAuthentication()
+                router.dismissOverlay()
                 followUpScheduler.invalidateAuthentication()
                 LocalStore.wipe(context: context)
             }))
@@ -161,6 +167,7 @@ struct SnapceiptApp: App {
 
         // Inject the SAME Router + APIClient instances into the APNs delegate (UIKit
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
+        NotificationDelegate.clientReminderCoordinator = clientReminders
         NotificationDelegate.router = router
         NotificationDelegate.api = api
         // Email-in push refresh seam: a tapped/foreground email-in push triggers a sync,
@@ -182,6 +189,7 @@ struct SnapceiptApp: App {
                 .environment(reachability)
                 .environment(sync)
                 .environment(profiles)
+                .environment(clientReminders)
                 .environment(followUpScheduler)
                 .environment(appLock)
                 .environment(storekit)

@@ -4,6 +4,30 @@ import Foundation
 /// (UI tests are a separate process and cannot @testable-import the app, so this file
 /// is added to both targets' sources in project.yml.)
 enum AccessibilityID {
+    static let clientRepeatReview = "clients.repeat.review"
+    static let invoiceEditorSaveDraft = "invoice.saveDraft"
+    static let homeClients = "home.clients"
+    static let clientsHubScreen = "clients.hub"
+    static let clientsClose = "clients.close"
+    static let clientsSavedItems = "clients.savedItems"
+    static let clientsFilter = "clients.filter"
+    static let clientsAdd = "clients.add"
+    static let clientDetailScreen = "clients.detail"
+    static let clientWorkspaceRowPrefix = "clients.row."
+    static let clientReminderRowPrefix = "clients.reminder."
+    static let clientDocumentRowPrefix = "clients.document."
+    static let clientCreateAgainPrefix = "clients.createAgain."
+    static let clientFieldPrefix = "clients.field."
+    static let clientEdit = "clients.edit"
+    static let clientNewQuote = "clients.newQuote"
+    static let clientNewInvoice = "clients.newInvoice"
+    static let clientSetReminder = "clients.setReminder"
+    static let clientLinkDocuments = "clients.linkDocuments"
+    static let followUpTitle = "followUp.title"
+    static let followUpTimezone = "followUp.timezone"
+    static let followUpTime = "followUp.time"
+    static let followUpSave = "followUp.save"
+
     static let signInApple = "signin.apple"
     static let signInWithEmail = "signin.withemail"   // landing → opens the email login page
     static let signInEmail = "signin.email"           // email field on the email login page
