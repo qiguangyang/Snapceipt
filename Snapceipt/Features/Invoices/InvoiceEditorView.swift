@@ -467,7 +467,7 @@ struct InvoiceEditorView: View {
     }
 
     private func openURL(_ url: String) {
-        let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+        let full = url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
         shareURL = URL(string: full)
     }
 

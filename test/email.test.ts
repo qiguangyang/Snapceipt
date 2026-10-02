@@ -7,8 +7,9 @@
  * live binding and (b) capture the raw MIME string passed to its constructor
  * to assert both attachments are present.
  */
+import PostalMime from "postal-mime";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendExportEmail, sendEmailChangeCode } from "../src/lib/email";
+import { sendExportEmail, sendEmailChangeCode, sendInvoiceEmail } from "../src/lib/email";
 
 // ---------------------------------------------------------------------------
 // Module mock for cloudflare:email — hoisted before any imports are resolved.
@@ -126,5 +127,23 @@ describe("sendEmailChangeCode", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe("new@example.com");
     expect(sent[0].text).toContain("123456");
+  });
+});
+
+
+describe("invoice email backend routing", () => {
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("renders invoice email links and logos on document origin %s", async (origin) => {
+    await sendInvoiceEmail({ EMAIL: { send: async () => {} } } as any, {
+      to: "client@example.com", replyTo: "business@example.com", invoiceNumber: "INV-0001",
+      clientName: "Client", totalCents: 100, url: `${origin}/i/routing-token`,
+      business: { name: "Business", logoR2Key: "user/profiles/p1/logo", abn: null, contact: null },
+      lineItems: [{ description: "Work", quantity: 1, amountCents: 100 }],
+      subtotalCents: 100, gstCents: 0, gstEnabled: false, dueDate: null,
+      appUrl: "https://snapceipt.cc", pdf: new Uint8Array([0x25,0x50,0x44,0x46]),
+    });
+    const mail = await PostalMime.parse(captured.raw!);
+    expect(mail.html).toContain(`${origin}/images/user/profiles/p1/logo`);
+    expect(mail.html).toContain(`${origin}/i/routing-token`);
+    expect(mail.attachments).toHaveLength(1);
   });
 });

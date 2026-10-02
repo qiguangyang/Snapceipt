@@ -122,12 +122,12 @@ describe("GET /i/:token (public HTML tax invoice)", () => {
 });
 
 describe("POST /invoices/:id/send wires the hosted link + rich email", () => {
-  it("emails the client with the /i/ hosted URL, line items, totals, and the PDF", async () => {
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("emails a working hosted invoice and PDF on request origin %s", async (origin) => {
     const { userId, accessToken } = await seedAuthed();
     const { invoiceId } = await seedInvoice(userId);
     const spy = vi.spyOn(emailModule, "sendInvoiceEmail").mockResolvedValue(undefined);
 
-    const res = await SELF.fetch(`${BASE}/invoices/${invoiceId}/send`, {
+    const res = await SELF.fetch(`${origin}/invoices/${invoiceId}/send`, {
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
       body: "{}",
@@ -141,7 +141,10 @@ describe("POST /invoices/:id/send wires the hosted link + rich email", () => {
     expect(arg.to).toBe("jane@example.com");
     expect(arg.replyTo).toBe("hi@acme.example"); // business email
     expect(arg.invoiceNumber).toBe("INV-0001");
-    expect(arg.url).toContain("https://api.snapceipt.cc/i/");
+    expect(arg.url).toContain(`${origin}/i/`);
+    const page = await SELF.fetch(arg.url);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Acme Pty Ltd");
     expect(arg.business.name).toBe("Acme Pty Ltd");
     expect(arg.lineItems.length).toBe(1);
     expect(arg.totalCents).toBe(11500);

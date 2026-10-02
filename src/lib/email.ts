@@ -189,9 +189,6 @@ export interface QuoteEmail {
   appUrl: string;
 }
 
-/** Origin that serves business logos from R2: GET /images/<r2key>. */
-const IMAGE_ORIGIN = "https://api.snapceipt.cc";
-
 /** Dollars with a leading sign, e.g. "$40.00". */
 function emailDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -219,7 +216,7 @@ function renderQuoteEmailHtml(msg: QuoteEmail): string {
   const total = emailDollars(msg.totalCents);
 
   const logoImg = b.logoR2Key
-    ? `<img src="${IMAGE_ORIGIN}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
+    ? `<img src="${emailEsc(new URL(msg.url).origin)}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
     : "";
 
   const businessSub: string[] = [];
@@ -401,7 +398,7 @@ function renderInvoiceEmailHtml(msg: InvoiceEmail): string {
   const total = emailDollars(msg.totalCents);
 
   const logoImg = b.logoR2Key
-    ? `<img src="${IMAGE_ORIGIN}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
+    ? `<img src="${emailEsc(new URL(msg.url).origin)}/images/${emailEsc(b.logoR2Key)}" alt="${emailEsc(b.name)} logo" height="48" style="max-height:48px;max-width:180px;display:block;border:0;outline:none;">`
     : "";
 
   const businessSub: string[] = [];

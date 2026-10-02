@@ -1049,7 +1049,7 @@ struct ShellView: View {
         #if DEBUG
         return AppLaunch.current.makeAPIClient(auth: auth)
         #else
-        return LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.cc")!, auth: auth)
+        return LiveAPIClient(baseURL: BackendConfig.configuredBaseURL, auth: auth)
         #endif
     }
 

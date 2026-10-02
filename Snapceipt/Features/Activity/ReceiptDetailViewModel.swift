@@ -97,7 +97,7 @@ final class ReceiptDetailViewModel {
         defer { isLoadingImage = false }
         // POST /invoices/:id/pdf (re)builds the PDF and returns a short-lived signed download URL.
         guard let resp = try? await api.invoicePdf(invoice.id) else { return }
-        let urlStr = resp.pdfUrl.hasPrefix("http") ? resp.pdfUrl : "https://api.snapceipt.cc\(resp.pdfUrl)"
+        let urlStr = resp.pdfUrl.hasPrefix("http") ? resp.pdfUrl : "\(BackendConfig.configuredBaseURL.absoluteString)\(resp.pdfUrl)"
         guard let url = URL(string: urlStr),
               let (data, _) = try? await URLSession.shared.data(from: url),
               let img = PDFImageRenderer.firstPage(data) else { return }

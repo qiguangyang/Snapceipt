@@ -58,7 +58,6 @@ export function validate<T extends ZodSchema, Target extends keyof ValidationTar
 export const authRoutes = new Hono<AppEnv>();
 
 const MAGIC_LINK_TTL_SECONDS = 600; // 10 minutes
-const MAGIC_LINK_BASE_URL = "https://api.snapceipt.cc/auth/magic";
 // Superseded-refresh-hash retention for reuse detection == the 60-day refresh window.
 const REFRESH_REUSE_TTL_SECONDS = 60 * 24 * 60 * 60;
 
@@ -137,7 +136,7 @@ authRoutes.post(
       metadata: { email: normalized, createdAt: nowMs(), ...(deviceHint ? { deviceId: deviceHint } : {}) },
     });
 
-    const link = `${MAGIC_LINK_BASE_URL}?token=${token}`;
+    const link = `${new URL(c.req.url).origin}/auth/magic?token=${token}`;
     const e2e = c.env.E2E_TEST_MODE === "1";
 
     // Routed through the email seam (src/lib/email.ts) so tests can spy on it;

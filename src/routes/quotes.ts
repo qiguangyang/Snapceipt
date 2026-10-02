@@ -32,7 +32,6 @@ function utcDate(ms: number): string {
 }
 
 export const APP_URL = "https://snapceipt.cc";
-export const API_ORIGIN = "https://api.snapceipt.cc";
 
 interface QuoteRenderRow {
   id: string;
@@ -229,7 +228,7 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 6. Mint the public quote link (carries the quote's current link_version).
   const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
-  const url = `${API_ORIGIN}/q/${token}`;
+  const url = `${new URL(c.req.url).origin}/q/${token}`;
 
   // 7. email_outbox row + gated send. export_format is NULL (a link, no file).
   const outboxId = uuidv7();
@@ -316,7 +315,7 @@ quotesRoutes.post("/:id/link", async (c) => {
   }
 
   const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
-  return c.json({ url: `${API_ORIGIN}/q/${token}`, number });
+  return c.json({ url: `${new URL(c.req.url).origin}/q/${token}`, number });
 });
 
 // POST /quotes/:id/link/revoke — invalidate every previously-minted public link for this

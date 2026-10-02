@@ -512,7 +512,7 @@ struct QuoteEditorView: View {
     }
 
     private func absolute(_ url: String) -> String {
-        url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+        url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
     }
 
     private struct ShareItem: Identifiable { let id = UUID(); let url: URL }
