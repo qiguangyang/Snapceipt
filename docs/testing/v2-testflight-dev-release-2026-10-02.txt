@@ -1,0 +1,88 @@
+Snapceipt v2 development TestFlight release — 2026-10-02 (Australia/Sydney)
+
+Source: 888d90a441404c2593928eaf68025c3cb5d41e1c
+Branch: codex/v2-clients-repeat-work
+Pull request: https://github.com/qiguangyang/Snapceipt/pull/168
+App Store Connect app: 6778894594 (app.snapceipt.Snapceipt)
+Version/build: 2.0.0 (1)
+Configuration: Release, App Store distribution signing for app + Share Extension.
+Baked SNAPCEIPT_API_HOST: snapceipt-api-staging.techsiderau.workers.dev
+IPA SHA-256: 5b2e0469a69d32b6a10359500284e258c0058ddad2a7926404743992a18eee61
+
+Development backend:
+https://snapceipt-api-staging.techsiderau.workers.dev
+Worker: snapceipt-api-staging
+Final Worker version: 677cfdcd-54ef-472b-8443-7818ecaf68d8
+Wrangler deployment runtime: 4.146.0 (handles configured email sender binding).
+Resources: existing isolated staging D1/KV/R2.
+Applied migrations: 0019_v2_clients_repeat_work.sql, 0020_v2_sync_reference_guards.sql.
+Verified: no pending migrations; catalog_items + client_follow_ups tables and all
+nine v2 reference triggers exist; /health 200, unauthenticated /sync/pull 401
+AUTH_INVALID_TOKEN. Existing staging secrets retained. No production deployment.
+
+Routing fixes required for this upload:
+- Release shell API client now uses BackendConfig.configuredBaseURL, including
+  capture, client workspace, quotes, invoices, reports, and account operations.
+- Relative iOS downloads/share links use that configured origin; absolute server
+  URLs remain intact.
+- Server hosted quote/invoice links and magic-link email bridges use the request
+  origin. Quote/invoice email logos use their document URL origin.
+- Production request origins retain production URLs; JWT claims/signing unchanged.
+- Independent read-only review initially found backend origin gaps and a duplicate
+  test download. All findings corrected; follow-up review had no actionable issues.
+
+Fresh verification:
+- TypeScript typecheck: exit 0.
+- Backend suite after fixes: 824 tests / 92 files passed, exit 0, using
+  npm test -- --testTimeout=30000. No source timeout/assertion changes committed.
+  Two earlier default-timeout runs failed at the export rate-limit test's 5-second
+  budget and subsequent isolated-storage cleanup. The unchanged isolated test
+  passed in 0.28 seconds. A full run measured 16.4 seconds for that test and passed
+  with the 30-second budget; the final full suite after routing changes also passed.
+- iOS unit suite: 788 Swift Testing tests / 167 suites + 4 XCTest tests passed,
+  exit 0. The final run includes the corrected single-download regression test.
+- Affected UI suite: 12 cases passed (capture 2, client workspace inspection 5,
+  client journeys 3, invoice flow 2); combined unit/UI run: 804 passed, zero
+  failures/skips, exit 0. iPhone 16 Simulator / iOS 26.5. Builds baked the staging
+  host via SNAPCEIPT_API_HOST=snapceipt-api-staging.techsiderau.workers.dev.
+- Red/green: actual relative invoice PDF request targeted production before the
+  iOS fix; absolute URL control passed. Both passed afterward.
+- Backend red: six staging cases failed, 64 cases passed across six test files.
+  Tests cover production and staging document links (opening hosted pages), login
+  bridges, and rendered quote/invoice email assets (parsed MIME for invoice).
+- Signed Release archive/export: exit 0. Verified IPA embedded host, app/extension
+  versions, export compliance, and codesign --verify --deep --strict (exit 0).
+
+Evidence directory:
+/private/tmp/snapceipt-testflight-v2-20261002
+Key files: build.log, upload.log, ipa-verification.json, asc-verification.json,
+backend-routing-red.log, backend-routing-green.log, routing-red.xcresult,
+ios-fix-tests.xcresult, ios-final-unit.xcresult, staging-deploy-final.log,
+staging-final-deployment-verified.log, staging-schema.json, staging-http-smoke.json.
+
+Coverage limits:
+The earlier 84-scenario simulator regression result remains documented separately
+in v2-xui-regression-2026-10-02.txt. This release adds targeted routing verification;
+it does not repeat all 84 UI scenarios or test a merge with newer main. Physical
+upgrade/VoiceOver/actual OS reminder delivery/taps/two-device gates remain manual.
+Existing invalid-frame focus warning remains unclassified. Actual email delivery,
+email-logo access permissions, and APNs delivery were not tested by this upload.
+No public App Store release or external Beta review submission.
+
+Publication confirmed through App Store Connect API:
+Build ID: ba6312c6-a374-4710-baa2-6b700f4edccc
+Processing: VALID; expired: false.
+Internal state: IN_BETA_TESTING.
+Internal group: Team (570ba43b-8efe-4729-b9c4-5d3cd55154ae).
+GET /v1/betaGroups/<Team>/builds includes the exact build ID above.
+Team hasAccessToAllBuilds=true; build is ready for existing internal testers.
+External state: READY_FOR_BETA_SUBMISSION (not submitted).
+
+Upload-tool outcome: Fastlane uploaded the binary, waited for successful Apple
+processing, and set the beta changelog. It then exited 1 when attempting manual
+assignment to Team: Apple rejects manual assignment to this automatic internal
+group. The direct API verification above establishes that Team already receives
+and can test this exact build. No duplicate upload or new build was performed.
+
+Install: TestFlight > Snapceipt > version 2.0.0, build 1 (Team internal testers).
+App Store Connect: https://appstoreconnect.apple.com/apps/6778894594/testflight/ios
