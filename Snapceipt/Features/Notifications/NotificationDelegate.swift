@@ -9,6 +9,7 @@ import UserNotifications
 final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Shared injection points set by SnapceiptApp before the scene appears.
     static var router: Router?
+    static var clientReminderCoordinator: ClientReminderRouteCoordinator?
     static var api: APIClient?
     static var timezoneProvider: () -> String = { QuietHours.deviceTimezone() }
 
@@ -33,7 +34,12 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     @MainActor
     static func route(userInfo: [AnyHashable: Any],
                       router: Router?,
-                      refresh: (@Sendable () async -> Void)?) async {
+                      refresh: (@Sendable () async -> Void)?,
+                      clientReminders: ClientReminderRouteCoordinator? = nil) async {
+        if userInfo["type"] as? String == "client_follow_up" {
+            if let route = ClientReminderRoute(userInfo: userInfo) { clientReminders?.receive(route) }
+            return
+        }
         if userInfo["type"] as? String == "email_in" {
             await refresh?()
             if let txn = userInfo["transactionId"] as? String, !txn.isEmpty {
@@ -99,7 +105,7 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
         await Self.route(userInfo: response.notification.request.content.userInfo,
-                         router: Self.router, refresh: Self.refreshOnPush)
+                         router: Self.router, refresh: Self.refreshOnPush, clientReminders: Self.clientReminderCoordinator)
     }
 
     // Foreground delivery -> show a banner. An email-in push also triggers a sync so the

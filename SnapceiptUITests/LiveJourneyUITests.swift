@@ -65,6 +65,76 @@ final class LiveJourneyUITests: UITestCase {
                       "Did not reach the shell after live onboarding")
     }
 
+    /// Real local Worker + disk store: create notes, edit while the endpoint is unreachable,
+    /// relaunch, reconnect, then sign out (wiping local data) and restore the server copy.
+    func testClientWorkspaceOfflineRelaunchAndServerRestore() throws {
+        let base = try launchLive()
+        tapDevSignIn()
+        if app.textFields[AccessibilityID.onboardingName].waitForExistence(timeout: 8) {
+            let name = app.textFields[AccessibilityID.onboardingName]
+            name.tap(); name.typeText("Client Journey Business")
+            app.buttons[AccessibilityID.onboardingTypeBusiness].tap()
+            app.buttons[AccessibilityID.onboardingCreate].tap()
+            if app.buttons["Continue"].waitForExistence(timeout: 5) { app.buttons["Continue"].tap() }
+            if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
+        }
+        func openClients() {
+            let home = app.buttons[AccessibilityID.tabHome].firstMatch
+            XCTAssertTrue(home.waitForExistence(timeout: 15)); home.tap()
+            let entry = app.buttons[AccessibilityID.homeClients]
+            XCTAssertTrue(entry.waitForExistence(timeout: 15))
+            if !entry.isHittable { app.swipeUp() }; entry.tap()
+            XCTAssertTrue(app.navigationBars["Clients"].waitForExistence(timeout: 5))
+        }
+        func openClient() {
+            let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", AccessibilityID.clientWorkspaceRowPrefix)).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(row.label.contains("Live workspace client")); row.tap()
+        }
+        openClients(); app.buttons[AccessibilityID.clientsAdd].tap()
+        let name = app.textFields[AccessibilityID.clientFieldPrefix + "Client name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("Live workspace client"); dismissKeyboard()
+        app.swipeUp()
+        let notes = app.descendants(matching: .any)[AccessibilityID.clientFieldPrefix + "Notes (optional)"].firstMatch
+        notes.tap(); notes.typeText("Live original notes"); dismissKeyboard()
+        app.buttons["Save client"].tap()
+        XCTAssertTrue(app.navigationBars["Live workspace client"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Live original notes"].exists)
+        app.terminate()
+        // A deliberately closed loopback port makes ALL real API requests fail without a stub.
+        app.launchArguments = ["-uiTestSkipPermissions"]
+        app.launchEnvironment["API_BASE_URL"] = "http://127.0.0.1:1"
+        app.launch(); openClients()
+        openClient()
+        app.buttons[AccessibilityID.clientEdit].tap(); app.swipeUp()
+        let offlineNotes = app.descendants(matching: .any)[AccessibilityID.clientFieldPrefix + "Notes (optional)"].firstMatch
+        offlineNotes.tap(); offlineNotes.typeText(" offline edit")
+        let editedNotes = try XCTUnwrap(offlineNotes.value as? String).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertTrue(editedNotes.contains("offline edit"))
+        XCTAssertTrue(editedNotes.contains("Live original notes"))
+        XCTAssertNotEqual(editedNotes, "Live original notes")
+        dismissKeyboard(); app.buttons["Save client"].tap()
+        XCTAssertTrue(app.staticTexts[editedNotes].waitForExistence(timeout: 5))
+        app.terminate(); app.launch(); openClients()
+        openClient()
+        XCTAssertTrue(app.staticTexts[editedNotes].waitForExistence(timeout: 5))
+        app.terminate(); app.launchEnvironment["API_BASE_URL"] = base; app.launch(); openClients()
+        openClient()
+        XCTAssertTrue(app.staticTexts[editedNotes].waitForExistence(timeout: 5))
+        // Real sign-out erases local domain/outbox/session while retaining completed priming.
+        // Seeing the exact edited notes after signing in again therefore requires server pull.
+        app.terminate(); app.launch()
+        let profile = app.buttons[AccessibilityID.tabProfile].firstMatch
+        XCTAssertTrue(profile.waitForExistence(timeout: 15)); profile.tap()
+        let signOut = app.descendants(matching: .any)[AccessibilityID.signOutButton].firstMatch
+        XCTAssertTrue(signOut.waitForExistence(timeout: 10)); signOut.tap()
+        let confirm = app.buttons["Sign out"]
+        if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+        tapDevSignIn(); openClients()
+        openClient()
+        XCTAssertTrue(app.staticTexts[editedNotes].waitForExistence(timeout: 5))
+    }
+
     /// J18c (live): a receipt captured offline drains to the backend on reconnect.
     func testOfflineCaptureDrainsOnReconnect() throws {
         let base = try launchLive()

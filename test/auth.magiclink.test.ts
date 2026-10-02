@@ -58,6 +58,22 @@ describe("POST /auth/magic-link/request", () => {
     expect(stored.metadata).toMatchObject({ email: "maya@example.com" });
   });
 
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("keeps emailed login links on request origin %s", async (origin) => {
+    const spy = installEmailSpy();
+    const res = await SELF.fetch(`${origin}/auth/magic-link/request`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "routing@example.com" }),
+    });
+    expect(res.status).toBe(202);
+    await res.text();
+    const link = spy.send.mock.calls[0]![1].link;
+    expect(new URL(link).origin).toBe(origin);
+    expect(new URL(link).pathname).toBe("/auth/magic");
+    const page = await SELF.fetch(link);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("snapceipt://auth/verify");
+  });
+
   it("returns 202 even for a syntactically valid but unknown email (no enumeration)", async () => {
     const spy = installEmailSpy();
     const res = await SELF.fetch("https://x/auth/magic-link/request", {

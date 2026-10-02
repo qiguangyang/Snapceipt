@@ -73,13 +73,13 @@ describe("sendQuoteEmail", () => {
     expect(msg.text).not.toContain("attached");
   });
 
-  it("the rich HTML body has the logo R2 url, line items, totals, accept button, and footer", async () => {
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("renders quote email links and logos on document origin %s", async (origin) => {
     const sent: any[] = [];
     const fakeEnv = { EMAIL: { send: async (m: unknown) => { sent.push(m); } } } as any;
-    await sendQuoteEmail(fakeEnv, payload());
+    await sendQuoteEmail(fakeEnv, payload({ url: `${origin}/q/sometoken` }));
     const html = sent[0].html as string;
     // Logo via R2 image URL (NOT a data-URI).
-    expect(html).toContain("https://api.snapceipt.cc/images/user/profiles/p1/logo");
+    expect(html).toContain(`${origin}/images/user/profiles/p1/logo`);
     expect(html).not.toContain("data:image");
     // Business header + line items + totals.
     expect(html).toContain("Acme Pty Ltd");
@@ -89,7 +89,7 @@ describe("sendQuoteEmail", () => {
     expect(html).toContain("$105.00");  // GST
     expect(html).toContain("$1155.00"); // total
     // Accept CTA + valid-until + footer.
-    expect(html).toContain("https://api.snapceipt.cc/q/sometoken");
+    expect(html).toContain(`${origin}/q/sometoken`);
     expect(html).toContain("accept online");
     expect(html).toContain("Valid until 2026-07-04");
     expect(html).toContain("Powered by Snapceipt");

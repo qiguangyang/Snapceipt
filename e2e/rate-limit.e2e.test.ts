@@ -13,9 +13,9 @@ import { unstable_dev, type Unstable_DevWorker } from "wrangler";
  * beforeAll/afterAll/api harness copied verbatim): boots the REAL worker over a
  * real HTTP socket, applies migrations to an isolated persist dir, and drives the
  * auth routes black-box. Proves the per-email rate-limit tier end-to-end:
- *   - J55: the authEmail tier (3/email/hr) trips on the 4th magic-link request
- *     for one email, returning 429 with a Retry-After header. The first three
- *     come from distinct IPs so the 10/IP/hr ceiling never fires first.
+ *   - J55: the authEmail tier (8/email/hr) trips on the 9th magic-link request
+ *     for one email, returning 429 with a Retry-After header. The first eight
+ *     come from distinct IPs so the 20/IP/hr ceiling never fires first.
  */
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,20 +110,20 @@ async function api(
   return { status: res.status, json, text };
 }
 
-describe("e2e (real HTTP): rate-limit tier breach — authEmail 3/email/hr (J55)", () => {
-  it("J55: a 4th magic-link request for the same email is rate-limited (429 + Retry-After)", async () => {
+describe("e2e (real HTTP): rate-limit tier breach — authEmail 8/email/hr (J55)", () => {
+  it("J55: a 9th magic-link request for the same email is rate-limited (429 + Retry-After)", async () => {
     const email = `e2e+${Date.now()}-rl@example.com`;
-    // 3 requests from 3 distinct IPs consume the 3/email/hr budget without tripping 10/IP/hr.
-    for (let i = 0; i < 3; i++) {
+    // 8 requests from 8 distinct IPs consume the 8/email/hr budget without tripping 20/IP/hr.
+    for (let i = 0; i < 8; i++) {
       const r = await api("/auth/magic-link/request", {
         method: "POST", headers: { "cf-connecting-ip": `198.51.100.${10 + i}` }, body: { email },
       });
       expect(r.status).toBe(202);
     }
-    const fourth = await api("/auth/magic-link/request", {
+    const ninth = await api("/auth/magic-link/request", {
       method: "POST", headers: { "cf-connecting-ip": "198.51.100.99" }, body: { email },
     });
-    expect(fourth.status).toBe(429);
+    expect(ninth.status).toBe(429);
     // The breach sets a Retry-After header.
     // (header access via a raw fetch since api() only surfaces status/json/text)
     const raw = await fetch(`${baseUrl}/auth/magic-link/request`, {

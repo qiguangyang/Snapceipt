@@ -110,3 +110,15 @@ describe("renderInvoiceHtml", () => {
     expect(html).not.toContain("A & B <Ltd>");
   });
 });
+
+ describe("saved-item units", () => {
+  it("renders and escapes units alongside descriptions", () => {
+    const html = renderInvoiceHtml(data({ lineItems: [{ description: "Work", unitLabel: "hour <script>", quantity: 1, unitPriceCents: 100 }] }));
+    expect(html).toContain("hour &lt;script&gt;");
+    expect(html).not.toContain("hour <script>");
+  });
+  it("null unit preserves legacy output", () => {
+    const line = { description: "Work", quantity: 1, unitPriceCents: 100 };
+    expect(renderInvoiceHtml(data({ lineItems: [{ ...line, unitLabel: null }] }))).toBe(renderInvoiceHtml(data({ lineItems: [line] })));
+  });
+});

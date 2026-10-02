@@ -9,6 +9,7 @@ final class Quote: Syncable {
     var profileId: String?
 
     var number: String?
+    var clientId: String? = nil
     var clientName: String?
     var clientEmail: String?
     /// Snapshot of the picked client's freeform address at save (mirrors clientName/
@@ -50,6 +51,7 @@ final class Quote: Syncable {
         userId: String,
         profileId: String?,
         number: String? = nil,
+        clientId: String? = nil,
         clientName: String? = nil,
         clientEmail: String? = nil,
         clientAddress: String? = nil,
@@ -76,6 +78,7 @@ final class Quote: Syncable {
         self.userId = userId
         self.profileId = profileId
         self.number = number
+        self.clientId = clientId
         self.clientName = clientName
         self.clientEmail = clientEmail
         self.clientAddress = clientAddress

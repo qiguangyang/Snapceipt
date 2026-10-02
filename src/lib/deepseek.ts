@@ -128,9 +128,9 @@ function printedGst(ocrText: string): number | null {
   for (const line of ocrText.split(/\r?\n/)) {
     if (!/\bgst\b/i.test(line)) continue;
     const amounts = [...line.matchAll(/(\d{1,3}(?:[ ,]\d{3})*\.\d{2})/g)].map((m) =>
-      parseFloat(m[1].replace(/[ ,]/g, "")),
+      parseFloat(m[1]!.replace(/[ ,]/g, "")),
     );
-    if (amounts.length) found = amounts[amounts.length - 1];
+    if (amounts.length) found = amounts.at(-1) ?? null;
   }
   return found;
 }
@@ -189,7 +189,7 @@ export function trimReceiptTail(text: string): string {
   const lines = text.split(/\r?\n/);
   let totalIdx = -1;
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].toLowerCase();
+    const l = lines[i]!.toLowerCase();
     if (/\btotal\b/.test(l) && !/sub ?total/.test(l)) {
       totalIdx = i;
       break;
@@ -199,7 +199,7 @@ export function trimReceiptTail(text: string): string {
   const footer =
     /^\s*[-=_*]{8,}\s*$|merch id|term id|\bcard\s*:|approved|redemption|cookware|everyday extra|thank you|present your coupon|buy any \d|\bbws\b|rewards points|you (just )?collected|t&cs?\b/i;
   for (let i = totalIdx + 1; i < lines.length; i++) {
-    if (footer.test(lines[i])) return lines.slice(0, i).join("\n");
+    if (footer.test(lines[i]!)) return lines.slice(0, i).join("\n");
   }
   return text;
 }
@@ -235,9 +235,9 @@ export function detectDate(ocrText: string): string | null {
     if (/expire|expiry|valid|offer|redeem|t&c|use by|best before/i.test(line)) continue;
     const m = line.match(dateRe);
     if (!m) continue;
-    let day = parseInt(m[1], 10);
-    let month = parseInt(m[2], 10);
-    let year = parseInt(m[3], 10);
+    let day = parseInt(m[1]!, 10);
+    let month = parseInt(m[2]!, 10);
+    let year = parseInt(m[3]!, 10);
     if (day <= 12 && month > 12) [day, month] = [month, day]; // tolerate MM/DD
     if (month < 1 || month > 12 || day < 1 || day > 31) continue;
     if (year < 100) year += 2000;
@@ -272,13 +272,13 @@ export function parseStructuredLineItems(text: string): { name: string; price: n
     /\b(sub ?total|total|gst|abn|tax invoice|eft(?:pos)?|balance|change|approved|redemption|merch|term id|card|you saved|promotional|count of items|rounding|description)\b/i;
   const lastAmount = (s: string): number | null => {
     const m = [...s.matchAll(amountRe)];
-    return m.length ? parseFloat(m[m.length - 1][1].replace(/[, ]/g, "")) : null;
+    return m.length ? parseFloat(m[m.length - 1]![1]!.replace(/[, ]/g, "")) : null;
   };
   // A genuine line-total sits at the very END of the line (e.g. "... @ $10.90/kg 10.65" -> 10.65).
   // A detail/sub-line whose only amount is a UNIT price ends in "EACH"/"/kg" and has none.
   const trailingAmount = (s: string): number | null => {
     const m = s.match(/(-?\d{1,3}(?:[, ]\d{3})*\.\d{2})\s*$/);
-    return m ? parseFloat(m[1].replace(/[, ]/g, "")) : null;
+    return m ? parseFloat(m[1]!.replace(/[, ]/g, "")) : null;
   };
   const strip = (s: string): string =>
     s

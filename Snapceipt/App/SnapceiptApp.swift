@@ -21,6 +21,8 @@ struct SnapceiptApp: App {
     @State private var reachability: Reachability
     @State private var sync: SyncEngine
     @State private var profiles: ProfilesStore
+    @State private var clientReminders: ClientReminderRouteCoordinator
+    @State private var followUpScheduler: FollowUpNotificationScheduler
 
     /// Biometric app-lock controller (spec §6). Owned here so the lock state is a
     /// single shared instance across the Privacy toggle (writes `isEnabled`) and the
@@ -134,11 +136,23 @@ struct SnapceiptApp: App {
         _storekit = State(initialValue: storekit)
         _entitlement = State(initialValue: entitlement)
 
+        let followUpScheduler = FollowUpNotificationScheduler(context: context)
+        followUpScheduler.setUser(auth.session?.userId)
+        _followUpScheduler = State(initialValue: followUpScheduler)
+        let clientReminders = ClientReminderRouteCoordinator(context: context, profiles: profiles,
+            router: router, currentUser: { auth.session?.userId })
+        _clientReminders = State(initialValue: clientReminders)
+
         _auth = State(initialValue: auth)
         _authVM = State(initialValue: AuthViewModel(
             api: api, auth: auth,
             // Wipe local financial data + receipt images on sign-out / account deletion.
-            onWipeLocalData: { LocalStore.wipe(context: context) }))
+            onWipeLocalData: {
+                clientReminders.invalidateAuthentication()
+                router.dismissOverlay()
+                followUpScheduler.invalidateAuthentication()
+                LocalStore.wipe(context: context)
+            }))
         _router = State(initialValue: router)
         _toasts = State(initialValue: toasts)
         _reachability = State(initialValue: Reachability())
@@ -153,6 +167,7 @@ struct SnapceiptApp: App {
 
         // Inject the SAME Router + APIClient instances into the APNs delegate (UIKit
         // owns the adaptor, so we hand it shared refs). Taps route to the live shell.
+        NotificationDelegate.clientReminderCoordinator = clientReminders
         NotificationDelegate.router = router
         NotificationDelegate.api = api
         // Email-in push refresh seam: a tapped/foreground email-in push triggers a sync,
@@ -174,6 +189,8 @@ struct SnapceiptApp: App {
                 .environment(reachability)
                 .environment(sync)
                 .environment(profiles)
+                .environment(clientReminders)
+                .environment(followUpScheduler)
                 .environment(appLock)
                 .environment(storekit)
                 .environment(entitlement)

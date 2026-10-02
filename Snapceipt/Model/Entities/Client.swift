@@ -16,6 +16,8 @@ final class Client: Syncable {
     var mobilePhone: String?
     /// Freeform multiline address (optional). Mirrors D1 `clients.address`.
     var address: String?
+    /// Private client workspace notes; never copied into document snapshots.
+    var notes: String? = nil
 
     var createdAt: Int
     var updatedAt: Int
@@ -33,6 +35,7 @@ final class Client: Syncable {
         email: String? = nil,
         mobilePhone: String? = nil,
         address: String? = nil,
+        notes: String? = nil,
         createdAt: Int = Epoch.nowMs(),
         updatedAt: Int = Epoch.nowMs(),
         deletedAt: Int? = nil,
@@ -45,6 +48,7 @@ final class Client: Syncable {
         self.name = name
         self.email = email
         self.mobilePhone = mobilePhone
+        self.notes = notes
         self.address = address
         self.createdAt = createdAt
         self.updatedAt = updatedAt

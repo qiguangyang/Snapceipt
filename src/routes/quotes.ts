@@ -21,6 +21,7 @@ export const quotesRoutes = new Hono<AppEnv>();
 
 interface LineItemRow {
   description: string;
+  unit_label: string | null;
   quantity: number;
   unit_price_cents: number;
 }
@@ -31,7 +32,6 @@ function utcDate(ms: number): string {
 }
 
 export const APP_URL = "https://snapceipt.cc";
-export const API_ORIGIN = "https://api.snapceipt.cc";
 
 interface QuoteRenderRow {
   id: string;
@@ -99,7 +99,7 @@ export async function loadQuoteForRender(
   if (!quote) return null;
 
   const { results: lineItems } = await env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM quote_line_items
       WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
@@ -146,6 +146,7 @@ export async function loadQuoteForRender(
     },
     lineItems: lineItems.map((li): QuoteHtmlData["lineItems"][number] => ({
       description: li.description,
+      unitLabel: li.unit_label,
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
@@ -187,7 +188,7 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 2. Load its non-deleted line items (deterministic order).
   const { results: lineItems } = await c.env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM quote_line_items
       WHERE quote_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
@@ -227,7 +228,7 @@ quotesRoutes.post("/:id/send", async (c) => {
 
   // 6. Mint the public quote link (carries the quote's current link_version).
   const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
-  const url = `${API_ORIGIN}/q/${token}`;
+  const url = `${new URL(c.req.url).origin}/q/${token}`;
 
   // 7. email_outbox row + gated send. export_format is NULL (a link, no file).
   const outboxId = uuidv7();
@@ -314,7 +315,7 @@ quotesRoutes.post("/:id/link", async (c) => {
   }
 
   const token = await signQuoteLinkToken(c.env.JWT_SIGNING_KEY, quoteId, userId, quote.link_version);
-  return c.json({ url: `${API_ORIGIN}/q/${token}`, number });
+  return c.json({ url: `${new URL(c.req.url).origin}/q/${token}`, number });
 });
 
 // POST /quotes/:id/link/revoke — invalidate every previously-minted public link for this

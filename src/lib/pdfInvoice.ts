@@ -17,6 +17,7 @@ export interface InvoiceSender {
 /** One line-item row as rendered in the body table. */
 export interface InvoiceLineItemRow {
   description: string;
+  unitLabel?: string | null;
   quantity: number;
   unitPriceCents: number;
 }
@@ -91,7 +92,11 @@ export async function buildInvoicePdf(
       page = doc.addPage([PAGE_W, PAGE_H]);
       y = PAGE_H - MARGIN;
     }
-    page.drawText(text, { x: MARGIN, y, size, font: f, color: rgb(0.07, 0.07, 0.07) });
+    const safeText = Array.from(text).map((character) => {
+      if (/[\u0000-\u001f\u007f]/.test(character)) return " ";
+      try { f.encodeText(character); return character; } catch { return "?"; }
+    }).join("");
+    page.drawText(safeText, { x: MARGIN, y, size, font: f, color: rgb(0.07, 0.07, 0.07) });
     y -= LINE;
   };
 
@@ -128,6 +133,14 @@ export async function buildInvoicePdf(
       font,
       10,
     );
+    if (li.unitLabel) {
+      // Units are bounded by the sync contract (40 characters); two short rows keep
+      // them readable beside the item without changing the legacy description row.
+      const unit = Array.from(li.unitLabel).slice(0, 40).join("");
+      for (let offset = 0; offset < unit.length; offset += 20) {
+        draw(`${offset === 0 ? "Unit: " : "      "}${unit.slice(offset, offset + 20)}`, font, 9);
+      }
+    }
   }
   y -= LINE / 2;
 

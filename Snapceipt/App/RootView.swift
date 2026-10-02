@@ -1,9 +1,7 @@
 import SwiftUI
 import SwiftData
 import UIKit   // UIImage for the share-extension drain; beginBackgroundTask for -bgDelay (DEBUG)
-#if DEBUG
-import Combine // .onReceive(publisher) for the Darwin-notification simulate trigger
-#endif
+import Combine // NotificationCenter publishers for reconciliation and debug simulation
 
 /// Top-level auth + first-run gate, then the authed app shell.
 ///
@@ -21,6 +19,8 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(ProfilesStore.self) private var profiles
     @Environment(SyncEngine.self) private var sync
+    @Environment(ClientReminderRouteCoordinator.self) private var clientReminders
+    @Environment(FollowUpNotificationScheduler.self) private var followUpScheduler
     @Environment(ToastCenter.self) private var toasts
     @Environment(Reachability.self) private var reachability
     /// Shared biometric app-lock controller, injected from `SnapceiptApp` (spec §6).
@@ -137,8 +137,25 @@ struct RootView: View {
         }
         // Re-arm the post-login initial pull on every sign-in/out so a returning user re-syncs
         // (their profile is restored from the server before the onboarding gate concludes).
-        .onChange(of: auth.session?.userId) { _, _ in
+        .onChange(of: auth.session?.userId, initial: true) { _, userId in
             didInitialSync = false
+            clientReminders.sessionChanged(to: userId)
+            profiles.rescope(to: userId ?? "")
+            if userId == nil { router.dismissOverlay() }
+            followUpScheduler.setUser(userId)
+            Task { await followUpScheduler.refresh() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await followUpScheduler.refresh() } }
+        }
+        .onChange(of: profileRows.map { "\($0.id).\($0.userId).\($0.type).\($0.updatedAt)" }) { _, _ in
+            Task { await followUpScheduler.refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncDidApplyChanges)) { _ in
+            Task { await followUpScheduler.refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clientFollowUpsDidChange)) { _ in
+            Task { await followUpScheduler.refresh() }
         }
     }
 }
@@ -148,6 +165,8 @@ struct RootView: View {
 /// the screen so the enter animation replays. `SyncEngine.sync()` fires on launch
 /// and on foreground.
 struct ShellView: View {
+    @Environment(ClientReminderRouteCoordinator.self) private var clientReminders
+    @Environment(FollowUpNotificationScheduler.self) private var followUpScheduler
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthStore.self) private var auth
     @Environment(AuthViewModel.self) private var authVM
@@ -329,6 +348,7 @@ struct ShellView: View {
         .overlay {
             if router.overlay == .notificationSettings {
                 NotificationsSettingsView(api: captureAPI, activeProfileId: profiles.activeProfileId,
+                                          userId: profiles.userId, followUpScheduler: followUpScheduler,
                                           onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
             }
@@ -357,6 +377,18 @@ struct ShellView: View {
                 LoyaltyCardDetailView(context: profiles.context, cardId: id,
                                       onClose: { router.dismissOverlay() })
                     .environment(\.accent, accent).transition(.opacity)
+            }
+        }
+        .overlay {
+            if case let .clients(clientId) = router.overlay,
+               let userId = auth.session?.userId, userId == profiles.userId,
+               ClientWorkspaceViewModel.isAvailable(profileType: profiles.activeProfile?.type) {
+                ClientsHubView(context: profiles.context, sync: sync, api: captureAPI,
+                    userId: userId, profileId: profiles.activeProfileId, initialClientId: clientId,
+                    onClose: { router.dismissOverlay() }, scheduler: followUpScheduler)
+                    .id("\(userId).\(profiles.activeProfileId).\(clientId ?? "all")")
+                    .environment(\.accent, accent)
+                    .transition(.opacity)
             }
         }
         .overlay {
@@ -489,6 +521,7 @@ struct ShellView: View {
             backfillGstDefaultsForActive()
             backfillDeductibleDefaultsForActive()
             await sync.sync()
+            await clientReminders.resumeAfterSessionRestoration()
             // Drain shared receipts BEFORE reconciling so a freshly-imported Share-Extension fallback
             // (saved "pending" when on-device AI couldn't read the language) is cloud-upgraded by the
             // reconciler in the SAME pass — not a foreground later.
@@ -765,6 +798,13 @@ struct ShellView: View {
                 quickActionRow(accent: accent)
                     .padding(.horizontal, 18).padding(.top, 18)
 
+                if ClientWorkspaceViewModel.isAvailable(profileType: profiles.activeProfile?.type),
+                   let userId = auth.session?.userId, userId == profiles.userId {
+                    ClientsHomeCard(context: profiles.context, sync: sync, userId: userId,
+                        profileId: profiles.activeProfileId, onOpen: { router.openClient(nil) }, refreshToken: router.overlay?.id ?? "home")
+                        .id("\(userId).\(profiles.activeProfileId)")
+                        .padding(.horizontal, 18).padding(.top, 18)
+                }
                 HomeRecentReceipts(profileId: profiles.activeProfileId,
                                    onSeeAll: { router.go(.activity) },
                                    onOpenReceipt: { router.present(.receiptDetail(id: $0)) })
@@ -889,7 +929,7 @@ struct ShellView: View {
             get: {
                 switch router.overlay {
                 case .capture, .mileage, .wfh, .manual, .receiptDetail, .budgets, .budgetEditor, .alerts, .notificationSettings,
-                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
+                     .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .clients, .bas, .quoteEditor,
                      .invoices, .invoiceEditor,
                      .emailIn,
                      .tax, .categories, .ruleEditor, .profileDetail,
@@ -913,7 +953,7 @@ struct ShellView: View {
                 if newValue == nil, let cur = router.overlay,
                    !fullScreen.contains(cur.id),
                    !cur.id.hasPrefix("budgetEditor"), !cur.id.hasPrefix("loyaltyCard"),
-                   !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("invoiceEditor"),
+                   !cur.id.hasPrefix("clients"), !cur.id.hasPrefix("quoteEditor"), !cur.id.hasPrefix("invoiceEditor"),
                    !cur.id.hasPrefix("ruleEditor"), !cur.id.hasPrefix("profileDetail"),
                    !cur.id.hasPrefix("manual"), !cur.id.hasPrefix("receiptDetail") {
                     router.dismissOverlay()
@@ -967,7 +1007,7 @@ struct ShellView: View {
         case .capture:
             EmptyView()  // handled by the full-screen capture overlay
         case .receiptDetail, .mileage, .wfh, .manual, .budgets, .budgetEditor, .alerts, .notificationSettings,
-             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .bas, .quoteEditor,
+             .loyalty, .loyaltyAdd, .loyaltyCard, .quotes, .clients, .bas, .quoteEditor,
              .invoices, .invoiceEditor,
              .emailIn,
              .tax, .categories, .ruleEditor, .profileDetail,
@@ -1009,7 +1049,7 @@ struct ShellView: View {
         #if DEBUG
         return AppLaunch.current.makeAPIClient(auth: auth)
         #else
-        return LiveAPIClient(baseURL: URL(string: "https://api.snapceipt.cc")!, auth: auth)
+        return LiveAPIClient(baseURL: BackendConfig.configuredBaseURL, auth: auth)
         #endif
     }
 
@@ -1206,12 +1246,15 @@ enum ExportDateFormatter {
     let toast = ToastCenter()
     let engine = SyncEngine(api: PreviewAPIClient(), context: context, auth: auth, toast: toast)
     let store = ProfilesStore(context: context, sync: engine, userId: "u1")
+    let previewRouter = Router()
     return RootView()
         .environment(AuthViewModel(api: PreviewAPIClient(), auth: auth))
         .environment(auth)
-        .environment(Router())
+        .environment(previewRouter)
         .environment(store)
         .environment(engine)
+        .environment(ClientReminderRouteCoordinator(context: context, profiles: store, router: previewRouter, currentUser: { "u1" }))
+        .environment(FollowUpNotificationScheduler(context: context))
         .environment(toast)
         .environment(Reachability())
         .environment(AppLockController(canEvaluate: { false }, evaluate: { true }))

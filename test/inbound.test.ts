@@ -373,7 +373,7 @@ describe("inboundEmailLogic", () => {
       );
       expect(res.status).toBe("created");
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][2].type).toBe("email_in");
+      expect(spy.mock.calls[0]![2].type).toBe("email_in");
     } finally {
       spy.mockRestore();
     }

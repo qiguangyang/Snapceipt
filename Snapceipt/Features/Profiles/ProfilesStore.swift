@@ -11,9 +11,23 @@ import SwiftUI
 // every caller (the @MainActor view-models, stores, and reconcilers) is already on the
 // main actor — so isolate the protocol to match. This silences the Swift 6
 // "conformance crosses into main actor-isolated code" error on `SyncEngine: SyncEnqueuing`.
+struct SyncMutationDescriptor {
+    let op: String
+    let entityType: EntityType
+    let entity: any Syncable
+}
+
 @MainActor
 protocol SyncEnqueuing: AnyObject {
     func enqueue(op: String, entityType: EntityType, entity: any Syncable)
+
+    /// Queue using an isolated mutation context without saving unrelated editor changes.
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext)
+
+    /// Commit domain edits and durable outbox work through one checked transaction.
+    /// The supplied context must be isolated; callers discard it if this throws.
+    func persistAndEnqueue(mutations: [SyncMutationDescriptor], context: ModelContext,
+                           save: (ModelContext) throws -> Void) throws
 
     /// Drain the local outbox to the backend NOW, awaiting any in-flight sync
     /// first. Action endpoints that require a just-edited entity to already exist
@@ -24,6 +38,17 @@ protocol SyncEnqueuing: AnyObject {
 }
 
 extension SyncEnqueuing {
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) {
+        enqueue(op: op, entityType: entityType, entity: entity)
+    }
+    func persistAndEnqueue(mutations: [SyncMutationDescriptor], context: ModelContext,
+                           save: (ModelContext) throws -> Void) throws {
+        // Compatibility for spies/previews that do not persist an outbox themselves.
+        try save(context)
+        for mutation in mutations {
+            enqueue(op: mutation.op, entityType: mutation.entityType, entity: mutation.entity, context: context)
+        }
+    }
     func flush() async {}
 }
 

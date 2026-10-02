@@ -21,6 +21,8 @@ struct SyncEntityHandler {
     let applyPulled: (_ context: ModelContext, _ env: PullChange) -> Void
     /// Local `updatedAt` for the row id, or nil if no local row exists.
     let localUpdatedAt: (_ context: ModelContext, _ id: String) -> Int?
+    /// Local server revision; older pulled revisions must never replace it.
+    let localRev: (_ context: ModelContext, _ id: String) -> Int?
     /// Delete the local row for the id (tombstone handling).
     let deleteLocal: (_ context: ModelContext, _ id: String) -> Void
     /// Overwrite the local row from a server entity (push conflict).
@@ -77,7 +79,34 @@ final class SyncEngine {
     /// Append an outbox mutation snapshotting `entity` (full camelCase payload for
     /// an upsert; the snapshot still carries the id for a delete) and mark it pending.
     func enqueue(op: String, entityType: EntityType, entity: any Syncable) {
+        enqueue(op: op, entityType: entityType, entity: entity, context: context)
+    }
+
+    /// Used by isolated domain transactions so outbox saves do not commit shared editor input.
+    func enqueue(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) {
+        // Keep the existing best-effort API compatible; checked domain transactions use
+        // persistAndEnqueue below so a staging/save failure reaches their UI.
+        try? persistAndEnqueue(mutations: [SyncMutationDescriptor(op: op, entityType: entityType, entity: entity)],
+                              context: context, save: { try $0.save() })
+    }
+
+    /// Stage all sync rows without saving, then commit domain and outbox changes once.
+    func persistAndEnqueue(mutations: [SyncMutationDescriptor], context: ModelContext,
+                           save: (ModelContext) throws -> Void) throws {
+        for mutation in mutations {
+            try stage(op: mutation.op, entityType: mutation.entityType, entity: mutation.entity, context: context)
+        }
+        try save(context)
+    }
+
+    private func stage(op: String, entityType: EntityType, entity: any Syncable, context: ModelContext) throws {
         let payload = registry.encodePayload(entityType: entityType, entity: entity)
+        // UUIDv7 random bits and millisecond ties cannot preserve insertion order.
+        // Allocate a strictly increasing local outbox time; domain timestamps remain unchanged.
+        var newest = FetchDescriptor<OutboxMutation>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        newest.fetchLimit = 1
+        let latest = try context.fetch(newest).first?.createdAt
+        let enqueueTime = max(Epoch.nowMs(), latest.map { $0 + 1 } ?? 0)
         // Dedupe consecutive PENDING upserts for the same entity into ONE row (refresh the payload
         // to the latest state, keep the original baseRev). Otherwise N rapid edits enqueue N upserts
         // all on the same baseRev — the first applies (server rev → R+1) and every later one
@@ -90,10 +119,10 @@ final class SyncEngine {
                 $0.entityId == eid && $0.entityType == etype && $0.op == "upsert" && $0.status == "pending"
             })
             existingDescriptor.fetchLimit = 1
-            if let existing = (try? context.fetch(existingDescriptor))?.first {
+            if let existing = try context.fetch(existingDescriptor).first {
                 existing.payloadJSON = payload
-                existing.createdAt = Epoch.nowMs()
-                try? context.save()
+                // Keep the original FIFO position and base revision. Push resolves
+                // any newly assigned pending parent before splitting into batches.
                 return
             }
         }
@@ -104,12 +133,11 @@ final class SyncEngine {
             op: op,
             payloadJSON: payload,
             baseRev: entity.rev,
-            createdAt: Epoch.nowMs(),
+            createdAt: enqueueTime,
             attemptCount: 0,
             status: "pending"
         )
         context.insert(mutation)
-        try? context.save()
     }
 
     // MARK: push
@@ -147,7 +175,13 @@ final class SyncEngine {
             do {
                 let resp = try await api.syncPush(deviceId: deviceId, mutations: wire)
                 applyPushResults(resp.results, batch: batch)
-                try? context.save()
+                do {
+                    try context.save()
+                    NotificationCenter.default.post(name: .syncDidApplyChanges, object: self)
+                } catch {
+                    status = .error("Could not save synced changes.")
+                    return
+                }
             } catch {
                 // A deterministic 4xx contract rejection (excluding 401, which the
                 // APIClient already refresh-retries, and 429, which is transient)
@@ -206,6 +240,11 @@ final class SyncEngine {
     /// LWW per change and persisting `nextCursor` after each page (crash-safe).
     func pull() async {
         status = .syncing
+        // Older apps can advance past unfamiliar types. Complete one full pull per
+        // user after expanding the registry; a failed/interrupted upgrade starts over.
+        let versionKey = auth.session.map { "sc.syncEntityVersion." + $0.userId }
+        let upgrading = versionKey.map { UserDefaults.standard.integer(forKey: $0) != 20 } ?? false
+        if upgrading { UserDefaults.standard.removeObject(forKey: cursorKey) }
         var cursor = UserDefaults.standard.string(forKey: cursorKey)
 
         while true {
@@ -220,7 +259,13 @@ final class SyncEngine {
             for change in resp.changes {
                 applyPulled(change)
             }
-            try? context.save()
+            do {
+                try context.save()
+                NotificationCenter.default.post(name: .syncDidApplyChanges, object: self)
+            } catch {
+                status = .error("Could not save synced changes.")
+                return
+            }
 
             // Persist only after the page committed (crash-safe).
             if let next = resp.nextCursor {
@@ -229,6 +274,9 @@ final class SyncEngine {
             }
 
             if !resp.hasMore { break }
+        }
+        if upgrading, let versionKey {
+            UserDefaults.standard.set(20, forKey: versionKey)
         }
         status = .idle
         // Signal screens whose lists are manual fetches (not @Query) to re-read after a pull,
@@ -245,8 +293,15 @@ final class SyncEngine {
         // Keep local if an unsynced (pending/inflight) outbox edit exists for this id.
         if hasUnsyncedOutbox(entityId: id) { return }
 
-        // LWW: an equal-or-newer local row wins over the incoming change.
-        if let localUpd = handler.localUpdatedAt(context, id), localUpd >= incomingUpdatedAt {
+        // Applied acknowledgements stamp updatedAt/rev without copying domain
+        // fields. An authoritative pull at that same timestamp must still apply
+        // (for example, a preserved server PDF/status omitted from the push).
+        // Pending/inflight edits remain protected above; older timestamps and
+        // revisions remain stale even when the other value happens to be newer.
+        if let localUpd = handler.localUpdatedAt(context, id), localUpd > incomingUpdatedAt {
+            return
+        }
+        if let localRev = handler.localRev(context, id), localRev > env.rev {
             return
         }
 
@@ -340,7 +395,65 @@ final class SyncEngine {
             predicate: #Predicate { $0.status == "pending" },
             sortBy: [SortDescriptor(\.createdAt)]
         )
-        return (try? context.fetch(descriptor)) ?? []
+        let pending = (try? context.fetch(descriptor)) ?? []
+        return orderingPendingDependencies(pending)
+    }
+
+    /// An older queued document can acquire a newly created client during association.
+    /// Resolve those edges over the complete pending snapshot, before the 200-row split.
+    /// Move only prerequisites ahead of their dependents; retain FIFO for other rows
+    /// and for multiple operations on one entity. Never change persisted queue metadata.
+    private func orderingPendingDependencies(_ pending: [OutboxMutation]) -> [OutboxMutation] {
+        struct EntityKey: Hashable {
+            let type: String
+            let id: String
+        }
+        var firstUpsert: [EntityKey: Int] = [:]
+        var previous: [EntityKey: Int] = [:]
+        var prerequisites = Array(repeating: [Int](), count: pending.count)
+        for (index, row) in pending.enumerated() {
+            let key = EntityKey(type: row.entityType, id: row.entityId)
+            if let earlier = previous[key] { prerequisites[index].append(earlier) }
+            previous[key] = index
+            if row.op == "upsert", firstUpsert[key] == nil { firstUpsert[key] = index }
+        }
+        for (index, row) in pending.enumerated() where row.op == "upsert" {
+            // These typed edges are acyclic: client -> document/follow-up -> line.
+            // Other payload IDs (including origin links) are not dependencies here.
+            let parent: (type: EntityType, field: String)
+            switch EntityType(rawValue: row.entityType) {
+            case .quote, .invoice, .clientFollowUp: parent = (.client, "clientId")
+            case .quoteLineItem: parent = (.quote, "quoteId")
+            case .invoiceLineItem: parent = (.invoice, "invoiceId")
+            default: continue
+            }
+            let fields = registry.decodePayload(row.payloadJSON)
+            guard let id = fields[parent.field]?.stringValue,
+                  let prerequisite = firstUpsert[EntityKey(type: parent.type.rawValue, id: id)] else { continue }
+            prerequisites[index].append(prerequisite)
+        }
+        var ordered: [OutboxMutation] = []
+        // Index identity preserves every mutation, even malformed duplicate entity rows.
+        // Iterative traversal cannot overflow the stack; visiting nodes break malformed
+        // cycles without dropping rows or bypassing the server's normal validation.
+        var state = Array(repeating: 0, count: pending.count) // unseen / visiting / emitted
+        for index in pending.indices {
+            var stack = [(index: index, expanded: false)]
+            while let next = stack.popLast() {
+                guard state[next.index] != 2 else { continue }
+                if next.expanded {
+                    state[next.index] = 2
+                    ordered.append(pending[next.index])
+                } else if state[next.index] == 0 {
+                    state[next.index] = 1
+                    stack.append((next.index, true))
+                    for prerequisite in prerequisites[next.index].reversed() where state[prerequisite] == 0 {
+                        stack.append((prerequisite, false))
+                    }
+                }
+            }
+        }
+        return ordered
     }
 
     private func hasUnsyncedOutbox(entityId: String) -> Bool {

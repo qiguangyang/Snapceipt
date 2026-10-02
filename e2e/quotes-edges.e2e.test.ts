@@ -1,3 +1,4 @@
+import { grantLocalPro } from "./helpers/entitlement";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -116,6 +117,7 @@ async function signIn(email: string, ip: string, deviceId: string) {
     method: "POST", headers: { "cf-connecting-ip": ip, "x-device-id": deviceId },
     body: { token: req.json.devToken },
   });
+  grantLocalPro(repoRoot, persistDir, ver.json.user.id);
   return { userId: ver.json.user.id as string, auth: { authorization: `Bearer ${ver.json.accessToken}` } };
 }
 

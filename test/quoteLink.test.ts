@@ -78,10 +78,10 @@ async function seedQuote(
 }
 
 describe("POST /quotes/:id/link", () => {
-  it("mints a token, mints a quote number if absent, and returns {url, number}", async () => {
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("mints a working quote link on request origin %s", async (origin) => {
     const { userId, accessToken } = await seedAuthed();
     const { quoteId } = await seedQuote(userId);
-    const res = await SELF.fetch(`${BASE}/quotes/${quoteId}/link`, {
+    const res = await SELF.fetch(`${origin}/quotes/${quoteId}/link`, {
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
       body: "{}",
@@ -89,7 +89,10 @@ describe("POST /quotes/:id/link", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(typeof body.url).toBe("string");
-    expect(body.url).toContain("https://api.snapceipt.cc/q/");
+    expect(body.url).toContain(`${origin}/q/`);
+    const page = await SELF.fetch(body.url);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Acme Pty Ltd");
     expect(typeof body.number).toBe("string");
     expect(body.number).toMatch(/^SN-\d{4}$/);
   });

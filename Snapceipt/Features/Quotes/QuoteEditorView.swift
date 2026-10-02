@@ -18,10 +18,12 @@ struct QuoteEditorView: View {
     /// on the saved draft. The editor and the list are sibling overlays, so a plain dismiss would
     /// land on the tab root, not the list.
     let onSavedDraft: () -> Void
+    var showsRepeatReview = false
 
     @Environment(\.accent) private var accent
     @State private var vm: QuoteEditorViewModel?
     @State private var showClientPicker = false
+    @State private var showCatalogPicker = false
     @State private var sent = false
     @State private var shareURL: URL?
     @State private var shareFileURL: URL?
@@ -59,11 +61,20 @@ struct QuoteEditorView: View {
                 vm = model
             }
         }
+        .sheet(isPresented: $showCatalogPicker) {
+            if let vm {
+                CatalogPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
+                    onPick: { item in
+                        _ = try vm.addCatalogItem(item)
+                        showCatalogPicker = false
+                    }, onClose: { showCatalogPicker = false })
+            }
+        }
         .sheet(isPresented: $showClientPicker) {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
-                                  onPick: { name, email, mobile, address in
-                                      vm.setClient(name: name, email: email, mobile: mobile, address: address)
+                                  onPick: { selection in
+                                      vm.setClient(selection)
                                       showClientPicker = false
                                   },
                                   onClose: { showClientPicker = false })
@@ -86,6 +97,7 @@ struct QuoteEditorView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.logbookClose)
+            .accessibilityLabel("Close")
             Text(quoteId == nil ? "New quote" : "Quote").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
             // Trailing slot: a "Save Draft" button while the quote is still a draft — persists it
@@ -93,8 +105,7 @@ struct QuoteEditorView: View {
             // server-minted quote number instead.
             if vm == nil || vm?.statusValue == .draft {
                 Button {
-                    vm?.saveDraft()
-                    onSavedDraft()
+                    if vm?.saveDraft() == true { onSavedDraft() }
                 } label: {
                     Text("Save Draft").font(.ui(12.5, .bold))
                         .foregroundStyle((vm?.canSaveDraft ?? false) ? accent.base : Palette.ink3)
@@ -114,6 +125,7 @@ struct QuoteEditorView: View {
     @ViewBuilder private func content(_ vm: QuoteEditorViewModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if showsRepeatReview { Text("Review prices and dates before sending.").font(.ui(13, .semibold)).foregroundStyle(Palette.ink2).accessibilityIdentifier(AccessibilityID.clientRepeatReview) }
                 billToSection(vm)
                 lineItemsSection(vm)
                 totalsCard(vm)
@@ -259,6 +271,10 @@ struct QuoteEditorView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(AccessibilityID.quoteEditorAddLine)
             }
+            if vm.status == "draft" {
+                Button("Saved items") { showCatalogPicker = true }
+                    .font(.ui(13, .bold)).foregroundStyle(accent.base)
+            }
             Card(padding: 14) {
                 if vm.lineItems.isEmpty {
                     HStack {
@@ -280,6 +296,9 @@ struct QuoteEditorView: View {
 
     private func lineRow(_ vm: QuoteEditorViewModel, _ line: QuoteLineItem) -> some View {
         VStack(spacing: 8) {
+            TextField("Unit (optional)", text: Binding(
+                get: { line.unitLabel ?? "" }, set: { line.unitLabel = $0.isEmpty ? nil : $0 }))
+                .font(.ui(12.5))
             HStack(alignment: .top, spacing: 8) {
                 TextField("Description", text: Binding(
                     get: { line.itemDescription }, set: { line.itemDescription = $0 }),
@@ -493,7 +512,7 @@ struct QuoteEditorView: View {
     }
 
     private func absolute(_ url: String) -> String {
-        url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+        url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
     }
 
     private struct ShareItem: Identifiable { let id = UUID(); let url: URL }

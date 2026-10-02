@@ -31,6 +31,7 @@ export const PURGE_ORDER = [
   // deletion to fail with an FK violation (500) for any user who had created an invoice.
   "payments", "invoice_line_items", "invoices",
   "quotes", // references profiles
+  "catalog_items", "client_follow_ups",
   "clients", "tax_settings", "loyalty_cards", "wfh_logs",
   "inbound_email_log", "profile_inbox_tokens", "quote_counters",
   "email_outbox", "processed_mutations", "sessions", "devices", "auth_identities",

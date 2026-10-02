@@ -8,7 +8,7 @@ import XCTest
 ///     strings "Month"/"Quarter"/"FY" — its element label does NOT encode the FY
 ///     window, so the recomputation is asserted on the netCard headline static text
 ///     ("Net saved · FY2025-26"), which is `Period.fy.headline` = `FinancialYear.label`.
-///     The seed leaves the FY start at the default July (7) → "FY2025-26"; picking
+///     The January-pinned tour seed leaves the FY start at the default July (7) → "FY2025-26"; picking
 ///     January (1) moves the current date into the next FY → a different "FY…" label.
 ///   • `taxFyStart` is a `Menu` of month `Button`s ("January"…); `taxMealsPct` is a
 ///     `Stepper` (step 5, 0...100), so it exposes an "Increment" button.
@@ -16,7 +16,8 @@ import XCTest
 ///     is covered while the sheet is up, so the sheet is dismissed before tab nav.
 final class SettingsExtraUITests: UITestCase {
     func testFyStartThreadsToReports() {
-        launchSeeded()
+        // Existing tour fixture pins 15 Jan 2026; July and January then have distinct FY labels.
+        launchTour()
         // Record the Reports FY headline BEFORE changing the FY start (FY segment selected).
         app.buttons[AccessibilityID.tabReports].firstMatch.tap()
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.reportsScreen].firstMatch
@@ -27,7 +28,7 @@ final class SettingsExtraUITests: UITestCase {
         let fyHeadline = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "FY")).firstMatch
         XCTAssertTrue(fyHeadline.waitForExistence(timeout: 10), "FY headline missing on Reports")
-        let before = fyHeadline.label
+        XCTAssertEqual(fyHeadline.label, "Net saved · FY2025-26")
 
         // Profile → Tax → change the FY start month to January via the month Menu.
         app.buttons[AccessibilityID.tabProfile].firstMatch.tap()
@@ -52,8 +53,8 @@ final class SettingsExtraUITests: UITestCase {
             NSPredicate(format: "label CONTAINS %@", "FY")).firstMatch
         XCTAssertTrue(fyHeadlineAfter.waitForExistence(timeout: 10),
                       "FY headline missing on Reports after FY change")
-        XCTAssertNotEqual(fyHeadlineAfter.label, before,
-                          "Reports FY period did not recompute after changing the FY start month")
+        XCTAssertEqual(fyHeadlineAfter.label, "Net saved · FY2026-27",
+                       "Reports FY period did not recompute after changing the FY start month")
     }
 
     func testMealsDefaultPctThreads() throws {

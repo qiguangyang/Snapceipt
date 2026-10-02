@@ -19,6 +19,7 @@ import {
   type SyncTableMeta,
 } from "../lib/syncTables";
 import { validate } from "./auth";
+import { validateV2Mutation, V2_SYNC_TYPES } from "../lib/v2SyncValidation";
 
 /**
  * Sync routes mounted under `/sync`. PROTECTED — the global auth middleware has
@@ -219,13 +220,28 @@ async function applyMutation(
   }
 
   // upsert
+  const retainOmittedV2Fields = V2_SYNC_TYPES.has(m.entityType);
+  const profileId = "profileId" in payload ? payload.profileId
+    : retainOmittedV2Fields ? stored?.profile_id : undefined;
+
+  // Validate the merged v2 row after stale-write/delete resolution. Fail only
+  // this mutation and record its outcome through the usual idempotency path.
+  const v2Error = await validateV2Mutation(db, userId, m, stored);
+  if (v2Error) {
+    return recordAndReturn(db, userId, deviceId, m, {
+      mutationId: m.mutationId,
+      status: "rejected",
+      reason: v2Error,
+      entity: null,
+    });
+  }
 
   // (5) Guard NOT NULL profile_id: an upsert into a table whose profile_id is NOT NULL
   // (transactions, budgets, mileage_trips, wfh_logs, quotes, tax_settings) that omits
   // profileId would write NULL and throw an unhandled D1 constraint error inside the
   // batch. Reject the mutation cleanly instead. (delete never inserts profile_id, so it
   // only applies on the upsert path.)
-  if (PROFILE_ID_REQUIRED.has(m.entityType) && payload.profileId == null) {
+  if (PROFILE_ID_REQUIRED.has(m.entityType) && profileId == null) {
     return recordAndReturn(db, userId, deviceId, m, {
       mutationId: m.mutationId,
       status: "rejected",
@@ -239,10 +255,10 @@ async function applyMutation(
   // row tagged with it. Without this, a known/guessed foreign profile UUID would create
   // a dangling cross-tenant reference (no data leak — every read re-scopes by user_id —
   // but it violates per-profile ownership).
-  if (meta.hasProfileId && payload.profileId != null) {
+  if (meta.hasProfileId && profileId != null) {
     const ownProfile = await db
       .prepare("SELECT 1 FROM profiles WHERE id = ? AND user_id = ? AND deleted_at IS NULL")
-      .bind(payload.profileId, userId)
+      .bind(profileId, userId)
       .first();
     if (!ownProfile) {
       return recordAndReturn(db, userId, deviceId, m, {
@@ -295,7 +311,7 @@ async function applyMutation(
     }
   }
 
-  const writeStmt = buildUpsertStmt(db, meta, m, userId, now, newRev, deviceId, stored);
+  const writeStmt = buildUpsertStmt(db, meta, m, userId, now, newRev, deviceId, stored, retainOmittedV2Fields);
 
   // Build the canonical row we are persisting so we can echo + record it without
   // a read-back race (the upsert is deterministic from these values).
@@ -308,7 +324,7 @@ async function applyMutation(
     rev: newRev,
     last_edited_device_id: deviceId,
   };
-  if (meta.hasProfileId) persisted.profile_id = normalize(payload.profileId);
+  if (meta.hasProfileId) persisted.profile_id = normalize(profileId);
   for (const [camel, col] of Object.entries(meta.columns)) {
     if (camel in payload) persisted[col] = normalize(payload[camel]);
     else if (stored && col in stored) persisted[col] = stored[col];
@@ -396,21 +412,33 @@ function buildUpsertStmt(
   newRev: number,
   deviceId: string,
   stored: Record<string, unknown> | null,
+  retainOmittedV2Fields: boolean,
 ): D1PreparedStatement {
   const payload = m.payload as Record<string, unknown>;
 
-  // Domain columns present in the payload.
+  // INSERT columns may include retained v2 values; UPDATE columns are supplied.
   const domainCols: string[] = [];
+  const suppliedDomainCols: string[] = [];
   const domainVals: (string | number | null)[] = [];
   for (const [camel, col] of Object.entries(meta.columns)) {
     if (camel in payload) {
       domainCols.push(col);
+      suppliedDomainCols.push(col);
       domainVals.push(normalize(payload[camel]));
+    } else if (retainOmittedV2Fields && stored && col in stored) {
+      // SQLite checks required INSERT values before ON CONFLICT. Supply retained
+      // values for insertion, but never add omitted columns to the update set:
+      // reference validation may yield to a concurrent server PDF/status write.
+      domainCols.push(col);
+      domainVals.push(normalize(stored[col]));
     }
   }
 
   const profileCol = meta.hasProfileId ? ["profile_id"] : [];
-  const profileVal = meta.hasProfileId ? [normalize(payload.profileId)] : [];
+  const profileId = "profileId" in payload ? payload.profileId
+    : retainOmittedV2Fields ? stored?.profile_id : undefined;
+  const profileVal = meta.hasProfileId ? [normalize(profileId)] : [];
+  const updateProfileCols = retainOmittedV2Fields && !("profileId" in payload) ? [] : profileCol;
 
   const createdAt = stored ? Number(stored.created_at) : Number(payload.createdAt ?? now);
 
@@ -441,8 +469,8 @@ function buildUpsertStmt(
   // ON CONFLICT update list: profile + domain columns + mutable envelope fields,
   // EXCEPT id/user_id/created_at (immutable on update).
   const updateSet = [
-    ...profileCol.map((col) => `${col} = excluded.${col}`),
-    ...domainCols.map((col) => `${col} = excluded.${col}`),
+    ...updateProfileCols.map((col) => `${col} = excluded.${col}`),
+    ...suppliedDomainCols.map((col) => `${col} = excluded.${col}`),
     "updated_at = excluded.updated_at",
     "deleted_at = excluded.deleted_at",
     "rev = excluded.rev",

@@ -1,3 +1,4 @@
+import { grantLocalPro } from "./helpers/entitlement";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -83,6 +84,7 @@ describe("e2e (real HTTP): /export csv -> /export/dl round-trip", () => {
     });
     expect(verifyRes.status).toBe(200);
     const userId: string = verifyRes.json.user.id;
+    grantLocalPro(repoRoot, persistDir, userId);
     const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
 
     const profileId = crypto.randomUUID();
@@ -149,6 +151,7 @@ describe("e2e (real HTTP): /export csv -> /export/dl round-trip", () => {
       method: "POST", headers: { "cf-connecting-ip": ip, "x-device-id": deviceId }, body: { token: reqRes.json.devToken },
     });
     const userId: string = verifyRes.json.user.id;
+    grantLocalPro(repoRoot, persistDir, userId);
     const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
 
     const profileId = crypto.randomUUID();

@@ -12,10 +12,13 @@ struct InvoiceEditorView: View {
     let profileId: String
     let invoiceId: String?           // nil = new
     let onClose: () -> Void
+    var onSavedDraft: (() -> Void)? = nil
+    var showsRepeatReview = false
 
     @Environment(\.accent) private var accent
     @State private var vm: InvoiceEditorViewModel?
     @State private var showClientPicker = false
+    @State private var showCatalogPicker = false
     @State private var showRecordPayment = false
     @State private var shareURL: URL?
     @State private var sent = false
@@ -25,6 +28,13 @@ struct InvoiceEditorView: View {
             Palette.cream.ignoresSafeArea()
             VStack(spacing: 0) {
                 header
+                if showsRepeatReview {
+                    Text("Review prices and dates before sending.")
+                        .font(.ui(13, .semibold)).foregroundStyle(Palette.ink2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18).padding(.bottom, 12)
+                        .accessibilityIdentifier(AccessibilityID.clientRepeatReview)
+                }
                 if let vm { content(vm) } else { Color.clear }
             }
             if let vm { actionBar(vm).ignoresSafeArea(.keyboard, edges: .bottom) }
@@ -41,11 +51,20 @@ struct InvoiceEditorView: View {
                 vm = model
             }
         }
+        .sheet(isPresented: $showCatalogPicker) {
+            if let vm {
+                CatalogPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
+                    onPick: { item in
+                        _ = try vm.addCatalogItem(item)
+                        showCatalogPicker = false
+                    }, onClose: { showCatalogPicker = false })
+            }
+        }
         .sheet(isPresented: $showClientPicker) {
             if let vm {
                 ClientPickerSheet(context: context, sync: sync, userId: userId, profileId: profileId,
                                   // clientAddress + clientMobile are scoped to QUOTES only — invoices ignore them.
-                                  onPick: { name, email, _, _ in vm.setClient(name: name, email: email); showClientPicker = false },
+                                  onPick: { selection in vm.setClient(selection); showClientPicker = false },
                                   onClose: { showClientPicker = false })
                     .environment(\.accent, accent)
             }
@@ -71,6 +90,7 @@ struct InvoiceEditorView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.logbookClose)
+            .accessibilityLabel("Close")
             Text(invoiceId == nil ? "New invoice" : "Invoice").font(.ui(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(maxWidth: .infinity).lineLimit(1)
             Text(vm?.displayNumber ?? "Draft").font(.ui(12.5, .bold)).foregroundStyle(Palette.ink3)
@@ -84,6 +104,10 @@ struct InvoiceEditorView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let qid = vm.quoteId { fromQuoteNote(qid) }
                 if vm.status != "draft" { badgeRow(vm) }
+                if vm.status == "draft", onSavedDraft != nil {
+                    Button("Save Draft") { saveDraft(vm) }
+                        .accessibilityIdentifier(AccessibilityID.invoiceEditorSaveDraft)
+                }
                 billToSection(vm)
                 lineItemsSection(vm)
                 dueDateSection(vm)
@@ -92,6 +116,10 @@ struct InvoiceEditorView: View {
             .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 130)
         }
         .keyboardDismissButton()
+    }
+
+    func saveDraft(_ vm: InvoiceEditorViewModel) {
+        if vm.saveDraft() { onSavedDraft?() }
     }
 
     private func fromQuoteNote(_ quoteId: String) -> some View {
@@ -201,6 +229,10 @@ struct InvoiceEditorView: View {
                     .accessibilityIdentifier(AccessibilityID.invoiceEditorAddLine)
                 }
             }
+            if vm.status == "draft" {
+                Button("Saved items") { showCatalogPicker = true }
+                    .font(.ui(13, .bold)).foregroundStyle(accent.base)
+            }
             Card(padding: 14) {
                 if vm.lineItems.isEmpty {
                     HStack { Text("No line items yet").font(.ui(13.5)).foregroundStyle(Palette.ink3); Spacer(minLength: 0) }
@@ -219,8 +251,12 @@ struct InvoiceEditorView: View {
     private func lineRow(_ vm: InvoiceEditorViewModel, _ line: InvoiceLineItem) -> some View {
         let editable = vm.status == "draft"
         return VStack(spacing: 8) {
+            TextField("Unit (optional)", text: Binding(
+                get: { line.unitLabel ?? "" }, set: { line.unitLabel = $0.isEmpty ? nil : $0 }))
+                .font(.ui(12.5)).disabled(!editable)
             HStack(spacing: 8) {
-                TextField("Description", text: Binding(get: { line.itemDescription }, set: { line.itemDescription = $0 }))
+                TextField("Description", text: Binding(get: { line.itemDescription }, set: { line.itemDescription = $0 }), axis: .vertical)
+                    .lineLimit(2...5)
                     .font(.ui(14.5, .semibold)).disabled(!editable)
                 Text(fmt(line.lineTotalCents)).font(.ui(14.5, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 if editable {
@@ -431,7 +467,7 @@ struct InvoiceEditorView: View {
     }
 
     private func openURL(_ url: String) {
-        let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+        let full = url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
         shareURL = URL(string: full)
     }
 

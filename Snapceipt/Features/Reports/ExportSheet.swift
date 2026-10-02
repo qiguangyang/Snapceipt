@@ -172,7 +172,7 @@ struct ExportSheet: View {
                 let result = try await api.exportBas(profileId: profileId, from: from, to: to,
                                                      paygInstalmentCents: paygInstalmentCents, toEmail: nil)
                 if case let .basPack(url, _, _, _, _) = result {
-                    let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+                    let full = url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
                     shareURL = URL(string: full)
                 }
                 phase = .idle
@@ -184,7 +184,7 @@ struct ExportSheet: View {
             switch result {
             case let .download(url, _):
                 // Resolve a shareable URL (absolute or app-host-relative).
-                let full = url.hasPrefix("http") ? url : "https://api.snapceipt.cc\(url)"
+                let full = url.hasPrefix("http") ? url : "\(BackendConfig.configuredBaseURL.absoluteString)\(url)"
                 shareURL = URL(string: full)
                 phase = .idle
             case .sent:

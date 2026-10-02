@@ -13,6 +13,7 @@ import {
   entitySchemaFor,
   SYNCABLE_TYPES,
 } from "../src/schemas/entities";
+import { SYNCABLE_TABLES } from "../src/lib/syncTables";
 import {
   mutationSchema,
   pushBodySchema,
@@ -240,7 +241,10 @@ describe("entitySchemaFor / SYNCABLE_TYPES", () => {
     expect(SYNCABLE_TYPES).toContain("vehicle");
     expect(SYNCABLE_TYPES).toContain("vehicleYear");
     expect(SYNCABLE_TYPES).toContain("client");
-    expect(SYNCABLE_TYPES.length).toBe(18);
+    expect(SYNCABLE_TYPES).toContain("catalogItem");
+    expect(SYNCABLE_TYPES).toContain("clientFollowUp");
+    expect(Object.keys(SYNCABLE_TABLES)).toHaveLength(20);
+    expect([...SYNCABLE_TYPES].sort()).toEqual(Object.keys(SYNCABLE_TABLES).sort());
   });
 
   it("returns the specialized schema for known types", () => {

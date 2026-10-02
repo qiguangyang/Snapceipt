@@ -10,7 +10,7 @@ import {
   signDownloadToken, verifyDownloadToken, DOWNLOAD_TTL_SECONDS, signInvoiceLinkToken,
 } from "../lib/exportToken";
 import { type InvoiceHtmlData } from "../lib/invoiceHtml";
-import { logoDataUri, APP_URL, API_ORIGIN } from "./quotes";
+import { logoDataUri, APP_URL } from "./quotes";
 import * as emailModule from "../lib/email";
 import { uuidv7 } from "../lib/ids";
 import { requireProPlan } from "../lib/plan";
@@ -44,6 +44,7 @@ interface InvoiceRow {
 
 interface InvoiceLineRow {
   description: string;
+  unit_label: string | null;
   quantity: number;
   unit_price_cents: number;
 }
@@ -71,7 +72,7 @@ async function loadInvoiceForPdf(
   if (!invoice) throw new ApiError("NOT_FOUND", "Invoice not found for this user");
 
   const { results: lineItems } = await c.env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM invoice_line_items
       WHERE invoice_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
@@ -126,7 +127,7 @@ export async function loadInvoiceForRender(
   if (!invoice) return null;
 
   const { results: lineItems } = await env.DB.prepare(
-    `SELECT description, quantity, unit_price_cents
+    `SELECT description, unit_label, quantity, unit_price_cents
        FROM invoice_line_items
       WHERE invoice_id = ? AND user_id = ? AND deleted_at IS NULL
       ORDER BY sort_order ASC, id ASC`,
@@ -176,6 +177,7 @@ export async function loadInvoiceForRender(
     },
     lineItems: lineItems.map((li) => ({
       description: li.description,
+      unitLabel: li.unit_label,
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
@@ -230,6 +232,7 @@ invoicesRoutes.post("/:id/issue", async (c) => {
     },
     lineItems.map((li): InvoiceLineItemRow => ({
       description: li.description,
+      unitLabel: li.unit_label,
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
@@ -308,6 +311,7 @@ async function rebuildInvoicePdf(
     },
     lineItems.map((li): InvoiceLineItemRow => ({
       description: li.description,
+      unitLabel: li.unit_label,
       quantity: li.quantity,
       unitPriceCents: li.unit_price_cents,
     })),
@@ -367,7 +371,7 @@ invoicesRoutes.post("/:id/send", async (c) => {
   // Mint the public hosted invoice link (https://api.snapceipt.cc/i/<token>); carries the
   // invoice's current link_version so a later /link/revoke can invalidate this link.
   const linkToken = await signInvoiceLinkToken(c.env.JWT_SIGNING_KEY, invoiceId, userId, invoice.link_version);
-  const hostedUrl = `${API_ORIGIN}/i/${linkToken}`;
+  const hostedUrl = `${origin}/i/${linkToken}`;
 
   // email_outbox row + gated send (mirrors the quote send exactly).
   const outboxId = uuidv7();

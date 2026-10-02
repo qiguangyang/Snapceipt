@@ -6,6 +6,7 @@ import {
   entitySchemaFor,
   SYNCABLE_TYPES,
 } from "../src/schemas/entities";
+import { SYNCABLE_TABLES } from "../src/lib/syncTables";
 
 const UID = "0190f8a0-1111-7000-8000-000000000001";
 const PID = "0190f8a0-2222-7000-8000-000000000002";
@@ -143,7 +144,8 @@ describe("entitySchemaFor / SYNCABLE_TYPES (invoices)", () => {
     expect(SYNCABLE_TYPES).toContain("invoice");
     expect(SYNCABLE_TYPES).toContain("invoiceLineItem");
     expect(SYNCABLE_TYPES).toContain("payment");
-    expect(SYNCABLE_TYPES.length).toBe(18);
+    expect(Object.keys(SYNCABLE_TABLES)).toHaveLength(20);
+    expect([...SYNCABLE_TYPES].sort()).toEqual(Object.keys(SYNCABLE_TABLES).sort());
   });
 
   it("returns the specialized invoice schemas", () => {

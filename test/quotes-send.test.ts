@@ -74,8 +74,8 @@ async function seedQuote(userId: string, opts: { clientEmail?: string | null; gs
   return { profileId, quoteId };
 }
 
-function send(quoteId: string, accessToken: string) {
-  return SELF.fetch(`${BASE}/quotes/${quoteId}/send`, {
+function send(quoteId: string, accessToken: string, origin = BASE) {
+  return SELF.fetch(`${origin}/quotes/${quoteId}/send`, {
     method: "POST",
     headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
     body: "{}",
@@ -83,18 +83,18 @@ function send(quoteId: string, accessToken: string) {
 }
 
 describe("POST /quotes/:id/send", () => {
-  it("recomputes totals, mints SN-0001 on first send, sets status=sent + sentAt, emails the LINK (spied)", async () => {
+  it.each(["https://api.snapceipt.cc", "https://snapceipt-api-staging.techsiderau.workers.dev"])("sends a quote link on request origin %s while persisting totals and status", async (origin) => {
     const spy = vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
     const { userId, accessToken, email } = await seedAuthed();
     const { quoteId } = await seedQuote(userId);
 
-    const res = await send(quoteId, accessToken);
+    const res = await send(quoteId, accessToken, origin);
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
 
     // The response is the link contract: { url, emailed, number }.
     expect(typeof body.url).toBe("string");
-    expect(body.url).toContain("https://api.snapceipt.cc/q/");
+    expect(body.url).toContain(`${origin}/q/`);
     expect(body.emailed).toBe(true);
     expect(body.number).toBe("SN-0001");
 
@@ -116,7 +116,10 @@ describe("POST /quotes/:id/send", () => {
     expect(arg.to).toBe("jane@example.com");
     expect(arg.replyTo).toBe("hello@acme.example");   // profile.business_email, not the account email
     expect(arg.quoteNumber).toBe("SN-0001");
-    expect(arg.url).toContain("/q/");
+    expect(arg.url).toBe(body.url);
+    const page = await SELF.fetch(arg.url);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Acme Pty Ltd");
     expect((arg as any).pdf).toBeUndefined();
     expect(arg.business.name).toBe("Acme Pty Ltd");
     expect(arg.business.abn).toBe("12 345 678 901");
@@ -265,4 +268,17 @@ describe("POST /quotes/:id/send", () => {
     const res = await send(quoteId, accessToken);
     expect(res.status).toBe(404);
   });
+});
+
+ it("selects and renders saved units in hosted quotes and WebKit PDF HTML", async () => {
+  vi.spyOn(emailModule, "sendQuoteEmail").mockResolvedValue(undefined);
+  const { userId, accessToken } = await seedAuthed();
+  const { quoteId } = await seedQuote(userId);
+  await env.DB.prepare("UPDATE quote_line_items SET unit_label = ? WHERE quote_id = ?").bind("hour <script>", quoteId).run();
+  const response = await send(quoteId, accessToken);
+  expect(response.status).toBe(200);
+  const { url } = await response.json() as { url: string };
+  const html = await (await SELF.fetch(url)).text();
+  expect(html).toContain("hour &lt;script&gt;");
+  expect(html).not.toContain("hour <script>");
 });

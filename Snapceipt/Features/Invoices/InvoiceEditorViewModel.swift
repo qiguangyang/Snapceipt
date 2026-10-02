@@ -17,6 +17,7 @@ final class InvoiceEditorViewModel {
     @ObservationIgnored private let context: ModelContext
     @ObservationIgnored private let sync: any SyncEnqueuing
     @ObservationIgnored private let userId: String
+    @ObservationIgnored private let persist: (ModelContext) throws -> Void
     @ObservationIgnored let profileId: String
 
     /// Localized tax label (GST / Sales tax / GST/HST) for the profile's business currency.
@@ -29,7 +30,8 @@ final class InvoiceEditorViewModel {
     }()
 
     private func fetchProfile(_ id: String) -> Profile? {
-        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id })
+        let uid = userId
+        var d = FetchDescriptor<Profile>(predicate: #Predicate { $0.id == id && $0.userId == uid })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }
@@ -42,6 +44,7 @@ final class InvoiceEditorViewModel {
     var gstEnabled = true
     var gstInclusive = false
     var dueDate: String = QuoteEditorViewModel.dueDatePlus14()
+    private(set) var clientId: String?
     private(set) var clientName: String?
     private(set) var clientEmail: String?
 
@@ -59,10 +62,12 @@ final class InvoiceEditorViewModel {
 
     @ObservationIgnored private var originalLineIds: Set<String> = []
 
-    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String) {
+    init(context: ModelContext, sync: any SyncEnqueuing, userId: String, profileId: String,
+         persist: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
         self.sync = sync
         self.userId = userId
+        self.persist = persist
         self.profileId = profileId
     }
 
@@ -105,6 +110,7 @@ final class InvoiceEditorViewModel {
             invoiceId = inv.id
             gstEnabled = inv.gstEnabled
             gstInclusive = inv.gstInclusive
+            clientId = inv.clientId
             clientName = inv.clientName
             clientEmail = inv.clientEmail
             number = inv.number
@@ -115,15 +121,17 @@ final class InvoiceEditorViewModel {
             gstRateBp = inv.gstRateBp
             dueDate = inv.dueDate ?? QuoteEditorViewModel.dueDatePlus14()
             let iid = inv.id
+            let uid = userId
             let d = FetchDescriptor<InvoiceLineItem>(
-                predicate: #Predicate { $0.invoiceId == iid && $0.deletedAt == nil },
+                predicate: #Predicate { $0.invoiceId == iid && $0.userId == uid && $0.deletedAt == nil },
                 sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.createdAt)])
-            lineItems = (try? context.fetch(d)) ?? []
+            lineItems = ((try? context.fetch(d)) ?? []).map(Self.copyLine)
             originalLineIds = Set(lineItems.map(\.id))
         } else {
             invoiceId = ID.uuidv7()
             gstEnabled = true
             gstInclusive = false
+            clientId = nil
             clientName = nil
             clientEmail = nil
             number = nil
@@ -139,8 +147,15 @@ final class InvoiceEditorViewModel {
     }
 
     func setClient(name: String, email: String?) {
+        clientId = nil
         clientName = name
         clientEmail = email
+    }
+
+    func setClient(_ selection: ClientSelection) {
+        clientId = selection.id
+        clientName = selection.name
+        clientEmail = selection.email
     }
 
     func setDueDate(_ iso: String) { dueDate = iso }
@@ -152,58 +167,120 @@ final class InvoiceEditorViewModel {
                                          sortOrder: lineItems.count))
     }
 
+    @discardableResult
+    func addCatalogItem(_ item: CatalogItem) throws -> String {
+        let saved = try CatalogStore(context: context, sync: sync, userId: userId, profileId: profileId).ownedItem(item)
+        guard let parentId = invoiceId else { throw CatalogStore.ValidationError.unavailable }
+        let currency = fetchInvoice(parentId)?.currency ?? AppSettings.businessCurrency(profileId: profileId)
+        guard saved.currency == currency else {
+            throw CatalogStore.ValidationError.currencyMismatch(item: saved.currency, document: currency)
+        }
+        let price = try CatalogPrice.enteredCents(exclusiveCents: saved.unitPriceCents,
+            gstEnabled: gstEnabled, gstInclusive: gstInclusive, rateBp: effectiveGstRateBp)
+        let line = InvoiceLineItem(userId: userId, invoiceId: parentId,
+            itemDescription: saved.itemDescription, unitLabel: saved.unitLabel,
+            quantity: 1, unitPriceCents: price, sortOrder: lineItems.count)
+        lineItems.append(line)
+        return line.id
+    }
+
+    private static func copyLine(_ line: InvoiceLineItem) -> InvoiceLineItem {
+        InvoiceLineItem(id: line.id, userId: line.userId, invoiceId: line.invoiceId,
+            itemDescription: line.itemDescription, unitLabel: line.unitLabel, quantity: line.quantity,
+            unitPriceCents: line.unitPriceCents, sortOrder: line.sortOrder,
+            createdAt: line.createdAt, updatedAt: line.updatedAt, deletedAt: line.deletedAt,
+            rev: line.rev, lastEditedDeviceId: line.lastEditedDeviceId)
+    }
+
     func removeLine(_ line: InvoiceLineItem) {
         lineItems.removeAll { $0.id == line.id }
     }
 
-    func saveDraft() {
-        guard let iid = invoiceId else { return }
-        let invoice = fetchInvoice(iid) ?? {
-            let x = Invoice(userId: userId, profileId: profileId,
-                            currency: AppSettings.businessCurrency(profileId: profileId))
-            x.id = iid
-            context.insert(x)
-            return x
-        }()
-        // Snapshot the GST rate from the active profile on first save (mirrors the quote
-        // editor); keep an existing snapshot (e.g. set by convert) so a re-save never
-        // re-rates the invoice. (spec §3)
-        if invoice.gstRateBp == nil { invoice.gstRateBp = profileGstRateBp }
-        gstRateBp = invoice.gstRateBp
-        let t = totals
-        invoice.profileId = profileId
-        invoice.quoteId = quoteId
-        invoice.clientName = clientName
-        invoice.clientEmail = clientEmail
-        invoice.gstEnabled = gstEnabled
-        invoice.gstInclusive = gstInclusive
-        invoice.subtotalCents = t.subtotal
-        invoice.gstCents = t.gst
-        invoice.totalCents = t.total
-        invoice.dueDate = dueDate
-        invoice.updatedAt = Epoch.nowMs()
-
-        let keptIds = Set(lineItems.map(\.id))
-        for (idx, line) in lineItems.enumerated() {
-            line.sortOrder = idx
-            line.updatedAt = Epoch.nowMs()
-            if fetchLine(line.id) == nil { context.insert(line) }
-        }
-        let removed = originalLineIds.subtracting(keptIds)
-        var deletedRows: [InvoiceLineItem] = []
-        for rid in removed {
-            if let row = fetchLine(rid) {
-                row.deletedAt = Epoch.nowMs()
-                row.updatedAt = Epoch.nowMs()
-                deletedRows.append(row)
+    @discardableResult
+    func saveDraft() -> Bool {
+        errorMessage = nil
+        guard let parentId = invoiceId else { return false }
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let uid = userId, pid = profileId
+        do {
+            let normalizedUnits = lineItems.map { line -> String? in
+                let unit = line.unitLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return unit?.isEmpty == true ? nil : unit
             }
+            guard normalizedUnits.allSatisfy({ ($0?.utf16.count ?? 0) <= 40 }) else {
+                throw CatalogStore.ValidationError.unitTooLong
+            }
+            let descriptor = FetchDescriptor<Invoice>(predicate: #Predicate {
+                $0.id == parentId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+            })
+            let existing = try mutationContext.fetch(descriptor).first
+            guard validClientLink(clientId, previousId: existing?.clientId) else {
+                errorMessage = "Select a live client in this business."
+                return false
+            }
+            let document = existing ?? Invoice(id: parentId, userId: userId, profileId: profileId,
+                currency: AppSettings.businessCurrency(profileId: profileId))
+            if existing == nil { mutationContext.insert(document) }
+            document.gstRateBp = document.gstRateBp ?? profileGstRateBp
+            let t = InvoiceTotals.compute(lineItems: lineItems, gstEnabled: gstEnabled,
+                gstInclusive: gstInclusive, gstRateBp: document.gstRateBp ?? profileGstRateBp)
+            document.clientId = clientId
+            document.clientName = clientName
+            document.clientEmail = clientEmail
+            document.gstEnabled = gstEnabled
+            document.gstInclusive = gstInclusive
+            document.quoteId = quoteId
+            document.dueDate = dueDate
+            document.subtotalCents = t.subtotal; document.gstCents = t.gst; document.totalCents = t.total
+            let now = Epoch.nowMs()
+            document.updatedAt = now
+            let lines = try mutationContext.fetch(FetchDescriptor<InvoiceLineItem>(predicate: #Predicate {
+                $0.invoiceId == parentId && $0.userId == uid
+            }))
+            let keptIds = Set(lineItems.map(\.id))
+            var mutations = [SyncMutationDescriptor(op: "upsert", entityType: .invoice, entity: document)]
+            for (index, working) in lineItems.enumerated() {
+                let line = lines.first { $0.id == working.id } ?? Self.copyLine(working)
+                if !lines.contains(where: { $0.id == working.id }) { mutationContext.insert(line) }
+                line.itemDescription = working.itemDescription; line.unitLabel = normalizedUnits[index]
+                line.quantity = working.quantity; line.unitPriceCents = working.unitPriceCents
+                line.sortOrder = index; line.updatedAt = now; line.deletedAt = nil
+                mutations.append(.init(op: "upsert", entityType: .invoiceLineItem, entity: line))
+            }
+            for line in lines where originalLineIds.contains(line.id) && !keptIds.contains(line.id) {
+                line.deletedAt = now; line.updatedAt = now
+                mutations.append(.init(op: "delete", entityType: .invoiceLineItem, entity: line))
+            }
+            try sync.persistAndEnqueue(mutations: mutations, context: mutationContext, save: persist)
+            // The shared context may already cache this parent. Refresh committed fields
+            // so a later issue/share metadata write cannot save its stale draft snapshot.
+            // This happens only after the transaction succeeds; unrelated edits stay pending.
+            if let cached = fetchInvoice(parentId) {
+                cached.clientId = document.clientId
+                cached.clientName = document.clientName
+                cached.clientEmail = document.clientEmail
+                cached.gstEnabled = document.gstEnabled
+                cached.gstInclusive = document.gstInclusive
+                cached.gstRateBp = document.gstRateBp
+                cached.subtotalCents = document.subtotalCents
+                cached.gstCents = document.gstCents
+                cached.totalCents = document.totalCents
+                cached.updatedAt = document.updatedAt
+                cached.quoteId = document.quoteId
+                cached.dueDate = document.dueDate
+            }
+            gstRateBp = document.gstRateBp
+            originalLineIds = keptIds
+            for (index, line) in lineItems.enumerated() {
+                line.unitLabel = normalizedUnits[index]
+                line.sortOrder = index; line.updatedAt = now
+            }
+            return true
+        } catch {
+            errorMessage = "Couldn’t save the draft. Try again."
+            return false
         }
-        try? context.save()
-
-        sync.enqueue(op: "upsert", entityType: .invoice, entity: invoice)
-        for line in lineItems { sync.enqueue(op: "upsert", entityType: .invoiceLineItem, entity: line) }
-        for row in deletedRows { sync.enqueue(op: "delete", entityType: .invoiceLineItem, entity: row) }
-        originalLineIds = keptIds
     }
 
     /// Finalize: save + flush so the draft exists server-side, then POST
@@ -211,7 +288,7 @@ final class InvoiceEditorViewModel {
     func issue(api: APIClient) async -> Bool {
         guard let iid = invoiceId else { return false }
         errorMessage = nil
-        saveDraft()
+        guard saveDraft() else { return false }
         isIssuing = true
         defer { isIssuing = false }
         // The issue route loads the invoice from D1 (it was only just enqueued locally
@@ -254,8 +331,11 @@ final class InvoiceEditorViewModel {
     /// note marker so a re-issue can't double-count.
     private func recordIncome(for invoice: Invoice) {
         let label = "Invoice \(invoice.number ?? invoice.id)"
-        let existing = try? context.fetch(FetchDescriptor<Transaction>(
-            predicate: #Predicate { $0.note == label && $0.source == "invoice" && $0.deletedAt == nil }))
+        let uid = userId, pid = profileId
+        let descriptor = FetchDescriptor<Transaction>(predicate: #Predicate {
+            $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+        })
+        let existing = (try? context.fetch(descriptor))?.filter { $0.note == label && $0.source == "invoice" }
         if let existing, !existing.isEmpty { return }
 
         let name = (clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -333,20 +413,35 @@ final class InvoiceEditorViewModel {
     }
 
     private func loadedPaymentAmounts() -> [AccountsReceivable.PaymentAmount] {
-        guard let iid = invoiceId else { return [] }
+        guard let iid = invoiceId, fetchInvoice(iid) != nil else { return [] }
+        let uid = userId
         let d = FetchDescriptor<Payment>(
-            predicate: #Predicate { $0.invoiceId == iid && $0.deletedAt == nil })
+            predicate: #Predicate { $0.invoiceId == iid && $0.userId == uid && $0.deletedAt == nil })
         return ((try? context.fetch(d)) ?? []).map { AccountsReceivable.PaymentAmount(amountCents: $0.amountCents) }
     }
 
+    private func validClientLink(_ candidate: String?, previousId: String?) -> Bool {
+        guard let clientId = candidate else { return true }
+        // Historical documents may keep their unchanged link after deletion.
+        if clientId == previousId { return true }
+        let uid = userId, pid = profileId
+        let descriptor = FetchDescriptor<Client>(predicate: #Predicate {
+            $0.id == clientId && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil
+        })
+        return (try? context.fetch(descriptor).isEmpty) == false
+    }
+
     private func fetchInvoice(_ id: String) -> Invoice? {
-        var d = FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == id })
+        let uid = userId, pid = profileId
+        var d = FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.profileId == pid && $0.deletedAt == nil })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }
 
     private func fetchLine(_ id: String) -> InvoiceLineItem? {
-        var d = FetchDescriptor<InvoiceLineItem>(predicate: #Predicate { $0.id == id })
+        guard let parentId = invoiceId, fetchInvoice(parentId) != nil else { return nil }
+        let uid = userId
+        var d = FetchDescriptor<InvoiceLineItem>(predicate: #Predicate { $0.id == id && $0.userId == uid && $0.invoiceId == parentId })
         d.fetchLimit = 1
         return (try? context.fetch(d))?.first
     }

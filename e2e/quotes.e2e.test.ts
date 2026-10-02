@@ -1,3 +1,4 @@
+import { grantLocalPro } from "./helpers/entitlement";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,8 +69,8 @@ async function api(
   return { status: res.status, json, text };
 }
 
-describe("e2e (real HTTP): POST /quotes/:id/send -> /quotes/dl round-trip", () => {
-  it("seeds a quote via /sync, sends it, mints SN-0001, downloads the PDF back", async () => {
+describe("e2e (real HTTP): POST /quotes/:id/send -> public quote link round-trip", () => {
+  it("seeds a quote via /sync, sends it, mints SN-0001, loads the hosted quote", async () => {
     const email = `e2e-quote+${Date.now()}@example.com`;
     const deviceId = crypto.randomUUID();
     const ip = "203.0.113.91";
@@ -83,6 +84,7 @@ describe("e2e (real HTTP): POST /quotes/:id/send -> /quotes/dl round-trip", () =
     });
     expect(verifyRes.status).toBe(200);
     const userId: string = verifyRes.json.user.id;
+    grantLocalPro(repoRoot, persistDir, userId);
     const authHeaders = { authorization: `Bearer ${verifyRes.json.accessToken}` };
 
     const profileId = crypto.randomUUID();
@@ -142,26 +144,29 @@ describe("e2e (real HTTP): POST /quotes/:id/send -> /quotes/dl round-trip", () =
     const sendRes = await api(`/quotes/${quoteId}/send`, { method: "POST", headers: authHeaders, body: {} });
     expect(sendRes.status).toBe(200);
     expect(sendRes.json.number).toBe("SN-0001");
-    expect(sendRes.json.status).toBe("sent");
-    expect(sendRes.json.subtotalCents).toBe(105000);
-    expect(sendRes.json.gstCents).toBe(10500);
-    expect(sendRes.json.totalCents).toBe(115500);
-    expect(typeof sendRes.json.sentAt).toBe("number");
-    expect(typeof sendRes.json.pdfUrl).toBe("string");
-    expect(sendRes.json.pdfUrl).toContain("/quotes/dl/");
-
-    const dlPath = new URL(sendRes.json.pdfUrl).pathname; // origin-agnostic: wrangler dev rewrites the worker-visible origin when custom-domain routes exist
-    const dl = await api(dlPath);
-    expect(dl.status).toBe(200);
-    expect(dl.text.startsWith("%PDF")).toBe(true);
+    expect(typeof sendRes.json.url).toBe("string");
+    expect(sendRes.json.url).toContain("/q/");
+    expect(typeof sendRes.json.emailed).toBe("boolean");
+    const pull = await api("/sync/pull?limit=500", { headers: authHeaders });
+    const saved = pull.json.changes.find((row: any) => row.type === "quote" && row.id === quoteId);
+    expect(saved.status).toBe("sent");
+    expect(saved.subtotalCents).toBe(105000);
+    expect(saved.gstCents).toBe(10500);
+    expect(saved.totalCents).toBe(115500);
+    expect(typeof saved.sentAt).toBe("number");
+    const page = await api(new URL(sendRes.json.url).pathname);
+    expect(page.status).toBe(200);
+    expect(page.text).toContain("SN-0001");
+    expect(page.text).toContain("Site inspection");
+    expect(page.text).toContain("Jane Roe");
 
     const resend = await api(`/quotes/${quoteId}/send`, { method: "POST", headers: authHeaders, body: {} });
     expect(resend.status).toBe(200);
     expect(resend.json.number).toBe("SN-0001");
   });
 
-  it("returns 403 for a forged quote download token", async () => {
-    const res = await api("/quotes/dl/not.a.real.token");
+  it("returns 403 for a forged public quote link token", async () => {
+    const res = await api("/q/not.a.real.token");
     expect(res.status).toBe(403);
   });
 });

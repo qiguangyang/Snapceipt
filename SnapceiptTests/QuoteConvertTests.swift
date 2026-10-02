@@ -73,8 +73,10 @@ struct QuoteConvertTests {
         #expect(inv.gstInclusive == false)
         // due = today + 14 days
         let today = ExportDateFormatter.shared.string(from: Date())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let expected = ExportDateFormatter.shared.string(
-            from: Calendar(identifier: .gregorian).date(byAdding: .day, value: 14,
+            from: calendar.date(byAdding: .day, value: 14,
                 to: ExportDateFormatter.shared.date(from: today)!)!)
         #expect(inv.dueDate == expected)
         let lines = try ctx.fetch(FetchDescriptor<InvoiceLineItem>(predicate: #Predicate { $0.invoiceId == invId! }))
@@ -136,5 +138,97 @@ struct QuoteConvertTests {
         #expect(v.convertToInvoice() == nil)
         let invoices = try ctx.fetch(FetchDescriptor<Invoice>())
         #expect(invoices.isEmpty)
+    }
+
+    @Test func convertPreservesClientLinkAndQuoteSnapshot() throws {
+        let (ctx, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Original", email: "old@example.com")
+        ctx.insert(client); try ctx.save()
+        let v = sentQuote(ctx, sync)
+        let qid = try #require(v.quoteId)
+        let q = try #require(ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == qid })).first)
+        q.clientId = client.id
+        q.clientName = "Original"; q.clientEmail = "old@example.com"
+        try ctx.save()
+        _ = try ClientStore(context: ctx, sync: sync, userId: "u1", profileId: "p1").save(id: client.id, draft: ClientDraft(name: "Renamed", email: "new@example.com"))
+        v.load(id: qid)
+        // Conversion must use the stored quote, even if the editor's working snapshot differs.
+        v.setClient(name: "Unsaved other contact", email: "unsaved@example.com")
+        let iid = try #require(v.convertToInvoice())
+        let inv = try #require(ctx.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == iid })).first)
+        #expect(inv.clientId == client.id)
+        #expect(inv.clientName == "Original" && inv.clientEmail == "old@example.com")
+    }
+
+    @Test func convertDoesNotCreateNewLinkToDeletedClient() throws {
+        let (ctx, sync) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Original")
+        ctx.insert(client); try ctx.save()
+        let v = sentQuote(ctx, sync)
+        let qid = try #require(v.quoteId)
+        let q = try #require(ctx.fetch(FetchDescriptor<Quote>(predicate: #Predicate { $0.id == qid })).first)
+        q.clientId = client.id; try ctx.save()
+        try ClientStore(context: ctx, sync: sync, userId: "u1", profileId: "p1").delete(id: client.id)
+        v.load(id: qid)
+        sync.calls.removeAll()
+        #expect(v.convertToInvoice() == nil && v.errorMessage != nil)
+        #expect(try ctx.fetch(FetchDescriptor<Invoice>()).isEmpty)
+        #expect(q.clientId == client.id && q.status == "sent" && sync.calls.isEmpty)
+    }
+
+    @Test func conversionUsesConsistentPersistedSourceAndIsolatesOutboxSaves() throws {
+        let (ctx, _) = try makeFixture()
+        let client = Client(userId: "u1", profileId: "p1", name: "Saved client", notes: "Saved notes")
+        let quote = Quote(userId: "u1", profileId: "p1", clientId: client.id, clientName: "Saved client", subtotalCents: 10_000, gstCents: 1_000, totalCents: 11_000, status: "sent")
+        let line = QuoteLineItem(userId: "u1", quoteId: quote.id, itemDescription: "Saved line", quantity: 1, unitPriceCents: 10_000)
+        ctx.insert(client); ctx.insert(quote); ctx.insert(line); try ctx.save()
+        let engine = SyncEngine(api: MockAPIClient(), context: ctx, auth: AuthStore(), toast: ToastCenter())
+        let v = QuoteEditorViewModel(context: ctx, sync: engine, userId: "u1", profileId: "p1")
+        v.load(id: quote.id)
+        v.lineItems[0].quantity = 2; v.lineItems[0].unitPriceCents = 20_000
+        v.lineItems[0].itemDescription = "Pending line"
+        v.gstEnabled = false
+        quote.clientName = "Pending contact"
+        client.notes = "Pending unrelated notes"
+        let iid = try #require(v.convertToInvoice())
+        let reader = ModelContext(ctx.container)
+        let invoice = try #require(reader.fetch(FetchDescriptor<Invoice>(predicate: #Predicate { $0.id == iid })).first)
+        let invoiceLine = try #require(reader.fetch(FetchDescriptor<InvoiceLineItem>()).first)
+        let savedQuote = try #require(reader.fetch(FetchDescriptor<Quote>()).first)
+        let savedLine = try #require(reader.fetch(FetchDescriptor<QuoteLineItem>()).first)
+        #expect(invoice.totalCents == 11_000 && invoice.gstEnabled)
+        #expect(invoiceLine.unitPriceCents == 10_000 && invoiceLine.quantity == 1 && invoiceLine.itemDescription == "Saved line")
+        #expect(invoice.subtotalCents == invoiceLine.lineTotalCents)
+        #expect(savedQuote.clientName == "Saved client" && savedQuote.totalCents == 11_000 && savedQuote.invoiceId == iid)
+        #expect(savedLine.unitPriceCents == 10_000 && savedLine.quantity == 1 && savedLine.itemDescription == "Saved line")
+        #expect(try reader.fetch(FetchDescriptor<Client>()).first?.notes == "Saved notes")
+        #expect(v.lineItems[0].unitPriceCents == 20_000 && v.lineItems[0].quantity == 2)
+        #expect(quote.clientName == "Pending contact" && client.notes == "Pending unrelated notes" && ctx.hasChanges)
+        let outbox = try reader.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(outbox.count == 3)
+        #expect(Set(outbox.map(\.entityType)) == Set([EntityType.invoice.rawValue, EntityType.invoiceLineItem.rawValue, EntityType.quote.rawValue]))
+        #expect(outbox.allSatisfy { $0.entityId != line.id && $0.entityId != client.id })
+        #expect(v.convertToInvoice() == iid)
+    }
+
+    @Test func failedConversionRetainsPendingSourceAndUnrelatedInput() throws {
+        let (ctx, sync) = try makeFixture()
+        let original = sentQuote(ctx, sync)
+        let client = Client(userId: "u1", profileId: "p1", name: "Other", notes: "Saved")
+        ctx.insert(client); try ctx.save()
+        struct Failure: Error {}
+        let v = QuoteEditorViewModel(context: ctx, sync: sync, userId: "u1", profileId: "p1", persist: { _ in throw Failure() })
+        v.load(id: original.quoteId)
+        v.lineItems[0].itemDescription = "Typed source description"
+        v.lineItems[0].quantity = 5; v.lineItems[0].unitPriceCents = 40_000
+        client.notes = "Pending unrelated"
+        sync.calls.removeAll()
+        #expect(v.convertToInvoice() == nil && v.errorMessage != nil)
+        #expect(v.lineItems[0].itemDescription == "Typed source description")
+        #expect(v.lineItems[0].quantity == 5 && v.lineItems[0].unitPriceCents == 40_000 && client.notes == "Pending unrelated" && ctx.hasChanges)
+        #expect(sync.calls.isEmpty)
+        let reader = ModelContext(ctx.container)
+        #expect(try reader.fetch(FetchDescriptor<Invoice>()).isEmpty)
+        #expect(try reader.fetch(FetchDescriptor<Quote>()).first?.status == "sent")
     }
 }

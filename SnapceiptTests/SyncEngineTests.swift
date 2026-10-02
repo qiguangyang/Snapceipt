@@ -308,4 +308,25 @@ struct SyncEngineTests {
         #expect(rows[0].name == "Acme")
         #expect(rows[0].type == "business")   // persona, not the "profile" discriminant
     }
+
+    @Test func contextAwareEnqueueDedupesWithoutSavingMainContextChanges() throws {
+        let (engine, context, _, _, _) = try makeEngine()
+        let client = Client(userId: "u1", profileId: "p1", name: "Unrelated", notes: "Saved")
+        let txn = makeTxn(); txn.merchant = "First"
+        context.insert(client); context.insert(txn); try context.save()
+        client.notes = "Pending"
+        let mutationContext = ModelContext(context.container)
+        mutationContext.autosaveEnabled = false
+        let tid = txn.id
+        let isolated = try #require(mutationContext.fetch(FetchDescriptor<Transaction>(predicate: #Predicate { $0.id == tid })).first)
+        engine.enqueue(op: "upsert", entityType: .transaction, entity: isolated, context: mutationContext)
+        isolated.merchant = "Latest"; try mutationContext.save()
+        engine.enqueue(op: "upsert", entityType: .transaction, entity: isolated, context: mutationContext)
+        let reader = ModelContext(context.container)
+        let outbox = try reader.fetch(FetchDescriptor<OutboxMutation>())
+        #expect(outbox.count == 1 && outbox[0].baseRev == txn.rev)
+        #expect(outbox[0].payloadJSON.contains("Latest"))
+        #expect(try reader.fetch(FetchDescriptor<Client>()).first?.notes == "Saved")
+        #expect(client.notes == "Pending" && context.hasChanges)
+    }
 }

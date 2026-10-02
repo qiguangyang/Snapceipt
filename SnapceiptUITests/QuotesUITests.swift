@@ -44,7 +44,7 @@ final class QuotesUITests: UITestCase {
 
         let gst = app.switches[AccessibilityID.quoteEditorGst].firstMatch
         if gst.waitForExistence(timeout: 3) { gst.tap() }
-        app.staticTexts["New quote"].firstMatch.tap()
+        dismissKeyboard()
 
         let send = app.buttons[AccessibilityID.quoteEditorSend]
         XCTAssertTrue(send.waitForExistence(timeout: 5), "Send button missing")

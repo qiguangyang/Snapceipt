@@ -11,6 +11,7 @@ final class QuoteLineItem: Syncable {
     var profileId: String?           // always nil (child of a quote)
 
     var quoteId: String
+    var unitLabel: String? = nil
     var itemDescription: String      // maps to backend "description"
     var quantity: Int
     var unitPriceCents: Int
@@ -32,6 +33,7 @@ final class QuoteLineItem: Syncable {
         userId: String,
         quoteId: String,
         itemDescription: String,
+        unitLabel: String? = nil,
         quantity: Int = 1,
         unitPriceCents: Int,
         sortOrder: Int = 0,
@@ -45,6 +47,7 @@ final class QuoteLineItem: Syncable {
         self.userId = userId
         self.profileId = nil
         self.quoteId = quoteId
+        self.unitLabel = unitLabel
         self.itemDescription = itemDescription
         self.quantity = quantity
         self.unitPriceCents = unitPriceCents

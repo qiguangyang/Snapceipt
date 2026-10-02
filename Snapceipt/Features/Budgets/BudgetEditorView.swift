@@ -9,6 +9,7 @@ struct SheetHeader: View {
     /// Optional top-right action (e.g. a Save button). When nil, a 40pt spacer keeps the
     /// title centered against the back button.
     var trailing: AnyView? = nil
+    var titleLineLimit: Int = 1
     var body: some View {
         HStack(spacing: 8) {
             Button(action: onClose) {
@@ -20,8 +21,9 @@ struct SheetHeader: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(AccessibilityID.logbookClose)
+            .accessibilityLabel("Close")
             Text(title).font(.ui(16, .bold)).foregroundStyle(Palette.ink)
-                .frame(maxWidth: .infinity).lineLimit(1)
+                .frame(maxWidth: .infinity).lineLimit(titleLineLimit).fixedSize(horizontal: false, vertical: true)
             if let trailing {
                 trailing.frame(minWidth: 40, minHeight: 40, alignment: .trailing)
             } else {
